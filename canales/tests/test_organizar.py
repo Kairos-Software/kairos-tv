@@ -247,11 +247,14 @@ class OrganizarTests(TestCase):
         self.assertNotContains(respuesta, 'la app solo muestra series')
         self.assertEqual([(s.nombre, s.cantidad, s.completa) for s in consultas.series()], [('Pocoyó', 3, True)])
 
-    def test_avisa_si_la_serie_queda_muy_corta_para_la_app(self):
+    def test_una_serie_nueva_aparece_desde_su_primer_capitulo(self):
         _con_fuente('El tornado', contenido=Contenido.PELICULA)
         respuesta = self.client.post(reverse('canales:catalogo_contenido'), {
             'canal': [Canal.objects.get().pk], 'contenido': 'serie', 'nombre_serie': 'Pocoyó'}, follow=True)
-        self.assertContains(respuesta, 'tiene 1 capítulo(s) y la app solo muestra series con 3 o más')
+        self.assertContains(respuesta, 'quedaron como capítulos de la serie &quot;Pocoyó&quot;')
+        self.assertNotContains(respuesta, 'la app solo muestra series')
+        serie = consultas.series()[0]
+        self.assertEqual((serie.nombre, serie.cantidad, serie.completa), ('Pocoyó', 1, True))
 
     def test_edicion_rapida(self):
         canal = _con_fuente('Zenón', self.noticias)

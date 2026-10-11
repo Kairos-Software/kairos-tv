@@ -1,6 +1,7 @@
 import 'package:app_movil/api/cliente.dart';
 import 'package:app_movil/api/modelos.dart';
 import 'package:app_movil/aparato.dart';
+import 'package:app_movil/movil/control_senal.dart';
 import 'package:app_movil/movil/datos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,17 +102,16 @@ void main() {
     expect(canal.fuentesReproducibles.map((f) => f.id), [2, 3, 4]);
   });
 
-  test('solo se muestran las series que arrancan en T1:E1 y tienen al menos 3 capítulos', () {
+  test('las series se muestran desde T1:E1 aunque tengan un solo capítulo', () {
     final series = agruparSeries([
       for (var i = 1; i <= 3; i++) _capitulo(i, 'Completa S01 E0$i'),
       _capitulo(10, 'A medias S01 E05'),
       _capitulo(11, 'A medias S01 E06'),
       _capitulo(12, 'A medias S01 E07'),
       _capitulo(20, 'Cortita S01 E01'),
-      _capitulo(21, 'Cortita S01 E02'),
       _capitulo(30, 'Película suelta'),
     ]);
-    expect(series.where((s) => s.completa).map((s) => s.nombre), ['Completa']);
+    expect(series.where((s) => s.completa).map((s) => s.nombre), ['Completa', 'Cortita']);
   });
 
   test('lo que no anduvo en este aparato se saca del catálogo enseguida', () {
@@ -136,9 +136,19 @@ void main() {
   });
 
   test('cuánto tiempo se oculta lo que no anduvo', () {
-    expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: false), const Duration(hours: 6));
+    expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: false), const Duration(hours: 1));
     expect(NoAnda.cuantoTiempo(enVivo: false, deFormato: false), const Duration(days: 3));
     expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: true), const Duration(days: 30));
+  });
+
+  test('un canal que se vio bien y después se cortó no se esconde', () {
+    // Nunca arrancó en este aparato: se esconde un rato
+    expect(ControlSenal.esconderDespuesDe(Falla.conexion, hayFuentes: true, seVio: false), isTrue);
+    // Anduvo un rato y se cortó: en este aparato anda, fue un corte de la señal
+    expect(ControlSenal.esconderDespuesDe(Falla.cortada, hayFuentes: true, seVio: true), isFalse);
+    expect(ControlSenal.esconderDespuesDe(Falla.trabada, hayFuentes: true, seVio: true), isFalse);
+    // Sin internet en el aparato: la señal no tiene la culpa
+    expect(ControlSenal.esconderDespuesDe(Falla.sinInternet, hayFuentes: true, seVio: false), isFalse);
   });
 
   test('categorías, años y nombres legibles', () {

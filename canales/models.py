@@ -304,6 +304,9 @@ class Importacion(models.Model):
     # Todo lo importado va a esta sección nueva (Música, Radio...; '' = cada
     # cosa a la fija que le toca: En vivo, Películas o Series)
     seccion = models.CharField('sección', max_length=10, blank=True)
+    # La lista la exportó este sistema (canales/exportar.py): lo que trae ya
+    # estaba aceptado acá, así que sus series entran aunque tengan pocos capítulos
+    de_kairos = models.BooleanField('exportada de Kairos', default=False)
 
     class Meta:
         verbose_name = 'importación'

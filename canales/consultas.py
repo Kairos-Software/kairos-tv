@@ -129,11 +129,6 @@ class Capitulo:
     titulo: str
 
 
-# Como la app (Serie.completa en lib/movil/datos.dart): una serie se muestra
-# solo si se puede empezar desde el principio
-MINIMO_DE_CAPITULOS = 3
-
-
 @dataclass
 class Serie:
     nombre: str
@@ -162,7 +157,7 @@ class Serie:
 
     @property
     def completa(self):
-        """La app la muestra: entre los capítulos que se ven está el T1:E1 y son al menos MINIMO_DE_CAPITULOS."""
+        """La app la muestra si entre los capítulos que se ven está el T1:E1."""
         return not self.por_que_no_se_ve
 
     @property
@@ -173,8 +168,6 @@ class Serie:
             return 'No se ve ningún capítulo.'
         if not any(c.temporada == 1 and c.numero == 1 for c in vistos):
             return 'Falta el capítulo 1 de la temporada 1: la app no muestra series que no se pueden empezar.'
-        if len(vistos) < MINIMO_DE_CAPITULOS:
-            return f'Tiene menos de {MINIMO_DE_CAPITULOS} capítulos que se vean: la app no la muestra.'
         return ''
 
     @property
@@ -247,8 +240,8 @@ class SerieEnLaApp:
 
     @property
     def completa(self):
-        """Como Serie.completa: la app solo muestra las que se pueden empezar (T1:E1) y tienen al menos 3."""
-        return self.tiene_el_primero and self.capitulos >= MINIMO_DE_CAPITULOS
+        """Como Serie.completa: la app muestra las que se pueden empezar desde T1:E1."""
+        return self.tiene_el_primero
 
 
 def como_en_la_app(contenido=Contenido.VIVO):
@@ -307,6 +300,19 @@ MOSTRAR = {
 }
 
 
+def canales_filtrados(contenido='', mostrar='todo', texto='', origen='', sin_logo=False, idioma=''):
+    """
+    El catálogo con los filtros de Organizar (`mostrar`: uno de MOSTRAR).
+    Sin `contenido`, de todas las secciones (lo usa la exportación).
+    """
+    estado = {'app': 'en_app', 'caidos': 'fuera', 'quitados': 'quitados'}.get(mostrar, '')
+    canales = catalogo(texto=texto, contenido=contenido, origen=origen, sin_logo=sin_logo, idioma=idioma,
+                       estado=estado)
+    if mostrar == 'fuera':
+        canales = canales.filter(Q(activo=False) | Q(tiene_usable=False))
+    return canales
+
+
 def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', origen='', sin_logo=False, idioma='',
                         categoria='', pagina=None, por_pagina=120):
     """
@@ -330,11 +336,7 @@ def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', orig
             items = [s for s in items if not alguno_activo(s)]
         pares = [(s, s.categoria_id) for s in items]
     else:
-        estado = {'app': 'en_app', 'caidos': 'fuera', 'quitados': 'quitados'}.get(mostrar, '')
-        canales = catalogo(texto=texto, contenido=contenido, origen=origen, sin_logo=sin_logo, idioma=idioma,
-                           estado=estado)
-        if mostrar == 'fuera':
-            canales = canales.filter(Q(activo=False) | Q(tiene_usable=False))
+        canales = canales_filtrados(contenido, mostrar, texto=texto, origen=origen, sin_logo=sin_logo, idioma=idioma)
         pares = list(canales.values_list('pk', 'categoria_id'))
 
     cuantos = {}

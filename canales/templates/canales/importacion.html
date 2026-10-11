@@ -6,7 +6,9 @@
          pasa queda "apta"; lo que no, con el motivo (y agrupado por causa).
       2. Cargar las aptas: recién ahí entran a la app.
     Abajo, cada entrada de la lista con lo que pasó y por qué, su idioma,
-    país, formato, la calidad que encontró la prueba y la categoría.
+    país, formato, la calidad que encontró la prueba y la categoría, en
+    pestañas por lo que pasó ("Pasaron", "No pasaron"...). Cada entrada es
+    una ficha que se acomoda al ancho: todo se ve sin correr de costado.
 {% endcomment %}
 
 {% block titulo %}{{ importacion.archivo }} · Contenido{% endblock %}
@@ -49,13 +51,13 @@
         </div>
     </div>
     <ul class="contadores mb-3" aria-live="polite">
-        <li><b data-contador="aptas">{{ avance.aptas }}</b> aptos (falta cargar)</li>
-        <li><b data-contador="agregadas">{{ avance.agregadas }}</b> cargados</li>
-        <li><b data-contador="rechazadas">{{ avance.rechazadas }}</b> no pasaron la prueba</li>
-        <li><b data-contador="caidas">{{ avance.caidas }}</b> no responden</li>
-        <li><b data-contador="descartadas">{{ avance.descartadas }}</b> descartados</li>
-        <li><b data-contador="repetidas">{{ avance.repetidas }}</b> ya estaban</li>
-        <li><b data-contador="pendientes">{{ avance.pendientes }}</b> por probar</li>
+        <li><a href="?estado=apta#entradas"><b data-contador="aptas">{{ avance.aptas }}</b> pasaron (falta cargar)</a></li>
+        <li><a href="?estado=agregada#entradas"><b data-contador="agregadas">{{ avance.agregadas }}</b> cargados</a></li>
+        <li><a href="?estado=rechazada#entradas"><b data-contador="rechazadas">{{ avance.rechazadas }}</b> no pasaron la prueba</a></li>
+        <li><a href="?estado=caida#entradas"><b data-contador="caidas">{{ avance.caidas }}</b> no responden</a></li>
+        <li><a href="?estado=descartada#entradas"><b data-contador="descartadas">{{ avance.descartadas }}</b> descartados</a></li>
+        <li><a href="?estado=repetida#entradas"><b data-contador="repetidas">{{ avance.repetidas }}</b> ya estaban</a></li>
+        <li><a href="?estado=pendiente#entradas"><b data-contador="pendientes">{{ avance.pendientes }}</b> por probar</a></li>
     </ul>
 
     {% if por_causa %}
@@ -101,15 +103,18 @@
 <section class="tarjeta mb-4" id="carga">
     <h2 class="tarjeta-titulo">2. Cargar las aptas</h2>
     {% if avance.aptas %}
-    <p class="texto-suave">Pasaron la prueba <strong data-texto="aptas">{{ avance.aptas }}</strong>. Revisalas abajo (filtrá por "Apta") y, si están bien, cargalas: recién ahí entran a la app. Si un canal ya existe, la dirección se suma como fuente alternativa.</p>
-    {% if puede_importar %}
+    <p class="texto-suave">Pasaron la prueba <strong data-texto="aptas">{{ avance.aptas }}</strong>. Revisalas abajo, en la pestaña «Pasaron», y si están bien, cargalas: recién ahí entran a la app. Si un canal ya existe, la dirección se suma como fuente alternativa.</p>
     <div class="d-flex flex-wrap align-items-center gap-2">
+        {% if estado_elegido != 'apta' %}
+        <a href="?estado=apta#entradas" class="btn btn-outline-secondary"><i class="bi bi-eye" aria-hidden="true"></i> Ver las {{ avance.aptas }} que pasaron</a>
+        {% endif %}
+        {% if puede_importar %}
         <button type="button" class="btn btn-primary" data-accion="cargar">
-            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> <span>Cargar las {{ avance.aptas }} aptas</span>
+            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> <span>Cargar las {{ avance.aptas }} que pasaron</span>
         </button>
         <span class="texto-suave small" data-texto="estado-carga"></span>
+        {% endif %}
     </div>
-    {% endif %}
     {% else %}
     <p class="mb-0"><i class="bi bi-check-circle" aria-hidden="true"></i> Listo: se cargaron {{ avance.agregadas }} el {{ importacion.cargada|date:"j/m/Y H:i" }}.</p>
     {% endif %}
@@ -122,15 +127,8 @@
         <label for="q" class="visually-hidden">Buscar</label>
         <input type="search" id="q" name="q" value="{{ filtros.texto }}" class="form-control" placeholder="Nombre o categoría">
     </div>
-    <div>
-        <label for="estado" class="visually-hidden">Qué pasó</label>
-        <select id="estado" name="estado" class="form-select">
-            <option value="">Todos los estados</option>
-            {% for valor, texto in estados %}
-            <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ texto }}</option>
-            {% endfor %}
-        </select>
-    </div>
+    {# Qué pasó se elige con las pestañas de abajo: al filtrar, se queda en la misma #}
+    {% if filtros.estado %}<input type="hidden" name="estado" value="{{ filtros.estado }}">{% endif %}
     <div>
         <label for="causa" class="visually-hidden">Por qué no pasó</label>
         <select id="causa" name="causa" class="form-select">
@@ -162,50 +160,52 @@
     {% if hay_filtros %}<a href="{% url 'canales:importacion' importacion.pk %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 
-<div class="tarjeta p-0" id="entradas">
-    {% if pagina.object_list %}
-    <div class="table-responsive">
-        <table class="table tabla mb-0">
-            <thead><tr>
-                <th scope="col">Canal</th><th scope="col">Categoría</th><th scope="col">Idioma / país</th>
-                <th scope="col">Formato y calidad</th><th scope="col">Qué pasó</th><th scope="col">Por qué</th>
-            </tr></thead>
-            <tbody>
-            {% for e in pagina %}
-                <tr>
-                    <td>
-                        <div class="celda-canal">
-                            <span class="logo-mini" data-iniciales="{{ e.nombre|iniciales }}">{% if e.logo %}<img src="{{ e.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ e.nombre|iniciales }}{% endif %}</span>
-                            <div>
-                                {% if e.canal and puede_importar %}<a href="{% url 'canales:canal_editar' e.canal.pk %}?volver={{ request.get_full_path|urlencode }}" title="Editar el canal">{{ e.nombre }}</a>{% else %}{{ e.nombre }}{% endif %}
-                                {% if e.nombre_original != e.nombre %}<small>{{ e.nombre_original }}</small>{% endif %}
-                                {% if not e.logo %}<small>Sin logo</small>{% endif %}
-                            </div>
-                        </div>
-                    </td>
-                    <td class="small">{{ e.categoria|default:"—" }}</td>
-                    <td class="small">
-                        {{ e.get_idioma_display }}{% if e.pais %} · {{ e.pais }}{% endif %}
-                        {% if e.contenido != 'vivo' %}<br><span class="texto-suave">{{ e.get_contenido_display }}</span>{% endif %}
-                    </td>
-                    <td class="small texto-suave">{{ e.get_tipo_display }}{% if e.calidad %}<br>{{ e.calidad }}{% endif %}</td>
-                    <td><span class="chip chip-{{ e.estado }}">{{ e.get_estado_display }}</span></td>
-                    <td class="motivo">
-                        {{ e.motivo|default:"—" }}
-                        <div class="direccion">{{ e.url|truncatechars:90 }}</div>
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
+<nav class="pestanias pestanias-entradas mb-3" id="entradas" aria-label="Qué pasó con cada uno">
+    <a href="?{{ sin_estado }}#entradas" {% if not estado_elegido %}class="activa" aria-current="page"{% endif %}>Todos <span class="pestania-numero">{{ importacion.total }}</span></a>
+    {% for estado, texto, cantidad in pestanias %}
+    <a href="?{% if sin_estado %}{{ sin_estado }}&amp;{% endif %}estado={{ estado }}#entradas" {% if estado_elegido == estado %}class="activa" aria-current="page"{% endif %}>{{ texto }} <span class="pestania-numero">{{ cantidad }}</span></a>
+    {% endfor %}
+</nav>
+
+{% if pagina.object_list %}
+<p class="small texto-suave mb-2">
+    {% if pagina.paginator.count == 1 %}1 de la lista{% else %}{{ pagina.paginator.count }} de la lista{% endif %}{% if hay_filtros %} con estos filtros{% endif %}{% if pagina.paginator.num_pages > 1 %} · se ven de a {{ pagina.paginator.per_page }}{% endif %}
+</p>
+<ul class="entradas">
+    {% for e in pagina %}
+    <li class="entrada">
+        <span class="logo-mini" data-iniciales="{{ e.nombre|iniciales }}">{% if e.logo %}<img src="{{ e.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ e.nombre|iniciales }}{% endif %}</span>
+        <div class="entrada-datos">
+            <div class="entrada-nombre">
+                {% if e.canal and puede_importar %}<a href="{% url 'canales:canal_editar' e.canal.pk %}?volver={{ request.get_full_path|urlencode }}" title="Editar el canal">{{ e.nombre }}</a>{% else %}<strong>{{ e.nombre }}</strong>{% endif %}
+                {% if e.nombre_original != e.nombre %}<small>En la lista: {{ e.nombre_original }}</small>{% endif %}
+            </div>
+            <ul class="entrada-etiquetas" aria-label="Datos">
+                <li>{{ e.get_contenido_display }}</li>
+                <li title="Categoría">{{ e.categoria|default:"Sin categoría" }}</li>
+                <li>{% if e.idioma %}{{ e.get_idioma_display }}{% else %}Idioma: no se sabe{% endif %}{% if e.pais %} · {{ e.pais }}{% endif %}</li>
+                <li>{{ e.get_tipo_display }}</li>
+                {% if e.numero %}<li>Canal {{ e.numero }}</li>{% endif %}
+                {% if not e.logo %}<li class="falta">Sin logo</li>{% endif %}
+            </ul>
+            {% if e.calidad %}<div class="entrada-calidad">{{ e.calidad }}</div>{% endif %}
+        </div>
+        <div class="entrada-resultado">
+            <span class="chip chip-{{ e.estado }}">{{ e.get_estado_display }}</span>
+            <p class="entrada-motivo">{{ e.motivo|default:"—" }}</p>
+            <div class="direccion">{{ e.url }}</div>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="tarjeta">
     <div class="vacio">
         <i class="bi bi-funnel" aria-hidden="true"></i>
-        <p>Ningún canal de esta lista coincide con los filtros.</p>
+        <p>{% if hay_filtros %}Ningún canal de esta lista coincide con los filtros.{% else %}No hay nada en esta lista.{% endif %}</p>
     </div>
-    {% endif %}
 </div>
+{% endif %}
 
 {% include "parciales/_paginacion.html" with pagina=pagina parametros=parametros %}
 {% endblock %}
@@ -253,9 +253,10 @@
             pintar(r);
             if (r.ocupada) estado.textContent = 'Esta lista ya se está probando en otra pestaña: esperando…';
         },
-        alTerminar: function () {
+        alTerminar: function (r) {
             estado.textContent = 'Terminó la prueba. Actualizando…';
-            window.location.href = window.location.pathname + '#carga';   // sin ?empezar=1
+            // Sin ?empezar=1, y mostrando las que pasaron (lo que se va a cargar)
+            window.location.href = window.location.pathname + (r.aptas ? '?estado=apta#carga' : '#carga');
         },
         alCambiar: function (corriendo) {
             if (corriendo) { inicio = Date.now(); verificadasAlEmpezar = verificadas; }

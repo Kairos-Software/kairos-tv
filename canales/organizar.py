@@ -360,8 +360,8 @@ def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=
     A serie con `nombre_serie`: además los renombra como capítulos de esa
     serie, numerados en el orden de sus nombres ("Pocoyó S01 E01 El tornado"...),
     para que la app los arme como UNA serie. Sin nombre solo se puede si ya
-    dicen temporada y capítulo ("Arrow S02 E05"): si no, cada uno quedaría
-    como una serie de un capítulo y la app no los mostraría.
+    dicen temporada y capítulo ("Arrow S02 E05"): si no, quedarían sin un
+    T1:E1 identificable y la app no los mostraría.
 
     Devuelve cuántos cambiaron.
     """
@@ -378,8 +378,7 @@ def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=
         sueltos = [c.nombre for c in elegidos if clasificar.episodio(c.nombre)[2] is None]
         if sueltos:
             raise NoSePuede(f'Escribí el nombre de la serie: {len(sueltos)} de los elegidos no dicen temporada y '
-                            f'capítulo (ej. "{sueltos[0][:40]}"), y solos quedarían como series de un capítulo que '
-                            f'la app no muestra.')
+                            f'capítulo (ej. "{sueltos[0][:40]}") y quedarían sin un T1:E1 que la app pueda mostrar.')
     ahora, quien, indice = timezone.now(), _usuario(usuario), indice_de_categorias()
     # Si la serie ya tiene capítulos (de otra tanda o importación), se sigue desde el último
     primero = ultimo_capitulo(nombre_serie, temporada, excluir=[c.pk for c in elegidos]) + 1 if nombre_serie else 1

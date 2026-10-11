@@ -55,11 +55,13 @@ class Serie {
 
   List<int> get numerosDeTemporada => temporadas.keys.toList()..sort();
 
-  /// Se puede seguir desde el principio: tiene el T1:E1 y al menos
-  /// [minimoDeCapitulos]. Las que no (sueltas o a medias) no se muestran.
-  bool get completa => episodios.length >= minimoDeCapitulos && (temporadas[1]?.any((e) => e.numero == 1) ?? false);
+  /// Si sus capítulos dicen temporada y capítulo ("S01 E02"). Un video suelto
+  /// cargado como serie no lo dice: no se puede saber cuál es el primero.
+  bool numerada = false;
 
-  static const minimoDeCapitulos = 3;
+  /// Se puede seguir desde el principio: tiene el T1:E1. Una serie nueva se
+  /// muestra desde su primer capítulo; las que empiezan a mitad no se muestran.
+  bool get completa => numerada && (temporadas[1]?.any((e) => e.numero == 1) ?? false);
 
   List<Episodio> get episodios => [for (final t in numerosDeTemporada) ...temporadas[t]!];
 
@@ -85,7 +87,8 @@ List<Serie> agruparSeries(List<Canal> capitulos, {Map<String, String> portadas =
     final int temporada;
     final int numero;
     final String titulo;
-    if (partes != null && partes.group(1)!.trim().isNotEmpty) {
+    final conNumero = partes != null && partes.group(1)!.trim().isNotEmpty;
+    if (conNumero) {
       nombre = partes.group(1)!.trim();
       temporada = int.parse(partes.group(2) ?? partes.group(4)!);
       numero = int.parse(partes.group(3) ?? partes.group(5)!);
@@ -101,6 +104,7 @@ List<Serie> agruparSeries(List<Canal> capitulos, {Map<String, String> portadas =
       nombre.toLowerCase(),
       () => Serie(nombre: nombre, categoria: capitulo.categoria, portada: portadaDe[nombre.toLowerCase()] ?? ''),
     );
+    if (conNumero) serie.numerada = true;
     serie.temporadas
         .putIfAbsent(temporada, () => [])
         .add(Episodio(canal: capitulo, temporada: temporada, numero: numero, titulo: titulo));
@@ -411,7 +415,7 @@ class Catalogo extends ChangeNotifier {
 /// Se deja de mostrar un tiempo, según el motivo, sin esperar a que el
 /// servidor lo saque (eso pasa recién cuando falla en varios aparatos):
 ///   - formato (el aparato no lo sabe mostrar): 30 días; no va a cambiar.
-///   - en vivo: 6 horas (los canales vuelven).
+///   - en vivo: 1 hora (los canales vuelven).
 ///   - películas y capítulos: 3 días.
 /// Se guarda en el aparato.
 class NoAnda {
@@ -431,7 +435,7 @@ class NoAnda {
 
   static Duration cuantoTiempo({required bool enVivo, required bool deFormato}) {
     if (deFormato) return const Duration(days: 30);
-    return enVivo ? const Duration(hours: 6) : const Duration(days: 3);
+    return enVivo ? const Duration(hours: 1) : const Duration(days: 3);
   }
 
   static Future<void> cargar() async {

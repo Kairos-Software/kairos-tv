@@ -17,6 +17,10 @@ indican de dos maneras, y las dos se leen:
     #EXTVLCOPT:http-referrer=https://pagina-del-canal.com/
     https://servidor/canal/playlist.m3u8|User-Agent=Mozilla/5.0&Referer=https://...
 
+Las listas que exporta este sistema (exportar.py) llevan además la sección
+de cada cosa (kairos-seccion="pelicula"), para que al volver a importarlas
+vaya a la misma aunque la dirección no diga si es una película.
+
     from canales.m3u import leer_m3u
     for entrada in leer_m3u(texto):
         entrada.nombre, entrada.url, entrada.categoria, ...
@@ -44,6 +48,7 @@ class EntradaM3U:
     user_agent: str = ''
     referer: str = ''
     idioma: str = ''   # el tvg-language tal cual viene ("Spanish", "es"...)
+    seccion: str = ''  # kairos-seccion: la sección que tenía al exportarla de este sistema
 
     @property
     def tipo(self):
@@ -86,6 +91,7 @@ def leer_m3u(texto):
                 tvg_id=atributos.get('tvg-id', '').strip(),
                 pais=atributos.get('tvg-country', '').strip().upper()[:2],
                 idioma=atributos.get('tvg-language', '').strip(),
+                seccion=atributos.get('kairos-seccion', '').strip()[:10],
             )
         elif linea.upper().startswith('#EXTVLCOPT:') and pendiente is not None:
             opcion, _, valor = linea[len('#EXTVLCOPT:'):].partition('=')

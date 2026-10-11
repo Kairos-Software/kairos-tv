@@ -230,6 +230,18 @@ class PortadaDeSerieTests(TestCase):
         self.assertEqual(imagenes.portada_de('Pocoyó Todo'), 'https://ejemplo.com/pocoyo.jpg')
         self.assertEqual(PortadaDeSerie.objects.count(), 1)
 
+    def test_pasarla_a_pelicula_y_volver_no_pierde_ninguna_imagen(self):
+        imagenes.poner_portada('Pocoyó', 'https://ejemplo.com/serie.jpg')
+        capitulos = organizar.capitulos_de(['Pocoyó'])
+        organizar.cambiar_contenido(capitulos, Contenido.PELICULA)
+        # Como película muestra su propia imagen; la portada de la serie queda guardada aparte
+        Canal.objects.filter(nombre__startswith='Pocoyó S01 E01').update(logo='https://ejemplo.com/peli.jpg')
+        self.assertEqual(imagenes.portada_de('Pocoyó'), 'https://ejemplo.com/serie.jpg')
+        organizar.cambiar_contenido(Canal.objects.all(), Contenido.SERIE, 'Pocoyó')
+        serie, = consultas.series()
+        self.assertEqual(serie.logo, 'https://ejemplo.com/serie.jpg')
+        self.assertEqual(Canal.objects.get(nombre__startswith='Pocoyó S01 E01').logo, 'https://ejemplo.com/peli.jpg')
+
     def test_eliminar_la_serie_le_saca_la_portada(self):
         imagenes.poner_portada('Pocoyó', 'https://ejemplo.com/pocoyo.jpg')
         self.client.post(reverse('canales:organizar_eliminar'), {'serie': 'Pocoyó'})

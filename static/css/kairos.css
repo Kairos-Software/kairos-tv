@@ -954,6 +954,42 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .logo-mini img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
 .motivo { min-width: 220px; max-width: 420px; font-size: .84rem; }
 .direccion { margin-top: .25rem; font-size: .72rem; color: var(--texto-apagado); word-break: break-all; }
+.contadores a { color: inherit; text-decoration: none; }
+.contadores li:has(a:hover) { border-color: var(--celeste-borde); }
+
+/* Informe de una lista: pestañas por lo que pasó y una ficha por entrada (todo a la vista, sin correr de costado) */
+.pestania-numero {
+    padding: .05rem .45rem; border-radius: 999px; background: var(--capa-alta);
+    font-size: .72rem; font-weight: 700; color: var(--texto-suave);
+}
+.pestanias a.activa .pestania-numero { background: rgba(0, 240, 255, .14); color: var(--celeste-claro); }
+.entradas {
+    list-style: none; margin: 0; padding: 0; overflow: hidden;
+    background: var(--capa); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
+}
+.entrada {
+    display: grid; grid-template-columns: 46px minmax(0, 1fr) minmax(0, 1fr); gap: .4rem 1rem; align-items: start;
+    padding: .9rem 1.1rem; border-bottom: 1px solid rgba(59, 73, 75, .35);
+}
+.entrada:last-child { border-bottom: 0; }
+.entrada:hover { background: rgba(255, 255, 255, .025); }
+.entrada-nombre { font-weight: 600; overflow-wrap: anywhere; }
+.entrada-nombre a { text-decoration: none; }
+.entrada-nombre a:hover { text-decoration: underline; }
+.entrada-nombre small { display: block; font-size: .74rem; font-weight: 400; color: var(--texto-apagado); }
+.entrada-etiquetas { list-style: none; display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0 0; padding: 0; }
+.entrada-etiquetas li {
+    padding: .1rem .5rem; border-radius: var(--radio-chico); background: var(--capa-baja); border: 1px solid var(--borde);
+    font-size: .74rem; color: var(--texto-suave); overflow-wrap: anywhere;
+}
+.entrada-etiquetas li.falta { color: var(--dorado-claro); border-color: rgba(255, 186, 32, .32); }
+.entrada-calidad { margin-top: .35rem; font-size: .78rem; color: var(--texto-suave); }
+.entrada-motivo { margin: .35rem 0 0; font-size: .84rem; }
+@media (max-width: 767.98px) {
+    /* En el celular, el resultado va debajo de los datos */
+    .entrada { grid-template-columns: 46px minmax(0, 1fr); }
+    .entrada-resultado { grid-column: 2; }
+}
 
 /* Catálogo: los canales como en la app */
 .vista-app { display: grid; gap: 2rem; }
@@ -1131,6 +1167,22 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 }
 .detalle-canal::backdrop { background: rgba(5, 5, 8, .72); backdrop-filter: blur(4px); }
 .detalle-canal-cuerpo { padding: 1.5rem; }
+
+/* Organizar: el cuadro "Exportar" (secciones con sus categorías, formato y opciones) */
+.exportar-paso { margin: 0 0 1.2rem; padding: 0; border: 0; }
+.exportar-paso legend { margin-bottom: .45rem; font-size: .95rem; font-weight: 700; }
+.exportar-secciones {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .6rem;
+    margin: .5rem 0 0 1.5rem;
+}
+.exportar-seccion { padding: .55rem .7rem; background: var(--capa); border: 1px solid var(--borde); border-radius: var(--radio); }
+.exportar-seccion:has([data-seccion]:checked) { border-color: var(--celeste-borde); }
+.exportar-seccion summary { margin-top: .3rem; font-size: .78rem; color: var(--texto-suave); cursor: pointer; }
+.exportar-categorias { display: grid; gap: .2rem; max-height: 12rem; overflow-y: auto; margin-top: .35rem; font-size: .82rem; }
+.exportar-numero { margin-left: .2rem; font-size: .75rem; color: var(--texto-apagado); }
+@media (max-width: 575.98px) {
+    .exportar-secciones { margin-left: 0; }
+}
 
 /* Series */
 .grilla-series { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .9rem; }

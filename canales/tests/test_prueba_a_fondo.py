@@ -318,6 +318,20 @@ def verificador_a_fondo(fuentes, cabeceras=None, hasta=None):
 
 class ImportarConPruebaTests(TestCase):
 
+    def test_en_una_lista_una_serie_de_menos_de_3_capitulos_no_entra(self):
+        # En las listas suelen venir series a medias. (Traída de YouTube como serie, sí entra: test_youtube)
+        lista = '''#EXTM3U
+#EXTINF:-1 group-title="SERIES",Electro Andes S01 E01
+http://x/series/u/p/electro-andes-1.mkv
+'''
+        importacion = crear_importacion(lista, 'serie-nueva.m3u', a_fondo=True)
+        avance = procesar_lote(importacion, verificador_a_fondo)
+        entrada = importacion.entradas.get()
+
+        self.assertTrue(avance['terminada'])
+        self.assertEqual((entrada.estado, entrada.causa), (Estado.RECHAZADA, Causa.SERIE_INCOMPLETA))
+        self.assertIn('al menos 3 capítulos', entrada.motivo)
+
     def test_solo_quedan_aptas_las_que_pasan_todo(self):
         importacion = crear_importacion(LISTA, 'lista.m3u', solo_espanol=True, a_fondo=True)
         avance = procesar_lote(importacion, verificador_a_fondo)

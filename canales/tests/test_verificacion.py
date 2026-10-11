@@ -350,12 +350,34 @@ class PantallaCanalesTests(TestCase):
         self.assertContains(pagina, 'Volver a probar las que fallaron')
         # Probar no cargó nada: las aptas se cargan con otro botón
         self.assertEqual(Canal.objects.count(), 0)
-        self.assertContains(pagina, 'Cargar las 2 aptas')
+        self.assertContains(pagina, 'Cargar las 2 que pasaron')
         datos = self.client.post(reverse('canales:importacion_cargar', args=[importacion.pk])).json()
         self.assertEqual((datos['aptas'], datos['agregadas']), (0, 2))
         self.assertEqual(set(Canal.objects.values_list('nombre', flat=True)), {'Canal 26', 'Encuentro'})
         pagina = self.client.get(reverse('canales:importacion', args=[importacion.pk]))
         self.assertContains(pagina, 'Listo: se cargaron 2')
+
+    def test_pestanias_para_ver_las_que_pasaron(self):
+        self.subir()
+        importacion = Importacion.objects.get()
+        self.client.post(reverse('canales:importacion_lote', args=[importacion.pk]))
+        url = reverse('canales:importacion', args=[importacion.pk])
+        pagina = self.client.get(url, {'idioma': 'es'})
+        # Solo las pestañas que tienen algo, con cuántos hay; cambiar de pestaña conserva los otros filtros
+        self.assertContains(pagina, 'Pasaron (falta cargar) <span class="pestania-numero">2</span>')
+        self.assertContains(pagina, 'No responden <span class="pestania-numero">1</span>')
+        self.assertNotContains(pagina, 'Ya estaban <span')
+        self.assertContains(pagina, 'href="?idioma=es&amp;estado=apta#entradas"')
+        self.assertContains(pagina, 'Ver las 2 que pasaron')
+        aptas = self.client.get(url, {'estado': 'apta'})
+        self.assertContains(aptas, 'Canal 26')
+        self.assertContains(aptas, 'Encuentro')
+        self.assertNotContains(aptas, 'Telemax')
+        self.assertNotContains(aptas, 'Ver las 2 que pasaron')   # ya las está viendo
+        self.assertContains(aptas, 'class="activa" aria-current="page">Pasaron')
+        # La dirección completa, sin cortar
+        caidas = self.client.get(url, {'estado': 'caida'})
+        self.assertContains(caidas, '<div class="direccion">https://caida/telemax.m3u8</div>')
 
     def test_acepta_un_zip(self):
         import io

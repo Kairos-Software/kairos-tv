@@ -27,6 +27,7 @@
     <div class="d-flex flex-wrap gap-2">
         <a href="{% url 'canales:youtube' %}" class="btn btn-outline-secondary"><i class="bi bi-youtube" aria-hidden="true"></i> Traer de YouTube</a>
         <a href="{% url 'canales:inicio' %}#form-importar" class="btn btn-outline-secondary"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
+        <button type="button" class="btn btn-outline-secondary" data-abrir-exportar><i class="bi bi-download" aria-hidden="true"></i> Exportar</button>
     </div>
     {% endif %}
 </div>
@@ -351,6 +352,7 @@
                         <option value="quitar">Quitar de la app</option>
                         <option value="mostrar">Volver a mostrar</option>
                         <option value="eliminar">Eliminar</option>
+                        <option value="exportar">Exportar (M3U8 o Excel)</option>
                     </select>
                 </div>
 
@@ -404,6 +406,10 @@
                     <button type="submit" class="btn btn-sm btn-danger" formaction="{% url 'canales:organizar_eliminar' %}"
                             data-confirmar="¿Eliminar lo elegido? Desaparece del panel y de la app.">Eliminar</button>
                     <span class="espejo-ayuda">Desaparecen del panel y de la app. Si los volvés a importar, entran de nuevo normalmente.</span>
+                </div>
+                <div class="espejo-barra-fila" data-accion="exportar" hidden>
+                    <button type="button" class="btn btn-sm btn-primary" data-abrir-exportar="elegido">Exportar lo elegido…</button>
+                    <span class="espejo-ayuda">Bajás lo elegido como lista M3U8 o planilla de Excel. No cambia nada acá.</span>
                 </div>
             </div>
             {% endif %}
@@ -494,6 +500,104 @@
     {% csrf_token %}
     <input type="hidden" name="volver" value="{{ request.get_full_path }}">
 </form>
+
+{% if puede_editar %}
+{# ── Exportar: qué (secciones y categorías, o las tarjetas elegidas), en qué formato y con qué opciones ── #}
+<dialog class="detalle-canal" id="exportar" aria-labelledby="exportar-titulo">
+    <form method="post" action="{% url 'canales:organizar_exportar' %}" class="detalle-canal-cuerpo" id="form-exportar">
+        {% csrf_token %}
+        <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+        {# Los filtros de la página (se usan si queda marcado "Con los filtros de arriba") #}
+        <input type="hidden" name="q" value="{{ filtros.texto }}">
+        <input type="hidden" name="mostrar" value="{{ filtros.mostrar }}">
+        <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
+        <input type="hidden" name="origen" value="{{ filtros.origen }}">
+        <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <h2 class="h5 mb-1" id="exportar-titulo">Exportar</h2>
+                <p class="small texto-suave mb-0">Bajás una copia de lo que elijas. No cambia nada en el panel ni en la app.</p>
+            </div>
+            <button type="button" class="btn-close" data-cerrar aria-label="Cerrar"></button>
+        </div>
+
+        <fieldset class="exportar-paso">
+            <legend>1. Qué</legend>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="que" value="lista" id="exportar-lista" checked>
+                <label class="form-check-label" for="exportar-lista">Secciones y categorías</label>
+            </div>
+            <div class="exportar-secciones" id="exportar-arbol">
+                {% for s in para_exportar %}
+                <div class="exportar-seccion">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="seccion" value="{{ s.clave }}" id="exp-{{ s.clave }}"
+                               data-seccion="{{ s.clave }}" {% if s.clave == contenido and datos.elegida == 'todas' %}checked{% endif %} {% if not s.total %}disabled{% endif %}>
+                        <label class="form-check-label" for="exp-{{ s.clave }}"><strong>{{ s.nombre }}</strong> <span class="exportar-numero">{{ s.total }}</span></label>
+                    </div>
+                    {% if s.categorias %}
+                    <details {% if s.clave == contenido and datos.elegida != 'todas' %}open{% endif %}>
+                        <summary>o solo algunas categorías ({{ s.categorias|length }})</summary>
+                        <div class="exportar-categorias">
+                            {% for valor, nombre, total in s.categorias %}
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" name="categoria" value="{{ valor }}" id="exp-{{ s.clave }}-{{ forloop.counter }}"
+                                       data-de="{{ s.clave }}" {% if s.clave == contenido and valor == exportar_elegida %}checked{% endif %}>
+                                <label class="form-check-label" for="exp-{{ s.clave }}-{{ forloop.counter }}">{{ nombre }} <span class="exportar-numero">{{ total }}</span></label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="d-flex gap-2 mt-2 mb-2 ms-4">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-exportar-todo="1">Todo</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-exportar-todo="0">Nada</button>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="que" value="elegido" id="exportar-elegido">
+                <label class="form-check-label" for="exportar-elegido">Lo que elegiste en la página (<span id="exportar-cuantos">0</span>)</label>
+                <div class="espejo-ayuda mx-0 mt-1 mb-0">Para un canal, una película o una serie en particular: tocá su tarjeta (o buscala arriba) y elegí esta opción.</div>
+            </div>
+        </fieldset>
+
+        <fieldset class="exportar-paso">
+            <legend>2. Formato</legend>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="formato" value="m3u" id="exportar-m3u" checked>
+                <label class="form-check-label" for="exportar-m3u"><strong>Lista M3U8</strong> · para VLC, otra app de listas o volver a importarla acá</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="formato" value="excel" id="exportar-excel">
+                <label class="form-check-label" for="exportar-excel"><strong>Planilla de Excel</strong> · para mirar y ordenar todo: una hoja con el contenido y otra con cada señal (estado, error, de dónde salió…)</label>
+            </div>
+        </fieldset>
+
+        <fieldset class="exportar-paso">
+            <legend>3. Opciones</legend>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="solo_las_que_andan" value="1" id="exportar-andan">
+                <label class="form-check-label" for="exportar-andan">Solo las señales que andan (las que usa la app). Sin marcar, todas: también las caídas y las apagadas.</label>
+            </div>
+            {% if hay_filtros %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="con_filtros" value="1" id="exportar-filtros" checked>
+                <label class="form-check-label" for="exportar-filtros">Con los filtros de arriba: {{ descripcion_filtros }}</label>
+            </div>
+            {% endif %}
+        </fieldset>
+
+        <p class="espejo-ayuda mx-0">Lo de YouTube no se exporta (solo lo abre el reproductor de YouTube). En la lista, un canal con varias señales aparece una vez por señal con el mismo nombre: al volver a importarla se juntan solas.</p>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-download" aria-hidden="true"></i> Exportar</button>
+            <button type="button" class="btn btn-link" data-cerrar>Cancelar</button>
+            <span class="small estado-mal" id="exportar-aviso" role="alert"></span>
+        </div>
+    </form>
+</dialog>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -695,6 +799,77 @@
             uno.appendChild(campo);
             uno.submit();
         });
+    }
+
+    // ── Exportar ──
+    var cuadroExportar = document.getElementById('exportar');
+    if (cuadroExportar) {
+        var formExportar = document.getElementById('form-exportar');
+        var arbol = document.getElementById('exportar-arbol');
+        var radioLista = document.getElementById('exportar-lista');
+        var radioElegido = document.getElementById('exportar-elegido');
+        var aviso = document.getElementById('exportar-aviso');
+        var tarjetasElegidas = function () {
+            return Array.prototype.filter.call(document.querySelectorAll('#form-organizar .canal-elegir'), function (c) { return c.checked; });
+        };
+        // Una sección entera marcada ya incluye sus categorías: se marcan y quedan fijas (no se mandan aparte)
+        var acomodarSeccion = function (seccion) {
+            arbol.querySelectorAll('[data-de="' + seccion.value + '"]').forEach(function (c) {
+                if (seccion.checked) c.checked = true;
+                else if (c.disabled) c.checked = false;
+                c.disabled = seccion.checked;
+            });
+        };
+        arbol.querySelectorAll('[data-seccion]').forEach(function (seccion) {
+            acomodarSeccion(seccion);
+            seccion.addEventListener('change', function () { acomodarSeccion(seccion); });
+        });
+        arbol.addEventListener('change', function () { radioLista.checked = true; aviso.textContent = ''; });
+        cuadroExportar.querySelectorAll('[data-exportar-todo]').forEach(function (boton) {
+            boton.addEventListener('click', function () {
+                var marcar = boton.dataset.exportarTodo === '1';
+                arbol.querySelectorAll('[data-seccion]').forEach(function (seccion) {
+                    if (!seccion.disabled) seccion.checked = marcar;
+                    acomodarSeccion(seccion);
+                });
+                arbol.querySelectorAll('[data-de]').forEach(function (c) { if (!marcar) c.checked = false; });
+                radioLista.checked = true;
+                aviso.textContent = '';
+            });
+        });
+        document.querySelectorAll('[data-abrir-exportar]').forEach(function (boton) {
+            boton.addEventListener('click', function () {
+                var cuantos = tarjetasElegidas().length;
+                document.getElementById('exportar-cuantos').textContent = cuantos;
+                radioElegido.disabled = !cuantos;
+                if (boton.dataset.abrirExportar === 'elegido' && cuantos) radioElegido.checked = true;
+                else if (!cuantos) radioLista.checked = true;
+                aviso.textContent = '';
+                cuadroExportar.showModal();
+            });
+        });
+        formExportar.addEventListener('submit', function (evento) {
+            formExportar.querySelectorAll('[data-tarjeta]').forEach(function (campo) { campo.remove(); });
+            if (radioElegido.checked) {
+                // Las tarjetas elegidas están en otro formulario: se copian acá
+                tarjetasElegidas().forEach(function (c) {
+                    var campo = document.createElement('input');
+                    campo.type = 'hidden';
+                    campo.name = c.name;
+                    campo.value = c.value;
+                    campo.dataset.tarjeta = '';
+                    formExportar.appendChild(campo);
+                });
+            } else if (!arbol.querySelector('input:checked:not(:disabled)')) {
+                evento.preventDefault();
+                aviso.textContent = 'Elegí al menos una sección o una categoría.';
+                return;
+            }
+            // La descarga no cambia de página: se cierra el cuadro
+            window.setTimeout(function () { cuadroExportar.close(); }, 300);
+        });
+        cuadroExportar.querySelectorAll('[data-cerrar]').forEach(function (b) { b.addEventListener('click', function () { cuadroExportar.close(); }); });
+        cuadroExportar.addEventListener('click', function (evento) { if (evento.target === cuadroExportar) cuadroExportar.close(); });
     }
 })();
 </script>

@@ -18,6 +18,7 @@ urlpatterns = [
     path('organizar/', views.organizar_contenido, name='organizar'),
     path('organizar/editar/', views.organizar_editar, name='organizar_editar'),
     path('organizar/eliminar/', views.organizar_eliminar, name='organizar_eliminar'),
+    path('organizar/exportar/', views.organizar_exportar, name='organizar_exportar'),
     path('series/detalle/', views.serie_detalle, name='serie_detalle'),
     path('canal/<int:pk>/editar/', views.canal_editar, name='canal_editar'),
     path('probar/', views.probar, name='probar'),

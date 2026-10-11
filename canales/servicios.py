@@ -12,7 +12,8 @@ no trabe el servidor y para que SOLO ENTRE LO QUE ESTÁ BIEN:
 Qué pasa la prueba lo decide `juzgar` (formato, sonido, idioma del audio,
 resolución, si llega fluido y si avanza: ver verificacion.py). Al terminar
 de probar, `_revisar_series` saca las series que la app no podría mostrar
-enteras (sin el capítulo 1 o con muy pocos).
+enteras (sin el capítulo 1 de la temporada 1; en una lista, también las
+de menos de 3 capítulos).
 
 La pantalla del panel llama a procesar_lote y cargar_lote una y otra vez y
 muestra el avance. `importar_m3u()` hace todo de una vez (consola y pruebas).
@@ -34,9 +35,9 @@ from django.utils import timezone
 from actividad.models import Accion
 from actividad.registro import registrar
 
-from . import clasificar, organizar, youtube
+from . import clasificar, organizar, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
-from .consultas import MINIMO_DE_CAPITULOS, fuentes_usables
+from .consultas import fuentes_usables
 from .m3u import leer_m3u, normalizar
 from .models import Canal, Contenido, EntradaImportada, Fuente, Importacion
 from .verificacion import NOMBRES_DE_CODECS, Resultado
@@ -138,21 +139,27 @@ def crear_importacion(texto, archivo='', usuario=None, solo_espanol=False, desca
     idioma, país y si son capítulos de series.
     `seccion`: todo va a esa sección nueva (Radio, Música...) en vez de a En
     vivo, Películas o Series según lo que sea cada uno.
+    Una lista exportada de acá (trae kairos-seccion) queda `de_kairos`.
     """
+    leidas = leer_m3u(texto)
     importacion = Importacion.objects.create(
         archivo=archivo[:150], usuario=usuario if getattr(usuario, 'pk', None) else None,
         solo_espanol=solo_espanol, descartar_sin_logo=descartar_sin_logo, descartar_vod=descartar_vod,
         descartar_adultos=descartar_adultos, a_fondo=a_fondo, seccion=seccion,
+        de_kairos=any(entrada.seccion for entrada in leidas),
     )
     ya_guardadas = set(Fuente.objects.values_list('url', flat=True))
+    validas = {clave for clave, _ in secciones.todas()}
     vistas = set()
     entradas = []
-    for posicion, entrada in enumerate(leer_m3u(texto), start=1):
+    for posicion, entrada in enumerate(leidas, start=1):
         nombre = clasificar.limpiar_nombre(entrada.nombre)
         idioma, pais = clasificar.idioma_y_pais(entrada.nombre, entrada.categoria, entrada.pais,
                                                 entrada.tvg_id, entrada.idioma)
-        # Con una sección nueva elegida, todo va ahí (una radio puede parecer "un archivo", o sea una película)
-        contenido = seccion or clasificar.contenido(entrada.url, entrada.categoria)
+        # Con una sección nueva elegida, todo va ahí (una radio puede parecer "un archivo", o sea una película).
+        # Si no, la que dice una lista exportada de acá (si esa sección existe) o la que parece por la dirección.
+        contenido = (seccion or (entrada.seccion if entrada.seccion in validas else '')
+                     or clasificar.contenido(entrada.url, entrada.categoria))
         tipo = clasificar.formato(entrada.url)
 
         estado, motivo = Estado.PENDIENTE, ''
@@ -376,13 +383,23 @@ def _motivo_apta(resultado):
     return ' '.join(motivos)
 
 
+# Al importar una lista M3U, una serie con menos capítulos que esto no entra
+MINIMO_DE_CAPITULOS_EN_LISTAS = 3
+
+
 def _revisar_series(importacion):
     """
     Al terminar de probar: las series que la app no mostraría (como
-    consultas.Serie.completa: hace falta el capítulo 1 de la temporada 1 y
-    al menos MINIMO_DE_CAPITULOS) no pasan. Cuentan los capítulos aptos de
-    esta lista más los que ya están cargados y se ven.
+    consultas.Serie.completa: hace falta el capítulo 1 de la temporada 1)
+    no pasan. Cuentan los capítulos aptos de esta lista más los que ya están
+    cargados y se ven.
+
+    Una LISTA (M3U) además pide MINIMO_DE_CAPITULOS_EN_LISTAS: ahí suelen venir
+    series sueltas o a medias. Lo que se trae a propósito como serie (YouTube
+    "Es una serie") entra desde su primer capítulo: puede ser una serie nueva.
+    Una lista exportada de acá, también: esas series ya estaban aceptadas.
     """
+    minimo = 1 if importacion.serie or importacion.de_kairos else MINIMO_DE_CAPITULOS_EN_LISTAS
     aptas = list(importacion.entradas.filter(estado=Estado.APTA, contenido=Contenido.SERIE))
     if not aptas:
         return 0
@@ -400,14 +417,14 @@ def _revisar_series(importacion):
     rechazadas = []
     for clave, (serie, capitulos) in por_serie.items():
         todos = ya_cargados.get(clave, set()) | {(temporada, numero) for _, temporada, numero in capitulos}
-        if (1, 1) in todos and len(todos) >= MINIMO_DE_CAPITULOS:
+        if (1, 1) in todos and len(todos) >= minimo:
             continue
-        falta = ('el capítulo 1 de la temporada 1' if (1, 1) not in todos
-                 else f'tener al menos {MINIMO_DE_CAPITULOS} capítulos')
+        falta = ('el capítulo 1 de la temporada 1. La app no la mostraría' if (1, 1) not in todos
+                 else f'tener al menos {minimo} capítulos (en una lista, una serie tan corta suele estar a medias)')
         for entrada, _, _ in capitulos:
             entrada.estado, entrada.causa = Estado.RECHAZADA, Causa.SERIE_INCOMPLETA
             entrada.motivo = (f'Serie incompleta: de "{serie}" pasaron {len(capitulos)} capítulo(s) y le falta '
-                              f'{falta}. La app no la mostraría.')[:200]
+                              f'{falta}.')[:200]
             rechazadas.append(entrada)
     EntradaImportada.objects.bulk_update(rechazadas, ['estado', 'causa', 'motivo'])
     return len(rechazadas)

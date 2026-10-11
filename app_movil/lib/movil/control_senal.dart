@@ -2,7 +2,8 @@
 /// si una no arranca, da error o se queda trabada cargando, pasa sola a la
 /// siguiente (failover) y le avisa al servidor que esa falló y por qué (ver
 /// [Falla]). Si ninguna anda, queda con [error]: el motivo de la última, y
-/// se anota en [NoAnda] (deja de mostrarse en este aparato por un tiempo).
+/// se anota en [NoAnda] (deja de mostrarse en este aparato por un tiempo),
+/// salvo que haya llegado a verse bien: entonces fue un corte de la señal.
 ///
 /// Además:
 ///   - Sin imagen: si a los pocos segundos el video suena pero no tiene imagen
@@ -195,11 +196,9 @@ class ControlSenal extends ChangeNotifier {
       error = fuentes.isEmpty
           ? 'Este canal no tiene una señal que la app pueda reproducir.'
           : (_ultimaFalla?.mensaje ?? Falla.conexion.mensaje);
-      // No anduvo ninguna: deja de mostrarse en este aparato por un tiempo
-      // (salvo que el problema sea la conexión del aparato)
       final falla = _ultimaFalla;
-      if (fuentes.isNotEmpty && falla != null && falla.motivo != Falla.sinInternet.motivo) {
-        NoAnda.anotar(canal!, deFormato: falla.motivo == Falla.formato.motivo);
+      if (esconderDespuesDe(falla, hayFuentes: fuentes.isNotEmpty, seVio: _seVio)) {
+        NoAnda.anotar(canal!, deFormato: falla!.motivo == Falla.formato.motivo);
         canalesSinAndar++;
       }
       _avisar();
@@ -269,6 +268,13 @@ class ControlSenal extends ChangeNotifier {
       _vueltas = 0;
     });
   }
+
+  /// Si no anduvo ninguna fuente, ¿deja de mostrarse en este aparato por un
+  /// tiempo ([NoAnda])? No si el problema es la conexión del aparato, ni si
+  /// llegó a verse bien y después se cortó: en este aparato SÍ anda, la señal
+  /// tuvo un corte (suele volver enseguida, o la estaba usando otro aparato).
+  static bool esconderDespuesDe(Falla? falla, {required bool hayFuentes, required bool seVio}) =>
+      hayFuentes && falla != null && falla.motivo != Falla.sinInternet.motivo && !seVio;
 
   /// Las radios (solo audio) no tienen imagen y está bien.
   bool _deberiaTenerImagen(FuenteCanal elegida) {

@@ -46,4 +46,5 @@ cliente.restaurar(request.user)  # la deshace
 |---|---|
 | `modelos.py` | `ModeloBase`: molde para cualquier modelo nuevo. Trae fecha de creación y modificación, quién lo creó y modificó, y **baja lógica** ("eliminar" lo oculta en vez de borrarlo, y se puede restaurar). Ver el ejemplo de uso al principio del archivo. |
 | `tests/` | Pruebas automáticas. `tests/app_pruebas/` es una mini-app con modelos de prueba que **solo se instala al correr los tests**. |
+| `excel.py` | `planilla(hojas)`: arma un **.xlsx** sin instalar nada (texto, números, Sí/No y fechas; una o varias hojas, la primera fila en negrita y fija, con filtros y columnas de ancho cómodo). `TIPO_XLSX` para la respuesta. Para fórmulas, colores o gráficos haría falta una librería (openpyxl). |
 | `formularios.py` | `EstiloBootstrapMixin`: agrega solo las clases de Bootstrap a los campos de cualquier formulario, marca en rojo los que tienen error (recién al validar, en `full_clean`: así un formulario puede armar sus desplegables después de `super().__init__()` y se valida con esas opciones) y pone "Elegir…" como opción vacía de los desplegables. `CampoFecha`: selector de fecha nativo del navegador. |

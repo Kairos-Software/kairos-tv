@@ -27,18 +27,22 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.formats import date_format
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.text import slugify
 from django.utils.timezone import localtime
 from django.views.decorators.http import require_POST
 
+from actividad.models import Accion
+from actividad.registro import registrar
+from herramientas.excel import TIPO_XLSX
 from usuarios.decoradores import requiere_permiso
 from usuarios.permisos import chequear_permiso
 
-from . import consultas, estadisticas, imagenes, organizar, secciones, servicios, youtube
+from . import consultas, estadisticas, exportar, imagenes, organizar, secciones, servicios, youtube
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
 from .forms import (CanalForm, CanalNuevoForm, EditarDesdeOrganizarForm, FuentesFormSet, ImportarListaForm,
                     ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
@@ -106,6 +110,18 @@ def importacion_url(importacion):
 
 # ── Una importación ──────────────────────────────────────────────────
 
+# (estado, cómo se llama la pestaña, su número en servicios.progreso), en el orden de las pestañas
+PESTANIAS_DE_LA_IMPORTACION = [
+    (EntradaImportada.Estado.APTA, 'Pasaron (falta cargar)', 'aptas'),
+    (EntradaImportada.Estado.AGREGADA, 'Cargados', 'agregadas'),
+    (EntradaImportada.Estado.RECHAZADA, 'No pasaron la prueba', 'rechazadas'),
+    (EntradaImportada.Estado.CAIDA, 'No responden', 'caidas'),
+    (EntradaImportada.Estado.DESCARTADA, 'Descartados', 'descartadas'),
+    (EntradaImportada.Estado.REPETIDA, 'Ya estaban', 'repetidas'),
+    (EntradaImportada.Estado.PENDIENTE, 'Por probar', 'pendientes'),
+]
+
+
 @requiere_permiso('ver_canales')
 def importacion(request, pk):
     importacion = get_object_or_404(Importacion.objects.select_related('usuario'), pk=pk)
@@ -131,15 +147,26 @@ def importacion(request, pk):
     if filtros['contenido'] in EntradaImportada.Contenido.values:
         entradas = entradas.filter(contenido=filtros['contenido'])
 
+    avance = servicios.progreso(importacion)
+    # Las pestañas de arriba de la lista: qué pasó con cada uno, con cuántos hay (las vacías no se muestran).
+    # Cambian solo el estado: la búsqueda, el idioma y el contenido elegidos se mantienen.
+    sin_estado = request.GET.copy()
+    for clave in ('estado', 'causa', 'pagina'):
+        sin_estado.pop(clave, None)
+    pestanias = [(estado, texto, avance[clave]) for estado, texto, clave in PESTANIAS_DE_LA_IMPORTACION
+                 if avance[clave]]
     return render(request, 'canales/importacion.html', {
         'importacion': importacion,
-        'avance': servicios.progreso(importacion),
+        'avance': avance,
+        'pestanias': pestanias,
+        'sin_estado': sin_estado.urlencode(),
+        # Elegir una causa es mirar dentro de "No pasaron la prueba"
+        'estado_elegido': EntradaImportada.Estado.RECHAZADA if filtros['causa'] else filtros['estado'],
         'por_causa': servicios.por_causa(importacion),
         'pagina': Paginator(entradas, ENTRADAS_POR_PAGINA).get_page(request.GET.get('pagina')),
         'filtros': filtros,
         'hay_filtros': any(filtros.values()),
         'parametros': _parametros_sin_pagina(request),
-        'estados': EntradaImportada.Estado.choices,
         'causas': EntradaImportada.Causa.choices,
         'contenidos': EntradaImportada.Contenido.choices,
         'puede_importar': chequear_permiso(request.user, 'importar_canales'),
@@ -320,6 +347,7 @@ def organizar_contenido(request):
     for clave in ('categoria', 'pagina'):
         base.pop(clave, None)
     base['contenido'] = contenido
+    puede_editar = chequear_permiso(request.user, 'importar_canales')
     return render(request, 'canales/organizar.html', {
         'contenido': contenido,
         'datos': datos,
@@ -340,8 +368,29 @@ def organizar_contenido(request):
         'iconos': Seccion.Icono.choices,
         'parametros': _parametros_sin_pagina(request),
         'base': base.urlencode(),
-        'puede_editar': chequear_permiso(request.user, 'importar_canales'),
+        'puede_editar': puede_editar,
+        # El cuadro "Exportar": todas las secciones con sus categorías, la que se está viendo y los filtros
+        'para_exportar': exportar.para_elegir() if puede_editar else [],
+        'exportar_elegida': f'ninguna:{contenido}' if datos.elegida == 'ninguna' else datos.elegida,
+        'descripcion_filtros': _descripcion_de_filtros(filtros),
     })
+
+
+def _descripcion_de_filtros(filtros):
+    """'busca «arr» · Solo lo que ve la app · en español' (para el cuadro Exportar)."""
+    partes = []
+    if filtros['texto']:
+        partes.append(f'busca «{filtros["texto"]}»')
+    if filtros['mostrar'] != 'todo':
+        partes.append(consultas.MOSTRAR[filtros['mostrar']])
+    if filtros['idioma']:
+        idiomas = {'es': 'en español', 'otro': 'en otro idioma', 'sin_dato': 'idioma: no se sabe'}
+        partes.append(idiomas[filtros['idioma']])
+    if filtros['origen']:
+        partes.append(f'de «{filtros["origen"]}»')
+    if filtros['sin_logo']:
+        partes.append('sin imagen')
+    return ' · '.join(partes)
 
 
 @require_POST
@@ -396,6 +445,69 @@ def organizar_eliminar(request):
     cantidad = organizar.eliminar_contenido(canales, request.user)
     messages.success(request, f'Se eliminaron {cantidad}.' if cantidad else 'No había nada elegido.')
     return redirect(_volver(request))
+
+
+def _eleccion_para_exportar(request):
+    """Lo que se eligió en el cuadro "Exportar" de Organizar (ver exportar.Eleccion)."""
+    datos = request.POST
+    eleccion = exportar.Eleccion(solo_las_que_andan=datos.get('solo_las_que_andan') == '1')
+    if datos.get('que') == 'elegido':
+        eleccion.canales = [pk for pk in datos.getlist('canal') if pk.isdigit()]
+        eleccion.series = [nombre for nombre in datos.getlist('serie') if nombre.strip()]
+    else:
+        validas = {clave for clave, _ in secciones.todas()}
+        eleccion.secciones = [clave for clave in datos.getlist('seccion') if clave in validas]
+        for valor in datos.getlist('categoria'):
+            if valor.isdigit():
+                eleccion.categorias.append(int(valor))
+            elif valor.startswith('ninguna:') and valor[len('ninguna:'):] in validas:
+                eleccion.sin_categoria.append(valor[len('ninguna:'):])
+    if datos.get('con_filtros') == '1':
+        eleccion.filtros = {
+            'texto': datos.get('q', '').strip(),
+            'mostrar': datos.get('mostrar') if datos.get('mostrar') in consultas.MOSTRAR else '',
+            'origen': datos.get('origen', ''),
+            'sin_logo': datos.get('sin_logo') == '1',
+            'idioma': datos.get('idioma') if datos.get('idioma') in ('es', 'otro', 'sin_dato') else '',
+        }
+    return eleccion
+
+
+def _nombre_de_la_exportacion(eleccion, nombres_de_secciones):
+    if eleccion.canales or eleccion.series:
+        parte = 'eleccion'
+    elif eleccion.categorias or eleccion.sin_categoria:
+        parte = 'categorias'
+    elif set(eleccion.secciones) == set(nombres_de_secciones):
+        parte = 'todo'
+    else:
+        parte = '-'.join(slugify(nombres_de_secciones[clave]) for clave in eleccion.secciones)
+    return f'kairos-tv-{parte}-{localtime():%Y-%m-%d}'
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def organizar_exportar(request):
+    """Baja lo elegido como lista M3U8 o planilla de Excel (ver exportar.py)."""
+    eleccion = _eleccion_para_exportar(request)
+    if eleccion.vacia:
+        messages.warning(request, 'Elegí qué exportar: una sección, una categoría o tarjetas de la página.')
+        return redirect(_volver(request))
+    resultado = exportar.elegir(eleccion)
+    if not resultado.canales:
+        motivo = ': lo que había es de YouTube o no tiene señales que anden' if resultado.sin_senales else ''
+        messages.warning(request, f'No hay nada para exportar con esa elección{motivo}.')
+        return redirect(_volver(request))
+    nombre = _nombre_de_la_exportacion(eleccion, resultado.nombres_de_secciones)
+    if request.POST.get('formato') == 'excel':
+        archivo, tipo, extension = exportar.planilla_excel(resultado), TIPO_XLSX, 'xlsx'
+    else:
+        archivo, tipo, extension = exportar.lista_m3u(resultado).encode(), 'audio/x-mpegurl; charset=utf-8', 'm3u8'
+    registrar(request.user, Accion.OTRO,
+              f'Exportó {len(resultado.canales)} canales, películas o capítulos ({resultado.cantidad_de_senales} '
+              f'señales) como {"Excel" if extension == "xlsx" else "lista M3U8"}.', modulo='canales')
+    return HttpResponse(archivo, content_type=tipo,
+                        headers={'Content-Disposition': f'attachment; filename="{nombre}.{extension}"'})
 
 
 @requiere_permiso('ver_canales')
@@ -513,10 +625,6 @@ def _avisar_cambio_de_tipo(request, cantidad, contenido, nombre_serie=''):
     if contenido == Contenido.SERIE and nombre_serie:
         messages.success(request, f'Listo: {cantidad} quedaron como capítulos de la serie "{nombre_serie}" '
                                   f'(los ves en la sección Series).')
-        total = organizar.capitulos_de([nombre_serie]).count()
-        if total < consultas.MINIMO_DE_CAPITULOS:
-            messages.warning(request, f'Ojo: "{nombre_serie}" tiene {total} capítulo(s) y la app solo muestra series '
-                                      f'con {consultas.MINIMO_DE_CAPITULOS} o más. Sumale capítulos para que aparezca.')
         return
     messages.success(request, f'{cantidad} pasaron a la sección {secciones.nombre(contenido)}.')
 

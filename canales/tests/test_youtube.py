@@ -199,6 +199,12 @@ class ComoUnaSerieTests(TestCase):
         serie, = consultas.series()
         self.assertEqual((serie.nombre, serie.completa), ('Masha y el Oso', True))
 
+    def test_una_serie_nueva_entra_con_su_primer_capitulo(self):
+        self._traer(_masha('mmmmmmmmmm1'))
+        self.assertEqual(self._capitulos(), [('Masha y el Oso S01 E01', 'mmmmmmmmmm1')])
+        serie, = consultas.series()
+        self.assertEqual((serie.nombre, serie.cantidad, serie.completa), ('Masha y el Oso', 1, True))
+
     def test_los_que_no_pasan_no_dejan_huecos(self):
         # El más viejo no deja verse fuera de YouTube: igual hay capítulo 1 (la app no muestra series sin él)
         def el_primero_no(fuentes, **_):
