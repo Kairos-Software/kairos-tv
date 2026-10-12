@@ -23,19 +23,22 @@ numerada.
     organizar.categorias_parecidas(categorias)                     -> [[cat, cat], ...] posibles repetidas
     organizar.borrar_categoria(infantil, con_contenido=True)       -> la borra con todo lo de adentro
     organizar.eliminar_contenido(canales)                          -> los borra (si se vuelven a importar, vuelven)
+    organizar.eliminados_recientes() / restaurar_eliminados(pk)    -> deshacer una eliminación
 """
 
 import re
+from dataclasses import dataclass
+from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.utils import timezone
 
 from actividad.models import Accion
 from actividad.registro import registrar
 
 from . import clasificar, imagenes, secciones
-from .models import Canal, Categoria, Contenido, Fuente
+from .models import Canal, Categoria, Contenido, EntradaImportada, Fuente
 
 
 class NoSePuede(Exception):
@@ -405,16 +408,21 @@ def capitulos_de(nombres_de_series):
     return Canal.objects.filter(pk__in=pks)
 
 
-def unir_en_una_serie(nombres_de_series, nombre_serie, temporada=1, usuario=None):
+def unir_en_una_serie(nombres_de_series, nombre_serie, temporada=1, usuario=None, capitulos=None):
     """
     Junta varias series (por ejemplo, 239 "series" de un capítulo que eran
     videos sueltos) en UNA serie: todos sus capítulos quedan numerados en orden.
+    `capitulos`: solo esos (los que se ven con un filtro); sin decirlo, todos los de esas series.
     """
     if not _limpio(nombre_serie):
         raise NoSePuede('Escribí el nombre de la serie que va a juntarlas.')
-    cantidad = cambiar_contenido(capitulos_de(nombres_de_series), Contenido.SERIE, nombre_serie, temporada, usuario)
-    for nombre in nombres_de_series:   # si alguna tenía portada, la serie unida se queda con ella
-        imagenes.mover_portada(nombre, nombre_serie)
+    if capitulos is None:
+        capitulos = capitulos_de(nombres_de_series)
+    cantidad = cambiar_contenido(capitulos, Contenido.SERIE, nombre_serie, temporada, usuario)
+    for nombre in nombres_de_series:
+        # Si alguna tenía portada, la serie unida se queda con ella (solo si pasó entera: si no, sigue siendo suya)
+        if _clave(nombre) == _clave(nombre_serie) or not capitulos_de([nombre]).exists():
+            imagenes.mover_portada(nombre, nombre_serie)
     return cantidad
 
 
@@ -435,6 +443,102 @@ def eliminar_contenido(canales, usuario=None):
     nombres = ', '.join(c.nombre for c in elegidos[:3]) + (f' y {len(elegidos) - 3} más' if len(elegidos) > 3 else '')
     registrar(usuario, Accion.ELIMINAR, f'Eliminó {len(elegidos)}: {nombres}.', modulo='canales')
     return len(elegidos)
+
+
+@dataclass
+class Eliminacion:
+    """Una vez que se eliminó contenido (todo lo que se eliminó junto tiene el mismo momento)."""
+    muestra: int             # pk de uno de los eliminados: identifica a todos los de esa vez
+    cuando: object
+    quien: str
+    cantidad: int
+    nombres: list            # algunos, para reconocerla
+    por_seccion: dict        # {nombre de la sección: cuántos}
+    recuperables: int        # cuántos tienen sus señales anotadas en el informe de alguna lista
+
+
+def eliminados_recientes(dias=30, limite=60):
+    """Lo eliminado en los últimos `dias`, agrupado por cada vez que se eliminó (lo más nuevo primero)."""
+    desde = timezone.now() - timedelta(days=dias)
+    grupos = (Canal.todos.filter(eliminado_en__gte=desde).values('eliminado_en')
+              .annotate(cantidad=Count('pk'), muestra=Min('pk')).order_by('-eliminado_en')[:limite])
+    resultado = []
+    for grupo in grupos:
+        canales = Canal.todos.filter(eliminado_en=grupo['eliminado_en'])
+        primero = canales.select_related('eliminado_por').first()
+        por_seccion = {}
+        for contenido, cantidad in canales.order_by().values_list('contenido').annotate(Count('pk')):
+            por_seccion[secciones.nombre(contenido) or contenido] = cantidad
+        resultado.append(Eliminacion(
+            muestra=grupo['muestra'], cuando=grupo['eliminado_en'], cantidad=grupo['cantidad'],
+            quien=str(primero.eliminado_por or 'alguien'),
+            nombres=list(canales.order_by('nombre').values_list('nombre', flat=True)[:6]),
+            por_seccion=por_seccion,
+            recuperables=EntradaImportada.objects.filter(canal__in=canales, estado=EntradaImportada.Estado.AGREGADA)
+            .values('canal').distinct().count(),
+        ))
+    return resultado
+
+
+@dataclass
+class Restauracion:
+    restaurados: int = 0
+    ya_estaban: int = 0      # se volvieron a importar después: ya hay uno igual
+    sin_senales: int = 0     # agregados a mano (o con el informe de la lista borrado): sus señales no quedaron
+
+
+@transaction.atomic
+def restaurar_eliminados(muestra, usuario=None):
+    """
+    Deshace una eliminación (todo lo eliminado junto con `muestra`). Al
+    eliminar, las señales se borran; se rearman con lo que quedó anotado en
+    el informe de cada lista importada (dirección, formato, User-Agent...) y
+    quedan "sin verificar": la app las intenta y la verificación las prueba.
+    Si la categoría también se había borrado, vuelve (o, si ya hay otra con
+    ese nombre, van a esa).
+    """
+    momento = Canal.todos.filter(pk=muestra, eliminado_en__isnull=False).values_list('eliminado_en', flat=True).first()
+    resultado = Restauracion()
+    if momento is None:
+        return resultado
+    en_uso = set(Fuente.objects.values_list('url', flat=True))
+    activos = {(_clave(c.nombre), c.contenido) for c in Canal.objects.only('nombre', 'contenido')}
+    categorias = {}
+    for canal in Canal.todos.filter(eliminado_en=momento).select_related('categoria').order_by('pk'):
+        if (_clave(canal.nombre), canal.contenido) in activos:
+            resultado.ya_estaban += 1
+            continue
+        fuentes = []
+        entradas = (EntradaImportada.objects.filter(canal=canal, estado=EntradaImportada.Estado.AGREGADA)
+                    .select_related('importacion').order_by('importacion__creada', 'posicion'))
+        for entrada in entradas:
+            if entrada.url in en_uso:
+                continue
+            en_uso.add(entrada.url)
+            fuentes.append(Fuente(canal=canal, url=entrada.url, tipo=entrada.tipo or Fuente.Tipo.HLS,
+                                  prioridad=len(fuentes) + 1, origen=entrada.importacion.archivo[:150],
+                                  user_agent=entrada.user_agent, referer=entrada.referer, codec=entrada.codec,
+                                  calidad=entrada.calidad, estado=Fuente.Estado.SIN_VERIFICAR))
+        if not fuentes:
+            resultado.sin_senales += 1
+            continue
+        categoria = canal.categoria
+        if categoria is not None and categoria.eliminado_en is not None:
+            if categoria.pk not in categorias:
+                otra = Categoria.objects.filter(contenido=categoria.contenido, nombre=categoria.nombre).first()
+                if otra is None:
+                    categoria.restaurar(usuario)
+                categorias[categoria.pk] = otra or categoria
+            canal.categoria = categorias[categoria.pk]
+        canal.eliminado_en, canal.eliminado_por = None, None
+        canal.marcar_autor(usuario)
+        canal.save()
+        Fuente.objects.bulk_create(fuentes)
+        activos.add((_clave(canal.nombre), canal.contenido))
+        resultado.restaurados += 1
+    registrar(usuario, Accion.EDITAR, f'Restauró {resultado.restaurados} eliminados el '
+                                      f'{timezone.localtime(momento):%d/%m %H:%M}.', modulo='canales')
+    return resultado
 
 
 @transaction.atomic

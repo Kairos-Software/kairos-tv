@@ -985,6 +985,16 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .entrada-etiquetas li.falta { color: var(--dorado-claro); border-color: rgba(255, 186, 32, .32); }
 .entrada-calidad { margin-top: .35rem; font-size: .78rem; color: var(--texto-suave); }
 .entrada-motivo { margin: .35rem 0 0; font-size: .84rem; }
+.entrada-estado { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.entrada-estado .form-check-input { margin: 0; }
+/* Elegir varias para "No cargar" / "Cargar igual": queda a mano al bajar */
+.entradas-barra {
+    position: sticky; top: .5rem; z-index: 2;
+    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .8rem;
+    margin-bottom: .6rem; padding: .7rem 1rem;
+    background: var(--capa-alta); border: 1px solid var(--celeste-borde); border-radius: var(--radio);
+}
+.entradas-barra .espejo-ayuda { margin: 0; flex: 1 1 22rem; }
 @media (max-width: 767.98px) {
     /* En el celular, el resultado va debajo de los datos */
     .entrada { grid-template-columns: 46px minmax(0, 1fr); }
@@ -1167,6 +1177,11 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 }
 .detalle-canal::backdrop { background: rgba(5, 5, 8, .72); backdrop-filter: blur(4px); }
 .detalle-canal-cuerpo { padding: 1.5rem; }
+
+/* Eliminados recientemente: una tarjeta por cada vez que se eliminó, con "Restaurar" */
+.eliminaciones { list-style: none; display: grid; gap: .8rem; margin: 0; padding: 0; }
+.eliminacion { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
+.eliminacion > div { flex: 1 1 24rem; min-width: 0; overflow-wrap: anywhere; }
 
 /* Organizar: el cuadro "Exportar" (secciones con sus categorías, formato y opciones) */
 .exportar-paso { margin: 0 0 1.2rem; padding: 0; border: 0; }

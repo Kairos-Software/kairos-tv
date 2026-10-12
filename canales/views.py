@@ -148,13 +148,16 @@ def importacion(request, pk):
         entradas = entradas.filter(contenido=filtros['contenido'])
 
     avance = servicios.progreso(importacion)
-    # Las pestañas de arriba de la lista: qué pasó con cada uno, con cuántos hay (las vacías no se muestran).
+    # Las pestañas de arriba de la lista: qué pasó con cada uno, con cuántos hay. Las vacías no se muestran,
+    # salvo "Pasaron": es la que se mira antes de cargar, y tiene que estar aunque todavía no se haya probado nada.
     # Cambian solo el estado: la búsqueda, el idioma y el contenido elegidos se mantienen.
     sin_estado = request.GET.copy()
     for clave in ('estado', 'causa', 'pagina'):
         sin_estado.pop(clave, None)
     pestanias = [(estado, texto, avance[clave]) for estado, texto, clave in PESTANIAS_DE_LA_IMPORTACION
-                 if avance[clave]]
+                 if avance[clave] or estado == EntradaImportada.Estado.APTA]
+    pagina = Paginator(entradas, ENTRADAS_POR_PAGINA).get_page(request.GET.get('pagina'))
+    se_pueden_elegir = [EntradaImportada.Estado.APTA, *servicios.SE_PUEDEN_CARGAR_IGUAL]
     return render(request, 'canales/importacion.html', {
         'importacion': importacion,
         'avance': avance,
@@ -163,7 +166,11 @@ def importacion(request, pk):
         # Elegir una causa es mirar dentro de "No pasaron la prueba"
         'estado_elegido': EntradaImportada.Estado.RECHAZADA if filtros['causa'] else filtros['estado'],
         'por_causa': servicios.por_causa(importacion),
-        'pagina': Paginator(entradas, ENTRADAS_POR_PAGINA).get_page(request.GET.get('pagina')),
+        'pagina': pagina,
+        # Lo que se puede cambiar a mano antes de cargar ("No cargar" / "Cargar igual")
+        'se_pueden_elegir': se_pueden_elegir,
+        'se_pueden_cargar_igual': servicios.SE_PUEDEN_CARGAR_IGUAL,
+        'hay_para_elegir': any(e.estado in se_pueden_elegir for e in pagina),
         'filtros': filtros,
         'hay_filtros': any(filtros.values()),
         'parametros': _parametros_sin_pagina(request),
@@ -201,6 +208,33 @@ def importacion_reintentar(request, pk):
         messages.info(request, 'No hay nada para volver a probar.')
         return redirect(importacion_url(importacion))
     return redirect(f'{importacion_url(importacion)}?empezar=1')
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_elegir(request, pk):
+    """Antes de cargar: "Cargar igual" lo que no pasó, o "No cargar" lo que pasó (las entradas marcadas)."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    entradas = [valor for valor in request.POST.getlist('entrada') if valor.isdigit()]
+    accion = request.POST.get('accion')
+    # El botón de una sola entrada ("Cargar igual" / "No cargar" en su ficha)
+    for campo, de_una in (('cargar_una', 'cargar'), ('no_cargar_una', 'descartar')):
+        if request.POST.get(campo, '').isdigit():
+            entradas, accion = [request.POST[campo]], de_una
+    if accion == 'cargar':
+        cantidad = servicios.cargar_igual(importacion, entradas, request.user)
+        texto = f'{cantidad} pasaron a «Pasaron»: entran con el próximo «Cargar».'
+    else:
+        cantidad = servicios.no_cargar(importacion, entradas, request.user)
+        texto = f'{cantidad} pasaron a «Descartados»: no se van a cargar.'
+    if cantidad:
+        messages.success(request, texto)
+    else:
+        messages.info(request, 'No había nada elegido para cambiar.')
+    volver = request.POST.get('volver', '')
+    if not url_has_allowed_host_and_scheme(volver, allowed_hosts={request.get_host()}):
+        volver = importacion_url(importacion)
+    return redirect(volver)
 
 
 @require_POST
@@ -319,6 +353,35 @@ def _preparar_para_editar(pagina, contenido):
         })
 
 
+def _filtros_de_organizar(datos):
+    """Los filtros de Organizar contenido (de la dirección, o de un formulario que los repite)."""
+    return {
+        'texto': datos.get('q', '').strip(),
+        'mostrar': datos.get('mostrar') if datos.get('mostrar') in consultas.MOSTRAR else 'todo',
+        'origen': datos.get('origen', ''),
+        'sin_logo': datos.get('sin_logo') == '1',
+        'idioma': datos.get('idioma') if datos.get('idioma') in ('es', 'otro', 'sin_dato') else '',
+    }
+
+
+def _hay_filtros(filtros):
+    return bool(filtros['texto'] or filtros['mostrar'] != 'todo' or filtros['origen'] or filtros['sin_logo']
+                or filtros['idioma'])
+
+
+def _capitulos_elegidos(request):
+    """
+    Los capítulos de las series elegidas en Organizar. Con filtros (por ejemplo,
+    "de tal lista"), SOLO los que se ven con esos filtros: la tarjeta muestra
+    esos, y una acción nunca puede tocar lo que no se ve (otra lista).
+    """
+    capitulos = organizar.capitulos_de(request.POST.getlist('serie'))
+    filtros = _filtros_de_organizar(request.POST)
+    if _hay_filtros(filtros):
+        capitulos = capitulos.filter(pk__in=consultas.canales_filtrados(Contenido.SERIE, **filtros).values('pk'))
+    return capitulos
+
+
 @requiere_permiso('ver_canales')
 def organizar_contenido(request):
     """
@@ -330,13 +393,7 @@ def organizar_contenido(request):
     contenido = request.GET.get('contenido', '')
     if not secciones.es_valida(contenido):
         contenido = Contenido.VIVO
-    filtros = {
-        'texto': request.GET.get('q', '').strip(),
-        'mostrar': request.GET.get('mostrar') if request.GET.get('mostrar') in consultas.MOSTRAR else 'todo',
-        'origen': request.GET.get('origen', ''),
-        'sin_logo': request.GET.get('sin_logo') == '1',
-        'idioma': request.GET.get('idioma') if request.GET.get('idioma') in ('es', 'otro', 'sin_dato') else '',
-    }
+    filtros = _filtros_de_organizar(request.GET)
     datos = consultas.organizar_contenido(contenido, categoria=request.GET.get('categoria', ''),
                                           pagina=request.GET.get('pagina'), **filtros)
     _preparar_para_editar(datos.pagina, contenido)
@@ -353,8 +410,7 @@ def organizar_contenido(request):
         'datos': datos,
         'nodo': nodo,
         'filtros': filtros,
-        'hay_filtros': bool(filtros['texto'] or filtros['mostrar'] != 'todo' or filtros['origen']
-                            or filtros['sin_logo'] or filtros['idioma']),
+        'hay_filtros': _hay_filtros(filtros),
         'que_mostrar': consultas.MOSTRAR.items(),
         'origenes': consultas.origenes(contenido),
         'categorias': categorias,
@@ -369,6 +425,9 @@ def organizar_contenido(request):
         'parametros': _parametros_sin_pagina(request),
         'base': base.urlencode(),
         'puede_editar': puede_editar,
+        # Lo que tiene la categoría elegida SIN filtros (borrarla con todo se lleva eso, no lo que se ve)
+        'total_de_la_categoria': next((c.total for c in categorias if nodo and nodo['categoria']
+                                       and c.pk == nodo['categoria'].pk), 0),
         # El cuadro "Exportar": todas las secciones con sus categorías, la que se está viendo y los filtros
         'para_exportar': exportar.para_elegir() if puede_editar else [],
         'exportar_elegida': f'ninguna:{contenido}' if datos.elegida == 'ninguna' else datos.elegida,
@@ -437,14 +496,35 @@ def organizar_editar(request):
 def organizar_eliminar(request):
     """Elimina lo elegido (canales/películas/capítulos, o series enteras)."""
     if request.POST.getlist('serie'):
-        canales = organizar.capitulos_de(request.POST.getlist('serie'))
+        cantidad = organizar.eliminar_contenido(_capitulos_elegidos(request), request.user)
         for nombre in request.POST.getlist('serie'):
-            imagenes.poner_portada(nombre, '')
+            if not organizar.capitulos_de([nombre]).exists():   # se fue entera (no quedaron de otras listas)
+                imagenes.poner_portada(nombre, '')
     else:
-        canales = _canales_elegidos(request)
-    cantidad = organizar.eliminar_contenido(canales, request.user)
-    messages.success(request, f'Se eliminaron {cantidad}.' if cantidad else 'No había nada elegido.')
+        cantidad = organizar.eliminar_contenido(_canales_elegidos(request), request.user)
+    if cantidad:
+        messages.success(request, f'Se eliminaron {cantidad}. Si fue un error, se recuperan en «Eliminados».')
+    else:
+        messages.info(request, 'No había nada elegido.')
     return redirect(_volver(request))
+
+
+@requiere_permiso('importar_canales')
+def eliminados(request):
+    """Lo eliminado en los últimos 30 días, de a una vez por cada vez que se eliminó, para deshacerlo."""
+    if request.method == 'POST':
+        muestra = request.POST.get('muestra', '')
+        resultado = organizar.restaurar_eliminados(int(muestra) if muestra.isdigit() else 0, request.user)
+        partes = [f'Se restauraron {resultado.restaurados}: vuelven a la app con sus señales "sin verificar" '
+                  '(la app las intenta y la verificación las prueba).']
+        if resultado.ya_estaban:
+            partes.append(f'{resultado.ya_estaban} ya estaban de nuevo (se volvieron a importar).')
+        if resultado.sin_senales:
+            partes.append(f'{resultado.sin_senales} no se pudieron: se habían agregado a mano o se borró el '
+                          'informe de su lista, y sus señales no quedaron anotadas.')
+        (messages.success if resultado.restaurados else messages.warning)(request, ' '.join(partes))
+        return redirect('canales:eliminados')
+    return render(request, 'canales/eliminados.html', {'eliminaciones': organizar.eliminados_recientes()})
 
 
 def _eleccion_para_exportar(request):
@@ -653,8 +733,11 @@ def catalogo_contenido(request):
 @require_POST
 @requiere_permiso('importar_canales')
 def series_acciones(request):
-    """Sobre series enteras (todos sus capítulos): moverlas de categoría o pasarlas a películas."""
-    capitulos = organizar.capitulos_de(request.POST.getlist('serie'))
+    """
+    Sobre las series elegidas: moverlas de categoría, pasarlas a películas,
+    unirlas, quitarlas o mostrarlas. Con filtros, solo los capítulos que se ven.
+    """
+    capitulos = _capitulos_elegidos(request)
     try:
         if request.POST.get('accion') == 'mover':
             categoria = _categoria_elegida(request, Contenido.SERIE)
@@ -671,7 +754,7 @@ def series_acciones(request):
             except ValueError:
                 temporada = 1
             cantidad = organizar.unir_en_una_serie(request.POST.getlist('serie'), nombre_serie, temporada,
-                                                   request.user)
+                                                   request.user, capitulos=capitulos)
             _avisar_cambio_de_tipo(request, cantidad, Contenido.SERIE, nombre_serie)
         elif request.POST.get('accion') == 'quitar':
             cantidad = servicios.quitar_canales(capitulos, request.POST.get('motivo', ''), request.user)
@@ -716,8 +799,19 @@ def _accion_de_categorias(request):
         con_contenido = request.POST.get('con_contenido') == '1'
         cantidad = organizar.borrar_categoria(categoria, request.user, con_contenido=con_contenido)
         if con_contenido:
-            return f'Se borró "{categoria}" con todo su contenido ({cantidad} eliminados).'
+            return (f'Se borró "{categoria}" con todo su contenido ({cantidad} eliminados). Si fue un error, se '
+                    'recupera en «Eliminados».')
         return f'Se borró "{categoria}"' + (f' y {cantidad} quedaron sin categoría.' if cantidad else '.')
+    if accion == 'eliminar_filtrados':
+        # Con filtros: solo lo de esta categoría que se ve (la categoría y lo demás quedan)
+        categoria = get_object_or_404(Categoria, pk=request.POST.get('categoria', '0'))
+        filtros = _filtros_de_organizar(request.POST)
+        if not _hay_filtros(filtros):
+            raise organizar.NoSePuede('Sin filtros, para eliminar todo usá «Con todo lo que tiene».')
+        canales = consultas.canales_filtrados(categoria.contenido, **filtros).filter(categoria=categoria)
+        cantidad = organizar.eliminar_contenido(Canal.objects.filter(pk__in=canales.values('pk')), request.user)
+        return (f'Se eliminaron {cantidad} de "{categoria}" (los que se veían con el filtro). Lo demás de la '
+                'categoría sigue. Si fue un error, se recupera en «Eliminados».')
     if accion == 'ordenar':
         ordenes = {int(clave[6:]): int(valor or 0) for clave, valor in request.POST.items()
                    if clave.startswith('orden_') and clave[6:].isdigit() and (valor or '0').isdigit()}

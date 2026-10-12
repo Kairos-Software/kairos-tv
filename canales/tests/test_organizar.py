@@ -337,3 +337,88 @@ class ComoEnLaAppTests(TestCase):
         _canal('Sin fuentes', categoria=self.kids)
         grupos = consultas.como_en_la_app(Contenido.VIVO)
         self.assertEqual([(c.nombre, [x.nombre for x in items]) for c, items in grupos], [('Kids', ['Zenón'])])
+
+
+class SoloLoQueSeVeTests(TestCase):
+    """Con un filtro puesto (por ejemplo, "de tal lista"), nada toca lo que no se ve: otras listas."""
+
+    def setUp(self):
+        self.client.force_login(Usuario.objects.create_superuser('admin', 'admin@test.com', 'x'))
+        self.infantil = Categoria.objects.create(nombre='Infantil')
+        for n in range(3):
+            _con_fuente(f'Nuevo {n}', self.infantil, origen='lista-nueva.m3u')
+        for n in range(5):
+            _con_fuente(f'Viejo {n}', self.infantil, origen='lista-vieja.m3u')
+        self.filtro = {'contenido': 'vivo', 'origen': 'lista-nueva.m3u', 'mostrar': 'todo'}
+
+    def test_la_categoria_dice_cuanto_tiene_de_verdad(self):
+        pagina = self.client.get(reverse('canales:organizar'), {**self.filtro, 'categoria': self.infantil.pk})
+        self.assertContains(pagina, 'Solo los 3 que ves con el filtro')
+        self.assertContains(pagina, 'Con todo lo que tiene (8)')
+        self.assertContains(pagina, 'TODO LO QUE TIENE: 8, DE TODAS LAS LISTAS (con el filtro ves solo 3)')
+
+    def test_eliminar_lo_de_una_lista_no_toca_las_otras(self):
+        respuesta = self.client.post(reverse('canales:categorias'), {
+            'accion': 'eliminar_filtrados', 'categoria': self.infantil.pk, **self.filtro}, follow=True)
+        self.assertContains(respuesta, 'Se eliminaron 3 de &quot;Infantil&quot;')
+        self.assertEqual(sorted(Canal.objects.values_list('nombre', flat=True)), [f'Viejo {n}' for n in range(5)])
+        self.assertTrue(Categoria.objects.filter(pk=self.infantil.pk).exists())
+
+    def test_las_series_con_filtro_solo_tocan_sus_capitulos_que_se_ven(self):
+        series = Categoria.objects.create(nombre='Series', contenido=Contenido.SERIE)
+        for n in (1, 2):
+            _con_fuente(f'Pocoyó S01 E0{n}', series, Contenido.SERIE, origen='lista-nueva.m3u')
+        for n in (3, 4):
+            _con_fuente(f'Pocoyó S01 E0{n}', series, Contenido.SERIE, origen='lista-vieja.m3u')
+        filtro = {**self.filtro, 'contenido': 'serie', 'serie': 'Pocoyó'}
+        self.client.post(reverse('canales:series_acciones'), {**filtro, 'accion': 'quitar'})
+        self.assertEqual(sorted(Canal.objects.filter(activo=False).values_list('nombre', flat=True)),
+                         ['Pocoyó S01 E01', 'Pocoyó S01 E02'])
+        self.client.post(reverse('canales:organizar_eliminar'), filtro)
+        self.assertEqual(sorted(Canal.objects.filter(contenido=Contenido.SERIE).values_list('nombre', flat=True)),
+                         ['Pocoyó S01 E03', 'Pocoyó S01 E04'])
+        # Sin filtro, la serie entera
+        self.client.post(reverse('canales:organizar_eliminar'), {'serie': 'Pocoyó'})
+        self.assertFalse(Canal.objects.filter(contenido=Contenido.SERIE).exists())
+
+
+class RestaurarTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(Usuario.objects.create_superuser('admin', 'admin@test.com', 'x'))
+        importar_m3u('#EXTM3U\n'
+                     '#EXTINF:-1 group-title="Infantil",Pakapaka\nhttps://x/paka.m3u8\n'
+                     '#EXTINF:-1 group-title="Infantil" tvg-logo="https://img/zenon.png",Zenón\n'
+                     '#EXTVLCOPT:http-user-agent=VLC/3.0\nhttps://x/zenon.m3u8\n'
+                     '#EXTINF:-1 group-title="Infantil",Zenón\nhttps://x/zenon-2.m3u8\n', 'lista.m3u')
+        self.infantil = Categoria.objects.get(nombre='Infantil')
+
+    def test_borrar_la_categoria_con_todo_y_restaurarla(self):
+        organizar.borrar_categoria(self.infantil, con_contenido=True)
+        self.assertFalse(Canal.objects.exists())
+        self.assertFalse(Fuente.objects.exists())
+
+        pagina = self.client.get(reverse('canales:eliminados'))
+        self.assertContains(pagina, '2 eliminados')
+        eliminacion, = organizar.eliminados_recientes()
+        self.assertEqual((eliminacion.cantidad, eliminacion.recuperables), (2, 2))
+
+        respuesta = self.client.post(reverse('canales:eliminados'), {'muestra': eliminacion.muestra}, follow=True)
+        self.assertContains(respuesta, 'Se restauraron 2')
+        zenon = Canal.objects.get(nombre='Zenón')
+        self.assertEqual((zenon.categoria.nombre, zenon.logo), ('Infantil', 'https://img/zenon.png'))
+        self.assertTrue(Categoria.objects.filter(pk=self.infantil.pk).exists())   # la categoría volvió
+        self.assertEqual(list(zenon.fuentes.values_list('url', 'user_agent', 'estado', 'origen')),
+                         [('https://x/zenon.m3u8', 'VLC/3.0', Fuente.Estado.SIN_VERIFICAR, 'lista.m3u'),
+                          ('https://x/zenon-2.m3u8', '', Fuente.Estado.SIN_VERIFICAR, 'lista.m3u')])
+        self.assertEqual(organizar.eliminados_recientes(), [])
+
+    def test_lo_que_ya_volvio_o_se_agrego_a_mano_no_se_duplica(self):
+        _con_fuente('A mano', self.infantil)
+        organizar.borrar_categoria(self.infantil, con_contenido=True)
+        importar_m3u('#EXTM3U\n#EXTINF:-1 group-title="Infantil",Pakapaka\nhttps://x/paka.m3u8\n', 'otra.m3u')
+        resultado = organizar.restaurar_eliminados(organizar.eliminados_recientes()[0].muestra)
+        self.assertEqual((resultado.restaurados, resultado.ya_estaban, resultado.sin_senales), (1, 1, 1))
+        self.assertEqual(Canal.objects.filter(nombre='Pakapaka').count(), 1)
+        # La categoría ya existía de nuevo (la creó la otra lista): Zenón va a esa
+        self.assertEqual(Canal.objects.get(nombre='Zenón').categoria, Categoria.objects.get(nombre='Infantil'))

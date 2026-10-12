@@ -14,12 +14,14 @@ Future<void> _abrirTv(
   WidgetTester tester,
   SeccionTv seccion, {
   Duration esperaReposo = const Duration(minutes: 3),
+  List<CategoriaCanales> enVivo = const [],
 }) async {
   tester.view.physicalSize = const Size(1920, 1080);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final catalogo = Catalogo(ApiCliente(urlBase: 'http://prueba/api/v1/'))
     ..peliculas = [for (var i = 1; i <= 10; i++) _pelicula(i)]
+    ..categoriasEnVivo = enVivo
     ..cargado = true;
   await tester.pumpWidget(
     MaterialApp(
@@ -124,6 +126,60 @@ void main() {
     expect(find.text('Apretá cualquier botón para volver'), findsNothing);
     expect(find.text('Reproducir'), findsNothing); // no se abrió el detalle de la película
     expect(FocusManager.instance.primaryFocus, isNot(antes)); // el foco volvió a la pantalla de abajo
+  });
+
+  testWidgets('guía: de las categorías se pasa a los canales con Derecha', (tester) async {
+    CategoriaCanales categoria(String nombre, int desde, int cuantos) => CategoriaCanales({
+      'nombre': nombre,
+      'canales': [
+        for (var i = desde; i < desde + cuantos; i++) {'id': i, 'nombre': '$nombre $i', 'fuentes': <dynamic>[]},
+      ],
+    });
+    await _abrirTv(
+      tester,
+      SeccionTv.guia,
+      enVivo: [categoria('Noticias', 1, 12), categoria('Deportes', 20, 3), categoria('Infantil', 30, 4)],
+    );
+    expect(_enfocado(), startsWith('Canal 1,')); // arranca en el primer canal
+
+    // Izquierda: a las categorías. Abajo hasta "Infantil" y OK la elige
+    await _tecla(tester, LogicalKeyboardKey.arrowLeft);
+    expect(_enfocado(), isNot(startsWith('Canal')));
+    for (var i = 0; i < 6 && _enfocado() != 'Infantil'; i++) {
+      await _tecla(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(_enfocado(), 'Infantil');
+    await _tecla(tester, LogicalKeyboardKey.select);
+    expect(find.text('4 canales'), findsOneWidget);
+
+    // Derecha: al primer canal de esa categoría
+    await _tecla(tester, LogicalKeyboardKey.arrowRight);
+    expect(_enfocado(), contains('Infantil 30'));
+    await _tecla(tester, LogicalKeyboardKey.arrowDown);
+    expect(_enfocado(), contains('Infantil 31'));
+
+    // Izquierda vuelve a la categoría elegida (no a la que está a la misma altura) y Derecha, al mismo canal
+    await _tecla(tester, LogicalKeyboardKey.arrowLeft);
+    expect(_enfocado(), 'Infantil');
+    await _tecla(tester, LogicalKeyboardKey.arrowRight);
+    expect(_enfocado(), contains('Infantil 31'));
+
+    // En "Todos", Derecha lleva al canal elegido aunque esté lejos en la lista (todavía sin dibujar)
+    await _tecla(tester, LogicalKeyboardKey.arrowLeft);
+    for (var i = 0; i < 6 && _enfocado() != 'Todos'; i++) {
+      await _tecla(tester, LogicalKeyboardKey.arrowUp);
+    }
+    await _tecla(tester, LogicalKeyboardKey.select);
+    await _tecla(tester, LogicalKeyboardKey.arrowRight);
+    expect(_enfocado(), contains('Noticias 1'));
+    for (var i = 0; i < 16; i++) {
+      await _tecla(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(_enfocado(), contains('Infantil 31'));
+    await _tecla(tester, LogicalKeyboardKey.arrowLeft);
+    expect(_enfocado(), 'Todos');
+    await _tecla(tester, LogicalKeyboardKey.arrowRight);
+    expect(_enfocado(), contains('Infantil 31'));
   });
 
   testWidgets('desde el menú, Derecha o Atrás vuelven al contenido', (tester) async {

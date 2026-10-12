@@ -171,6 +171,26 @@
 <p class="small texto-suave mb-2">
     {% if pagina.paginator.count == 1 %}1 de la lista{% else %}{{ pagina.paginator.count }} de la lista{% endif %}{% if hay_filtros %} con estos filtros{% endif %}{% if pagina.paginator.num_pages > 1 %} · se ven de a {{ pagina.paginator.per_page }}{% endif %}
 </p>
+<form method="post" action="{% url 'canales:importacion_elegir' importacion.pk %}" id="form-elegir">
+{% csrf_token %}
+<input type="hidden" name="volver" value="{{ request.get_full_path }}">
+{% if puede_importar and hay_para_elegir %}
+{# Antes de cargar: no cargar lo que pasó, o cargar igual lo que no #}
+<div class="entradas-barra">
+    <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="elegir-todas">
+        <label class="form-check-label" for="elegir-todas">Toda la página</label>
+    </div>
+    <strong class="small" id="cuantas-elegidas">Ninguna elegida</strong>
+    <button type="submit" class="btn btn-sm btn-outline-secondary" name="accion" value="descartar" data-elegir disabled>
+        <i class="bi bi-x-circle" aria-hidden="true"></i> No cargar
+    </button>
+    <button type="submit" class="btn btn-sm btn-outline-secondary" name="accion" value="cargar" data-elegir disabled>
+        <i class="bi bi-check-circle" aria-hidden="true"></i> Cargar igual
+    </button>
+    <span class="espejo-ayuda">«No cargar» saca de «Pasaron» lo que no te interesa. «Cargar igual» pasa a «Pasaron» lo que no pasó (si no respondía, entra sin verificar y la app lo intenta). Recién entran a la app con «Cargar».</span>
+</div>
+{% endif %}
 <ul class="entradas">
     {% for e in pagina %}
     <li class="entrada">
@@ -191,18 +211,37 @@
             {% if e.calidad %}<div class="entrada-calidad">{{ e.calidad }}</div>{% endif %}
         </div>
         <div class="entrada-resultado">
-            <span class="chip chip-{{ e.estado }}">{{ e.get_estado_display }}</span>
+            <div class="entrada-estado">
+                {% if puede_importar and e.estado in se_pueden_elegir %}
+                <input class="form-check-input entrada-elegir" type="checkbox" name="entrada" value="{{ e.pk }}" aria-label="Elegir {{ e.nombre }}">
+                {% endif %}
+                <span class="chip chip-{{ e.estado }}">{{ e.get_estado_display }}</span>
+                {% if puede_importar and e.estado == 'apta' %}
+                <button type="submit" class="btn btn-sm btn-link p-0" name="no_cargar_una" value="{{ e.pk }}">No cargar</button>
+                {% elif puede_importar and e.estado in se_pueden_cargar_igual %}
+                <button type="submit" class="btn btn-sm btn-link p-0" name="cargar_una" value="{{ e.pk }}">Cargar igual</button>
+                {% endif %}
+            </div>
             <p class="entrada-motivo">{{ e.motivo|default:"—" }}</p>
             <div class="direccion">{{ e.url }}</div>
         </div>
     </li>
     {% endfor %}
 </ul>
+</form>
 {% else %}
 <div class="tarjeta">
     <div class="vacio">
         <i class="bi bi-funnel" aria-hidden="true"></i>
-        <p>{% if hay_filtros %}Ningún canal de esta lista coincide con los filtros.{% else %}No hay nada en esta lista.{% endif %}</p>
+        {% if estado_elegido == 'apta' and avance.pendientes %}
+        <p>Todavía faltan probar {{ avance.pendientes }}. Tocá «{% if avance.verificadas %}Continuar{% else %}Empezar a probar{% endif %}» arriba: lo que pase la prueba va apareciendo acá, y al terminar la página se abre sola en esta pestaña.</p>
+        {% elif estado_elegido == 'apta' and avance.agregadas %}
+        <p>Ya se cargó todo lo que pasó la prueba: está en la pestaña «Cargados».</p>
+        {% elif hay_filtros %}
+        <p>Ningún canal de esta lista coincide con los filtros.</p>
+        {% else %}
+        <p>No hay nada en esta lista.</p>
+        {% endif %}
     </div>
 </div>
 {% endif %}
@@ -211,6 +250,33 @@
 {% endblock %}
 
 {% block scripts %}
+{% if puede_importar and hay_para_elegir %}
+<script>
+(function () {
+    // Elegir varias entradas para "No cargar" / "Cargar igual" (los botones se activan con algo elegido)
+    var form = document.getElementById('form-elegir');
+    var casillas = form.querySelectorAll('.entrada-elegir');
+    var todas = document.getElementById('elegir-todas');
+    var cuantas = document.getElementById('cuantas-elegidas');
+    function actualizar() {
+        var elegidas = Array.prototype.filter.call(casillas, function (c) { return c.checked; }).length;
+        cuantas.textContent = elegidas ? elegidas + ' elegida' + (elegidas > 1 ? 's' : '') : 'Ninguna elegida';
+        todas.checked = elegidas > 0 && elegidas === casillas.length;
+        todas.indeterminate = elegidas > 0 && elegidas < casillas.length;
+        form.querySelectorAll('[data-elegir]').forEach(function (b) { b.disabled = !elegidas; });
+    }
+    casillas.forEach(function (c) { c.addEventListener('change', actualizar); });
+    todas.addEventListener('change', function () {
+        casillas.forEach(function (c) { c.checked = todas.checked; });
+        actualizar();
+    });
+    // El botón de UNA entrada cambia solo esa, aunque haya otras tildadas
+    form.querySelectorAll('[name=cargar_una], [name=no_cargar_una]').forEach(function (boton) {
+        boton.addEventListener('click', function () { casillas.forEach(function (c) { c.checked = false; }); });
+    });
+})();
+</script>
+{% endif %}
 {% if puede_importar and avance.pendientes or puede_importar and avance.aptas %}
 <script src="{% static 'js/tandas.js' %}"></script>
 {% endif %}

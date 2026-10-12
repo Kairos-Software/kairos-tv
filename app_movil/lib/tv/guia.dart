@@ -3,7 +3,9 @@
 /// iniciales, nombre y categoría). Sin programación: no hay EPG todavía y no
 /// se inventan horarios.
 ///
-///   Arriba/Abajo: recorre los canales.  Izquierda: categorías (y el menú).
+///   Arriba/Abajo: recorre los canales.  Izquierda: a la categoría elegida
+///   (y desde ahí, el menú).  Derecha desde las categorías: al último canal
+///   elegido de esa categoría, o al primero.
 ///   OK: pantalla completa (con zapping por esta misma lista).
 ///   Los números del control saltan al canal con ese número.
 library;
@@ -13,6 +15,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../api/modelos.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
 import 'estructura.dart';
@@ -35,11 +38,61 @@ class _GuiaTvState extends State<GuiaTv> {
   String _numero = '';
   Timer? _numeroListo;
 
+  /// Un nodo de foco por categoría ('' = Todos) y por canal, para llevar el
+  /// foco a uno en particular al ir de un lado al otro.
+  final _nodosDeCategorias = <String, FocusNode>{};
+  final _nodosDeCanales = <int, FocusNode>{};
+
+  /// El último canal elegido (para volver a él con Derecha).
+  int? _ultimoCanal;
+
   @override
   void dispose() {
     _lista.dispose();
     _numeroListo?.cancel();
+    for (final nodo in [..._nodosDeCategorias.values, ..._nodosDeCanales.values]) {
+      nodo.dispose();
+    }
     super.dispose();
+  }
+
+  // Con el mismo nombre que les pone Enfocable (con un nodo propio no lo hace solo)
+  FocusNode _nodoDeCategoria(String? valor, [String texto = '']) =>
+      _nodosDeCategorias.putIfAbsent(valor ?? '', () => FocusNode(debugLabel: texto));
+
+  FocusNode _nodoDeCanal(Canal canal) => _nodosDeCanales.putIfAbsent(
+    canal.id,
+    () => FocusNode(debugLabel: 'Canal ${DatosScope.of(context).catalogo.numeroDe(canal)}, ${canal.nombre}'),
+  );
+
+  /// Derecha en las categorías: a los canales (al último elegido de esta lista, o al primero).
+  KeyEventResult _teclaEnCategorias(FocusNode _, KeyEvent evento, List<Canal> canales) {
+    if (evento is KeyUpEvent || evento.logicalKey != LogicalKeyboardKey.arrowRight || canales.isEmpty) {
+      return KeyEventResult.ignored;
+    }
+    final indice = canales.indexWhere((c) => c.id == _ultimoCanal);
+    final destino = canales[indice < 0 ? 0 : indice];
+    final nodo = _nodoDeCanal(destino);
+    if (nodo.context != null) {
+      nodo.requestFocus();
+    } else if (_lista.hasClients) {
+      // Todavía no está dibujado (quedó lejos en la lista): primero se lleva la lista hasta él
+      final posicion = _lista.position;
+      _lista.jumpTo(((indice < 0 ? 0 : indice) * _altoFila).clamp(0, posicion.maxScrollExtent));
+      WidgetsBinding.instance.addPostFrameCallback((_) => _nodoDeCanal(destino).requestFocus());
+    }
+    return KeyEventResult.handled;
+  }
+
+  /// Izquierda en los canales: recuerda en cuál estaba y va a la categoría elegida.
+  KeyEventResult _teclaEnCanales(FocusNode _, KeyEvent evento) {
+    if (evento is KeyUpEvent || evento.logicalKey != LogicalKeyboardKey.arrowLeft) return KeyEventResult.ignored;
+    final actual = FocusManager.instance.primaryFocus;
+    for (final MapEntry(:key, :value) in _nodosDeCanales.entries) {
+      if (value == actual) _ultimoCanal = key;
+    }
+    _nodoDeCategoria(_categoria).requestFocus();
+    return KeyEventResult.handled;
   }
 
   /// Escribir un número con el control: a los 1,5 s abre ese canal.
@@ -72,6 +125,10 @@ class _GuiaTvState extends State<GuiaTv> {
         : catalogo.canales.where((c) => c.categoria == _categoria).toList();
 
     return Focus(
+      // Solo escucha los números del control. No puede tener el foco: si no, Derecha desde las
+      // categorías lo elegía a él (ocupa toda la pantalla) y no se llegaba nunca a los canales.
+      canRequestFocus: false,
+      skipTraversal: true,
       onKeyEvent: _tecla,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -112,59 +169,68 @@ class _GuiaTvState extends State<GuiaTv> {
                     // Categorías
                     SizedBox(
                       width: 330,
-                      child: FocusTraversalGroup(
-                        child: ListView(
-                          padding: const EdgeInsets.fromLTRB(24, 26, 24, 26),
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.only(left: 4, bottom: 14),
-                              child: Text('Categorías', style: LetraTv.tarjeta),
-                            ),
-                            for (final (valor, texto) in [
-                              (null, 'Todos'),
-                              for (final c in catalogo.categoriasEnVivo)
-                                (c.nombre, categoriaLegible(c.nombre).isEmpty ? 'Otros' : categoriaLegible(c.nombre)),
-                            ])
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _Categoria(
-                                  texto: texto,
-                                  activa: valor == _categoria,
-                                  alOk: () {
-                                    setState(() => _categoria = valor);
-                                    if (_lista.hasClients) _lista.jumpTo(0);
-                                  },
+                      child: Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: (nodo, evento) => _teclaEnCategorias(nodo, evento, canales),
+                        child: FocusTraversalGroup(
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(24, 26, 24, 26),
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4, bottom: 14),
+                                child: Text('Categorías', style: LetraTv.tarjeta),
+                              ),
+                              for (final (valor, texto) in [
+                                (null, 'Todos'),
+                                for (final c in catalogo.categoriasEnVivo)
+                                  (c.nombre, categoriaLegible(c.nombre).isEmpty ? 'Otros' : categoriaLegible(c.nombre)),
+                              ])
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _Categoria(
+                                    texto: texto,
+                                    nodo: _nodoDeCategoria(valor, texto),
+                                    activa: valor == _categoria,
+                                    alOk: () {
+                                      setState(() {
+                                        _categoria = valor;
+                                        _ultimoCanal = null;
+                                      });
+                                      if (_lista.hasClients) _lista.jumpTo(0);
+                                    },
+                                  ),
+                                ),
+                              const SizedBox(height: 14),
+                              Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: Tono.celeste.withValues(alpha: .07),
+                                  borderRadius: BorderRadius.circular(Curva.boton),
+                                  border: Border.all(color: Tono.celeste.withValues(alpha: .25)),
+                                ),
+                                child: const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Tip',
+                                      style: TextStyle(
+                                        fontFamily: Letra.texto,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: Tono.celesteClaro,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Escribí el número de un canal con el control para ir directo.',
+                                      style: LetraTv.ayuda,
+                                    ),
+                                  ],
                                 ),
                               ),
-                            const SizedBox(height: 14),
-                            Container(
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: Tono.celeste.withValues(alpha: .07),
-                                borderRadius: BorderRadius.circular(Curva.boton),
-                                border: Border.all(color: Tono.celeste.withValues(alpha: .25)),
-                              ),
-                              child: const Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Tip',
-                                    style: TextStyle(
-                                      fontFamily: Letra.texto,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      color: Tono.celesteClaro,
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Escribí el número de un canal con el control para ir directo.',
-                                    style: LetraTv.ayuda,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -189,30 +255,36 @@ class _GuiaTvState extends State<GuiaTv> {
                             ),
                           ),
                           Expanded(
-                            child: FocusTraversalGroup(
-                              child: ListView.builder(
-                                key: ValueKey(_categoria),
-                                controller: _lista,
-                                clipBehavior: Clip.hardEdge,
-                                padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
-                                itemExtent: _altoFila,
-                                itemCount: canales.length,
-                                itemBuilder: (context, i) {
-                                  final canal = canales[i];
-                                  final clave = Biblioteca.claveDe(canal);
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    child: FilaCanalTv(
-                                      canal: canal,
-                                      numero: catalogo.numeroDe(canal),
-                                      autofocus: i == 0,
-                                      favorito: biblioteca.estaEnMiLista(clave),
-                                      ayuda: 'OK · Pantalla completa',
-                                      alOk: () => verCanalTv(context, canal, lista: canales),
-                                      alOkLargo: () => alternarFavoritoTv(context, clave),
-                                    ),
-                                  );
-                                },
+                            child: Focus(
+                              canRequestFocus: false,
+                              skipTraversal: true,
+                              onKeyEvent: _teclaEnCanales,
+                              child: FocusTraversalGroup(
+                                child: ListView.builder(
+                                  key: ValueKey(_categoria),
+                                  controller: _lista,
+                                  clipBehavior: Clip.hardEdge,
+                                  padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
+                                  itemExtent: _altoFila,
+                                  itemCount: canales.length,
+                                  itemBuilder: (context, i) {
+                                    final canal = canales[i];
+                                    final clave = Biblioteca.claveDe(canal);
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      child: FilaCanalTv(
+                                        canal: canal,
+                                        nodo: _nodoDeCanal(canal),
+                                        numero: catalogo.numeroDe(canal),
+                                        autofocus: i == 0,
+                                        favorito: biblioteca.estaEnMiLista(clave),
+                                        ayuda: 'OK · Pantalla completa',
+                                        alOk: () => verCanalTv(context, canal, lista: canales),
+                                        alOkLargo: () => alternarFavoritoTv(context, clave),
+                                      ),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
@@ -231,15 +303,17 @@ class _GuiaTvState extends State<GuiaTv> {
 }
 
 class _Categoria extends StatelessWidget {
-  const _Categoria({required this.texto, required this.activa, required this.alOk});
+  const _Categoria({required this.texto, required this.nodo, required this.activa, required this.alOk});
 
   final String texto;
+  final FocusNode nodo;
   final bool activa;
   final VoidCallback alOk;
 
   @override
   Widget build(BuildContext context) {
     return Enfocable(
+      nodo: nodo,
       alOk: alOk,
       curva: 99,
       escala: 1.03,

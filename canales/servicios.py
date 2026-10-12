@@ -620,6 +620,45 @@ def cargar_lote(importacion, tamanio=TAMANIO_CARGA):
     return {**progreso(importacion), 'canales_nuevos': canales_nuevos}
 
 
+# Lo que se puede cambiar a mano antes de cargar (ver cargar_igual / no_cargar)
+SE_PUEDEN_CARGAR_IGUAL = [Estado.RECHAZADA, Estado.CAIDA, Estado.DESCARTADA]
+
+
+def cargar_igual(importacion, entradas, usuario=None):
+    """
+    Las elegidas que no pasaron (no pasaron la prueba, no respondieron o se
+    descartaron) quedan aptas: entran con el próximo "Cargar". Las que no
+    respondieron entran "sin verificar": la app las intenta y la verificación
+    automática las vuelve a probar. Devuelve cuántas cambiaron.
+    """
+    elegidas = list(importacion.entradas.filter(pk__in=entradas, estado__in=SE_PUEDEN_CARGAR_IGUAL))
+    for entrada in elegidas:
+        if entrada.estado == Estado.CAIDA:
+            entrada.estado_fuente = ''
+        antes = entrada.motivo
+        entrada.estado, entrada.causa = Estado.APTA, ''
+        entrada.motivo = f'Elegida a mano para cargar{f" (antes: {antes})" if antes else ""}.'[:200]
+    EntradaImportada.objects.bulk_update(elegidas, ['estado', 'causa', 'motivo', 'estado_fuente'])
+    if elegidas:
+        registrar(usuario, Accion.EDITAR, f'Eligió a mano cargar {len(elegidas)} de "{importacion.archivo}" '
+                                          'que no habían pasado.', modulo='canales')
+    return len(elegidas)
+
+
+def no_cargar(importacion, entradas, usuario=None):
+    """Las elegidas que pasaron (aptas, sin cargar todavía) quedan descartadas. Devuelve cuántas cambiaron."""
+    elegidas = list(importacion.entradas.filter(pk__in=entradas, estado=Estado.APTA))
+    for entrada in elegidas:
+        antes = entrada.motivo
+        entrada.estado = Estado.DESCARTADA
+        entrada.motivo = f'Descartada a mano{f" (había pasado: {antes})" if antes else ""}.'[:200]
+    EntradaImportada.objects.bulk_update(elegidas, ['estado', 'motivo'])
+    if elegidas:
+        registrar(usuario, Accion.EDITAR, f'Descartó a mano {len(elegidas)} de "{importacion.archivo}" '
+                                          'que habían pasado.', modulo='canales')
+    return len(elegidas)
+
+
 def progreso(importacion):
     """Cuántas hay en cada estado y el porcentaje de avance (sobre las que había que verificar)."""
     por_estado = dict(importacion.entradas.order_by().values_list('estado').annotate(cantidad=Count('pk')))

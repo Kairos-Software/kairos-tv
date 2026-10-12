@@ -28,6 +28,7 @@
         <a href="{% url 'canales:youtube' %}" class="btn btn-outline-secondary"><i class="bi bi-youtube" aria-hidden="true"></i> Traer de YouTube</a>
         <a href="{% url 'canales:inicio' %}#form-importar" class="btn btn-outline-secondary"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
         <button type="button" class="btn btn-outline-secondary" data-abrir-exportar><i class="bi bi-download" aria-hidden="true"></i> Exportar</button>
+        <a href="{% url 'canales:eliminados' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Eliminados</a>
     </div>
     {% endif %}
 </div>
@@ -268,20 +269,40 @@
                     <button type="submit" class="btn btn-sm btn-outline-secondary">Guardar</button>
                     <span class="espejo-ayuda">En la app, el número más chico aparece primero.</span>
                 </form>
+                {% if hay_filtros %}
+                <form method="post" action="{% url 'canales:categorias' %}" class="espejo-opcion">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="eliminar_filtrados">
+                    <input type="hidden" name="categoria" value="{{ nodo.categoria.pk }}">
+                    <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+                    <input type="hidden" name="q" value="{{ filtros.texto }}">
+                    <input type="hidden" name="mostrar" value="{{ filtros.mostrar }}">
+                    <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
+                    <input type="hidden" name="origen" value="{{ filtros.origen }}">
+                    <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
+                    <span class="small texto-suave">Eliminar</span>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary text-danger"
+                            data-confirmar="¿Eliminar los {{ nodo.total }} de «{{ nodo.categoria.nombre }}» que ves con el filtro? Lo demás de la categoría ({{ total_de_la_categoria }} en total) NO se toca.">
+                        Solo los {{ nodo.total }} que ves con el filtro
+                    </button>
+                    <span class="espejo-ayuda">La categoría y lo que no coincide con el filtro (otras listas) quedan.</span>
+                </form>
+                {% endif %}
                 <form method="post" action="{% url 'canales:categorias' %}" class="espejo-opcion">
                     {% csrf_token %}
                     <input type="hidden" name="accion" value="borrar">
                     <input type="hidden" name="categoria" value="{{ nodo.categoria.pk }}">
                     <input type="hidden" name="volver" value="{% url 'canales:organizar' %}?contenido={{ contenido }}">
-                    <span class="small texto-suave">Borrar</span>
+                    <span class="small texto-suave">Borrar la categoría entera</span>
                     <button type="submit" class="btn btn-sm btn-outline-secondary" name="con_contenido" value="0"
-                            data-confirmar="¿Borrar la categoría «{{ nodo.categoria.nombre }}»? Lo que tiene NO se borra: queda sin categoría (en la app, en «Otros»).">
+                            data-confirmar="¿Borrar la categoría «{{ nodo.categoria.nombre }}»? Lo que tiene ({{ total_de_la_categoria }}, de todas las listas) NO se borra: queda sin categoría (en la app, en «Otros»).">
                         Solo la categoría
                     </button>
                     <button type="submit" class="btn btn-sm btn-outline-secondary text-danger" name="con_contenido" value="1"
-                            data-confirmar="¿Borrar «{{ nodo.categoria.nombre }}» Y TODO LO QUE TIENE ({{ nodo.total }})? Desaparece del panel y de la app.">
-                        Con todo lo que tiene
+                            data-confirmar="¿Borrar «{{ nodo.categoria.nombre }}» Y TODO LO QUE TIENE: {{ total_de_la_categoria }}, DE TODAS LAS LISTAS{% if hay_filtros %} (con el filtro ves solo {{ nodo.total }}){% endif %}? Desaparece del panel y de la app.">
+                        Con todo lo que tiene ({{ total_de_la_categoria }})
                     </button>
+                    {% if hay_filtros %}<span class="espejo-ayuda">Ojo: esto es la categoría entera, sin el filtro: {{ total_de_la_categoria }}, de todas las listas.</span>{% endif %}
                 </form>
             </div>
         </details>
@@ -300,6 +321,12 @@
             {% csrf_token %}
             <input type="hidden" name="volver" value="{{ request.get_full_path }}">
             <input type="hidden" name="seccion" value="{{ contenido }}">
+            {# Con filtros, lo que se haga con una serie toca solo sus capítulos que se ven #}
+            <input type="hidden" name="q" value="{{ filtros.texto }}">
+                    <input type="hidden" name="mostrar" value="{{ filtros.mostrar }}">
+                    <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
+                    <input type="hidden" name="origen" value="{{ filtros.origen }}">
+                    <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
             {% for categoria, items in datos.grupos %}
             {% if datos.elegida == 'todas' %}
             <h3 class="espejo-seccion">{% if categoria %}{{ categoria.nombre }}{% else %}Sin categoría (en la app: «Otros»){% endif %}</h3>

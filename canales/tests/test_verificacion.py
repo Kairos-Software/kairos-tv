@@ -360,6 +360,10 @@ class PantallaCanalesTests(TestCase):
     def test_pestanias_para_ver_las_que_pasaron(self):
         self.subir()
         importacion = Importacion.objects.get()
+        url = reverse('canales:importacion', args=[importacion.pk])
+        # Antes de probar ya está la pestaña "Pasaron" (vacía), y dice qué falta
+        self.assertContains(self.client.get(url), 'Pasaron (falta cargar) <span class="pestania-numero">0</span>')
+        self.assertContains(self.client.get(url, {'estado': 'apta'}), 'Todavía faltan probar 3.')
         self.client.post(reverse('canales:importacion_lote', args=[importacion.pk]))
         url = reverse('canales:importacion', args=[importacion.pk])
         pagina = self.client.get(url, {'idioma': 'es'})
@@ -378,6 +382,47 @@ class PantallaCanalesTests(TestCase):
         # La dirección completa, sin cortar
         caidas = self.client.get(url, {'estado': 'caida'})
         self.assertContains(caidas, '<div class="direccion">https://caida/telemax.m3u8</div>')
+
+    def test_elegir_a_mano_que_se_carga_y_que_no(self):
+        self.subir()
+        importacion = Importacion.objects.get()
+        self.client.post(reverse('canales:importacion_lote', args=[importacion.pk]))
+        entrada = {e.nombre: e for e in importacion.entradas.all()}
+        url, elegir = reverse('canales:importacion', args=[importacion.pk]), reverse('canales:importacion_elegir',
+                                                                                     args=[importacion.pk])
+        pagina = self.client.get(url)
+        self.assertContains(pagina, f'name="no_cargar_una" value="{entrada["Canal 26"].pk}"')
+        self.assertContains(pagina, f'name="cargar_una" value="{entrada["Telemax"].pk}"')
+
+        # Canal 26 pasó, pero no interesa; Telemax no respondió, pero se quiere igual
+        respuesta = self.client.post(elegir, {'no_cargar_una': entrada['Canal 26'].pk, 'volver': f'{url}?estado=apta'})
+        self.assertRedirects(respuesta, f'{url}?estado=apta')
+        self.client.post(elegir, {'cargar_una': entrada['Telemax'].pk})
+        estados = dict(importacion.entradas.values_list('nombre', 'estado'))
+        Estado = EntradaImportada.Estado
+        self.assertEqual(estados, {'Canal 26': Estado.DESCARTADA, 'Telemax': Estado.APTA, 'Encuentro': Estado.APTA})
+        self.assertTrue(importacion.entradas.get(nombre='Canal 26').motivo.startswith('Descartada a mano'))
+
+        self.client.post(reverse('canales:importacion_cargar', args=[importacion.pk]))
+        self.assertEqual(set(Canal.objects.values_list('nombre', flat=True)), {'Telemax', 'Encuentro'})
+        # La que no respondía entra sin verificar: la app la intenta y la verificación la vuelve a probar
+        self.assertEqual(Canal.objects.get(nombre='Telemax').fuentes.get().estado, Fuente.Estado.SIN_VERIFICAR)
+
+    def test_elegir_varias_cambia_solo_las_que_corresponden(self):
+        self.subir()
+        importacion = Importacion.objects.get()
+        self.client.post(reverse('canales:importacion_lote', args=[importacion.pk]))
+        todas = list(importacion.entradas.values_list('pk', flat=True))
+        elegir = reverse('canales:importacion_elegir', args=[importacion.pk])
+        respuesta = self.client.post(elegir, {'accion': 'cargar', 'entrada': todas}, follow=True)
+        self.assertContains(respuesta, '1 pasaron a «Pasaron»')   # solo Telemax: las otras ya habían pasado
+        respuesta = self.client.post(elegir, {'accion': 'descartar', 'entrada': todas}, follow=True)
+        self.assertContains(respuesta, '3 pasaron a «Descartados»')
+        # Quien solo mira no puede
+        self.client.force_login(self.solo_ve)
+        self.assertEqual(self.client.post(elegir, {'accion': 'cargar', 'entrada': todas}).status_code, 403)
+        self.assertNotContains(self.client.get(reverse('canales:importacion', args=[importacion.pk])),
+                               'name="cargar_una"')
 
     def test_acepta_un_zip(self):
         import io
