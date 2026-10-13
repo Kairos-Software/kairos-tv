@@ -4,10 +4,11 @@ Lo que el sistema BUSCA de los canales (capa Base).
 
 from dataclasses import dataclass, field
 
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.db.models import Case, Count, Exists, F, OuterRef, Prefetch, Q, Value, When
 
 from . import clasificar, imagenes, secciones
-from .models import Canal, Categoria, Contenido, Fuente, Importacion, hace_dias_oculta
+from .models import (CORTES_POR_HORA_TOLERABLES, MINIMO_VISTO_PARA_JUZGAR, PROPORCION_PANTALLA_COMPLETA,
+                     VELOCIDAD_SOBRADA, Canal, Categoria, Contenido, Fuente, Importacion, hace_dias_oculta)
 
 # Lo que el reproductor de la app sabe reproducir. La app nueva lo dice al
 # pedir los canales (?formatos=hls,dash,directo,rtsp,youtube,pagina); la
@@ -39,16 +40,68 @@ def fuentes_usables(tipos=None):
             .exclude(oculta_desde__gt=hace_dias_oculta()))
 
 
+# El orden en que la app prueba las fuentes de un canal (ver ordenadas_por_estabilidad)
+ESTABLE, SIN_DATOS, SE_CORTA = 0, 1, 2
+
+
+def ordenadas_por_estabilidad(fuentes):
+    """
+    Las fuentes de un canal en el orden en que conviene probarlas (la app
+    arranca por la primera):
+
+      1. Al final, las que en los APARATOS se cortan seguido
+         (CORTES_POR_HORA_TOLERABLES o más). Ej: si en HBO la 1 se traba, en
+         poco tiempo deja de ser la primera en todos los aparatos.
+      2. Primero, las que llenan la pantalla: las "cuadradas" (4:3, con
+         franjas negras a los costados; lo cuentan los aparatos) después.
+      3. Lo que midió la PRUEBA A FONDO (al importar y, de madrugada, la
+         verificación programada): las verificadas que andan antes que las
+         sin verificar; las que llegan sobradas (VELOCIDAD_SOBRADA) antes que
+         las no medidas, y esas antes que las que llegan justas; a igual
+         fluidez, la de mejor imagen (1080p antes que 720p).
+      4. Las que ya se vieron un buen rato sin cortarse antes que las que
+         todavía no se vieron.
+      5. La prioridad del panel (el orden en que se cargaron).
+
+    Que "se vio bien" no pase por delante de la prueba es a propósito: si no,
+    la primera que anduvo quedaría siempre primera y las otras nunca se
+    verían (nunca se sabría si alguna es mejor).
+    """
+    # cortes por hora >= tolerables  <=>  segundos <= cortes * (3600 / tolerables)
+    se_corta = Q(segundos_en_aparatos__lte=F('cortes_en_aparatos') * (3600 // CORTES_POR_HORA_TOLERABLES))
+    return fuentes.annotate(
+        estabilidad=Case(
+            When(segundos_en_aparatos__lt=MINIMO_VISTO_PARA_JUZGAR, then=Value(SIN_DATOS)),
+            When(se_corta, then=Value(SE_CORTA)),
+            default=Value(ESTABLE),
+        ),
+        se_corta=Case(
+            When(Q(segundos_en_aparatos__gte=MINIMO_VISTO_PARA_JUZGAR) & se_corta, then=Value(1)),
+            default=Value(0),
+        ),
+        cuadrada=Case(
+            When(proporcion__gt=0, proporcion__lt=PROPORCION_PANTALLA_COMPLETA, then=Value(1)),
+            default=Value(0),
+        ),
+        verificada_que_anda=Case(When(estado=Fuente.Estado.FUNCIONA, then=Value(0)), default=Value(1)),
+        fluidez=Case(
+            When(velocidad__gte=VELOCIDAD_SOBRADA, then=Value(0)),
+            When(velocidad=0, then=Value(1)),
+            default=Value(2),
+        ),
+    ).order_by('se_corta', 'cuadrada', 'verificada_que_anda', 'fluidez', '-alto', 'estabilidad', 'prioridad', 'pk')
+
+
 def canales_disponibles(tipos=None, contenido=Contenido.VIVO):
     """
     Canales que la app puede mostrar: activos, del contenido pedido (en vivo,
     películas o series) y con al menos una fuente usable. Trae esas fuentes
-    (ordenadas por prioridad) y su categoría.
+    (las que no se cortan primero, ver ordenadas_por_estabilidad) y su categoría.
 
     Más adelante acá se va a filtrar según el plan / los créditos del
     dispositivo que pregunta.
     """
-    fuentes = fuentes_usables(tipos).order_by('prioridad', 'pk')
+    fuentes = ordenadas_por_estabilidad(fuentes_usables(tipos))
     return (
         Canal.objects
         .filter(activo=True, contenido=contenido, pk__in=fuentes_usables(tipos).values('canal'))

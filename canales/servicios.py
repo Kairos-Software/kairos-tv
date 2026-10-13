@@ -29,7 +29,7 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import DatabaseError, transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, F, Max, Q
 from django.utils import timezone
 
 from actividad.models import Accion
@@ -39,7 +39,7 @@ from . import clasificar, organizar, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
 from .consultas import fuentes_usables
 from .m3u import leer_m3u, normalizar
-from .models import Canal, Contenido, EntradaImportada, Fuente, Importacion
+from .models import Canal, Contenido, EntradaImportada, Fuente, Importacion, medidas_de_calidad
 from .verificacion import NOMBRES_DE_CODECS, Resultado
 
 # De a cuántas se verifican, y cuánto puede tardar como máximo una tanda en
@@ -487,7 +487,7 @@ def _agregar(entrada, resultado, indice, categorias, origen, usuario, ahora):
         canal=canal, url=entrada.url, tipo=tipo, prioridad=prioridad, origen=origen[:150],
         user_agent=user_agent, referer=entrada.referer, estado=estado, codec=resultado.codec if resultado else '',
         error=resultado.error[:200] if resultado else '', verificada=ahora if resultado else None,
-        calidad=entrada.calidad,
+        calidad=entrada.calidad, **medidas_de_calidad(entrada.calidad), medida=ahora if entrada.calidad else None,
     )
 
     motivos = ['Canal nuevo.' if nuevo else f'Se sumó como fuente alternativa de "{canal.nombre}".']
@@ -754,9 +754,16 @@ def aplicar_resultado(fuente, resultado, ahora):
         fuente.codec = resultado.codec
     if resultado.user_agent and not fuente.user_agent:
         fuente.user_agent = resultado.user_agent
+    if resultado.a_fondo:
+        fuente.medida = ahora
+        if resultado.estado == Fuente.Estado.FUNCIONA:
+            # Se volvió a medir: la calidad y la velocidad de ahora
+            fuente.calidad = resultado.calidad()
+            fuente.alto, fuente.velocidad = resultado.alto, resultado.velocidad
 
 
-CAMPOS_DE_VERIFICACION = ['estado', 'error', 'verificada', 'tipo', 'codec', 'user_agent']
+CAMPOS_DE_VERIFICACION = ['estado', 'error', 'verificada', 'tipo', 'codec', 'user_agent', 'calidad', 'alto',
+                          'velocidad', 'medida']
 
 
 def _fuentes_vigentes():
@@ -771,7 +778,8 @@ def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos
     usarse. No toca `activa`. Devuelve el avance y `siguiente`: el `desde`
     para la próxima tanda.
     """
-    fuentes = list(_fuentes_vigentes().filter(pk__gt=desde).order_by('pk')[:tamanio])
+    vigentes = _fuentes_vigentes()
+    fuentes = list(vigentes.filter(pk__gt=desde).order_by('pk')[:tamanio])
     hasta = time.monotonic() + segundos if segundos else None
     estados = verificar({f.url: f.tipo for f in fuentes},
                         cabeceras={f.url: (f.user_agent, f.referer) for f in fuentes if f.user_agent or f.referer},
@@ -798,11 +806,11 @@ def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos
         verificadas.append(fuente)
     Fuente.objects.bulk_update(verificadas, CAMPOS_DE_VERIFICACION)
 
-    total = _fuentes_vigentes().count()
-    terminado = not _fuentes_vigentes().filter(pk__gt=siguiente).exists()
+    total = vigentes.count()
+    terminado = not vigentes.filter(pk__gt=siguiente).exists()
     if terminado:
         registrar(usuario, Accion.EDITAR, 'Volvió a verificar todas las fuentes de los canales.', modulo='canales')
-    hechas = _fuentes_vigentes().filter(pk__lte=siguiente).count()
+    hechas = vigentes.filter(pk__lte=siguiente).count()
     return {
         'siguiente': siguiente, 'total': total, 'verificadas': hechas, 'terminado': terminado,
         'porcentaje': 100 if not total else round(100 * hechas / total),
@@ -811,17 +819,84 @@ def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos
     }
 
 
-def verificar_fuentes_guardadas(verificar, usuario=None):
-    """Todas de una vez (consola / cron): tanda tras tanda hasta terminar."""
+def avance_de_la_verificacion(desde):
+    """Cómo va "verificar todas" sin verificar nada (mientras espera su turno, ver core/trabajos.py)."""
+    vigentes = _fuentes_vigentes()
+    total = vigentes.count()
+    hechas = vigentes.filter(pk__lte=desde).count()
+    return {
+        'siguiente': desde, 'total': total, 'verificadas': hechas, 'terminado': False,
+        'porcentaje': 100 if not total else round(100 * hechas / total),
+        'funcionan': 0, 'caidas': 0, 'sin_verificar': 0, 'revividas': 0, 'nuevas_caidas': 0,
+    }
+
+
+def verificar_fuentes_guardadas(verificar, usuario=None, al_avanzar=None):
+    """
+    Todas de una vez (consola / cron): tanda tras tanda hasta terminar.
+    `al_avanzar(avance)`: se llama después de cada tanda (para mostrar cómo va).
+    """
     total = ResultadoVerificacion()
     desde = 0
     while True:
         avance = verificar_lote_de_fuentes(verificar, desde, segundos=None, usuario=usuario)
+        if al_avanzar:
+            al_avanzar(avance)
         total.sumar(ResultadoVerificacion(**{c: avance[c] for c in (
             'funcionan', 'caidas', 'sin_verificar', 'revividas', 'nuevas_caidas')}))
         if avance['terminado']:
             return total
         desde = avance['siguiente']
+
+
+# ── Medir las fuentes (cuál es la mejor de cada canal) ───────────────
+
+# Cuántas fuentes se miden a fondo cada vez (y en cuánto tiempo, como mucho).
+# Se mide de a poco, empezando por las nunca medidas y siguiendo por las
+# medidas hace más tiempo: en unos días quedan todas medidas y se van
+# renovando solas.
+MEDIR_POR_VEZ = 300
+SEGUNDOS_PARA_MEDIR = 30 * 60
+# Solo se mide de madrugada (hora de Argentina, antes de las 7): medir ocupa
+# conexiones de las listas IPTV, y de día las usa la gente que está mirando.
+HORA_HASTA_LA_QUE_SE_MIDE = 7
+# Lo que no se puede medir bajando un pedazo de video (lo de YouTube y páginas)
+TIPOS_QUE_SE_MIDEN = [Fuente.Tipo.HLS, Fuente.Tipo.DASH, Fuente.Tipo.DIRECTO]
+
+
+def es_hora_de_medir(ahora=None):
+    return timezone.localtime(ahora).hour < HORA_HASTA_LA_QUE_SE_MIDE
+
+
+def medir_fuentes(verificar_a_fondo, cantidad=MEDIR_POR_VEZ, segundos=SEGUNDOS_PARA_MEDIR):
+    """
+    Mide a fondo (como la prueba a fondo de la importación: resolución y
+    velocidad con que llega) las fuentes de los canales que tienen más de
+    una: ahí es donde importa cuál va primera (ver
+    consultas.ordenadas_por_estabilidad). Las caídas no: no se usan. Lo
+    corre solo la verificación programada (verificar_fuentes), de madrugada.
+    Devuelve cuántas midió.
+    """
+    vigentes = (_fuentes_vigentes().filter(activa=True, tipo__in=TIPOS_QUE_SE_MIDEN)
+                .exclude(estado=Fuente.Estado.CAIDA))
+    con_varias = vigentes.values('canal').annotate(cantidad=Count('pk')).filter(cantidad__gte=2).values('canal')
+    fuentes = list(vigentes.filter(canal__in=con_varias)
+                   .order_by(F('medida').asc(nulls_first=True), 'pk')[:cantidad])
+    if not fuentes:
+        return 0
+    estados = verificar_a_fondo({f.url: f.tipo for f in fuentes},
+                                cabeceras={f.url: (f.user_agent, f.referer) for f in fuentes
+                                           if f.user_agent or f.referer},
+                                hasta=time.monotonic() + segundos)
+    ahora = timezone.now()
+    medidas = []
+    for fuente in fuentes:
+        nuevo = estados.get(fuente.url)
+        if nuevo is not None:
+            aplicar_resultado(fuente, nuevo, ahora)
+            medidas.append(fuente)
+    Fuente.objects.bulk_update(medidas, CAMPOS_DE_VERIFICACION)
+    return len(medidas)
 
 
 def _contar(resultado, estado):
@@ -1022,3 +1097,36 @@ def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):
                   modulo='canales')
     fuente.save(update_fields=['avisos_de_aparatos', 'primer_aviso', 'falla_en_aparatos', 'oculta_desde'])
     return fuente.oculta_desde is not None and fuente.oculta_por_aparatos
+
+
+# Lo que un aparato puede contar de una sola vez (más es un error o un abuso).
+MAXIMO_VISTO_POR_AVISO = 6 * 3600     # segundos
+# Cuando lo visto pasa esto, lo viejo pesa la mitad: cuenta más lo reciente
+# (una fuente que antes se cortaba y ahora anda bien sube sola, y al revés).
+MEMORIA_DE_ESTABILIDAD = 10 * 3600    # segundos
+
+
+def registrar_estabilidad(fuente, segundos, cortes, proporcion=None):
+    """
+    Un aparato dejó de ver esta fuente: la vio `segundos` y se cortó `cortes`
+    veces (se frenó a cargar, o se cayó y se reconectó), y la imagen tenía
+    esta `proporcion` (ancho / alto; opcional). Se suma a lo que contaron los
+    demás; con eso la API pone primero las que no se cortan y llenan la
+    pantalla (consultas.ordenadas_por_estabilidad). No se guarda quién lo mandó.
+    """
+    segundos = max(0, min(int(segundos), MAXIMO_VISTO_POR_AVISO))
+    cortes = max(0, min(int(cortes), segundos // 5 + 1))   # más de uno cada 5 s no es real
+    # Una imagen más angosta que 1:2 o más ancha que 3:1 no es real
+    proporcion = round(float(proporcion), 2) if proporcion and .5 <= float(proporcion) <= 3 else None
+    if not segundos and not proporcion:
+        return
+    with transaction.atomic():
+        fuente = Fuente.objects.select_for_update().get(pk=fuente.pk)
+        fuente.segundos_en_aparatos += segundos
+        fuente.cortes_en_aparatos += cortes
+        while fuente.segundos_en_aparatos > MEMORIA_DE_ESTABILIDAD:
+            fuente.segundos_en_aparatos //= 2
+            fuente.cortes_en_aparatos //= 2
+        if proporcion:
+            fuente.proporcion = proporcion
+        fuente.save(update_fields=['segundos_en_aparatos', 'cortes_en_aparatos', 'proporcion'])

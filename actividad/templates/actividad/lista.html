@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block titulo %}Actividad{% endblock %}
+{% block clase_body %}pagina-listado{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -26,24 +27,34 @@
             {% endfor %}
         </select>
     </div>
-    <div>
-        <label for="modulo" class="visually-hidden">Módulo</label>
-        <select id="modulo" name="modulo" class="form-select">
-            <option value="">Todos los módulos</option>
-            {% for m in modulos %}
-            <option value="{{ m }}" {% if filtros.modulo == m %}selected{% endif %}>{{ m|capfirst }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="filtros-fecha">
-        <label for="desde" class="visually-hidden">Desde</label>
-        <input type="date" id="desde" name="desde" value="{{ filtros.desde }}" class="form-control" title="Desde">
-    </div>
-    <div class="filtros-fecha">
-        <label for="hasta" class="visually-hidden">Hasta</label>
-        <input type="date" id="hasta" name="hasta" value="{{ filtros.hasta }}" class="form-control" title="Hasta">
-    </div>
-    <button type="submit" class="btn btn-primary">Filtrar</button>
+    <details class="filtros-mas">
+        <summary class="btn btn-outline-secondary">
+            <i class="bi bi-sliders" aria-hidden="true"></i> Más filtros
+            {% if filtros.modulo or filtros.desde or filtros.hasta %}<span class="filtro-activo" aria-label="Hay filtros adicionales activos"></span>{% endif %}
+        </summary>
+        <div class="filtros-mas-panel filtros-mas-panel-ancho">
+            <div>
+                <label for="modulo" class="form-label">Módulo</label>
+                <select id="modulo" name="modulo" class="form-select">
+                    <option value="">Todos los módulos</option>
+                    {% for m in modulos %}
+                    <option value="{{ m }}" {% if filtros.modulo == m %}selected{% endif %}>{{ m|capfirst }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filtros-fechas">
+                <div>
+                    <label for="desde" class="form-label">Desde</label>
+                    <input type="date" id="desde" name="desde" value="{{ filtros.desde }}" class="form-control">
+                </div>
+                <div>
+                    <label for="hasta" class="form-label">Hasta</label>
+                    <input type="date" id="hasta" name="hasta" value="{{ filtros.hasta }}" class="form-control">
+                </div>
+            </div>
+        </div>
+    </details>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
     {% if hay_filtros %}<a href="{% url 'actividad:lista' %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 

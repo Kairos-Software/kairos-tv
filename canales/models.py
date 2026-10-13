@@ -13,6 +13,7 @@ de la misma señal. La app usa la primera que funcione y, si se corta, pasa
 sola a la siguiente (failover). Así, si una fuente se cae, el canal sigue.
 """
 
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -183,6 +184,30 @@ def hace_dias_oculta():
     return timezone.now() - timedelta(days=DIAS_OCULTA)
 
 
+# Estabilidad en los aparatos (Fuente.cortes_por_hora). Con menos de
+# MINIMO_VISTO_PARA_JUZGAR segundos vistos no se sabe todavía; desde
+# CORTES_POR_HORA_TOLERABLES cortes por hora (uno cada 10 minutos) se
+# considera que "se corta" y la app la prueba después de las demás.
+MINIMO_VISTO_PARA_JUZGAR = 10 * 60
+CORTES_POR_HORA_TOLERABLES = 6
+# La prueba a fondo: desde esta velocidad (segundos de video por segundo) la
+# señal llega SOBRADA; por debajo llega justa y es más fácil que se corte.
+VELOCIDAD_SOBRADA = 1.5
+# Por debajo de esta forma (ancho / alto) la imagen es "cuadrada" (4:3 = 1.33):
+# en una TV o un celular acostado queda con franjas negras a los costados.
+PROPORCION_PANTALLA_COMPLETA = 1.5
+
+
+def medidas_de_calidad(calidad):
+    """
+    Lo que midió la prueba a fondo, en números, sacado del texto de la
+    calidad: '1080p · H.264 · audio AAC (es) · llega x3.2' -> {'alto': 1080, 'velocidad': 3.2}.
+    """
+    alto = re.search(r'\b(\d{3,4})p\b', calidad or '')
+    velocidad = re.search(r'llega x(\d+(?:\.\d+)?)', calidad or '')
+    return {'alto': int(alto.group(1)) if alto else 0, 'velocidad': float(velocidad.group(1)) if velocidad else 0}
+
+
 class Fuente(models.Model):
 
     # El formato de la señal. Lo averigua la verificación mirando lo que
@@ -214,6 +239,14 @@ class Fuente(models.Model):
     codec = models.CharField('códec', max_length=10, blank=True, help_text='Lo averigua la verificación.')
     # Lo que encontró la prueba a fondo al importarla: '1080p · H.264 · audio AAC (es) · llega x3.2'
     calidad = models.CharField(max_length=80, blank=True, help_text='Lo que encontró la prueba a fondo.')
+    # Lo mismo, en números, para elegir la mejor (ver consultas.ordenadas_por_estabilidad):
+    # las líneas de la imagen (1080, 720...) y cuántos segundos de video llegan por
+    # segundo (3.2 = sobrado; cerca de 1 = justo, se puede cortar). 0 = no se sabe.
+    alto = models.PositiveSmallIntegerField(default=0)
+    velocidad = models.FloatField(default=0)
+    # Cuándo se midió por última vez (la verificación programada mide de a
+    # tandas, empezando por las nunca medidas: servicios.medir_fuentes).
+    medida = models.DateTimeField('última medición', null=True, blank=True)
     prioridad = models.PositiveIntegerField(default=0, help_text='Menor = se prueba primero.')
     activa = models.BooleanField(default=True, help_text='Apagarla a mano: la app no la usa aunque funcione.')
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.SIN_VERIFICAR,
@@ -239,6 +272,16 @@ class Fuente(models.Model):
     falla_en_aparatos = models.CharField('motivo según los aparatos', max_length=200, blank=True)
     oculta_desde = models.DateTimeField('oculta por fallar en los aparatos desde', null=True, blank=True)
 
+    # Qué tan estable es en los aparatos: cuánto se vio y cuántas veces se
+    # cortó mientras se veía (se frenó a cargar o se cayó y se reconectó). Con
+    # eso la API pone primero las que no se cortan (ver consultas.fuentes_usables
+    # y servicios.registrar_estabilidad). Pesa más lo reciente.
+    segundos_en_aparatos = models.PositiveIntegerField('visto en los aparatos (segundos)', default=0)
+    cortes_en_aparatos = models.PositiveIntegerField('cortes en los aparatos', default=0)
+    # La forma de la imagen según los aparatos (ancho / alto: 1.78 = 16:9; 1.33 = 4:3,
+    # "cuadrada", con franjas negras a los costados). 0 = no se sabe.
+    proporcion = models.FloatField('forma de la imagen', default=0)
+
     class Meta:
         verbose_name = 'fuente'
         verbose_name_plural = 'fuentes'
@@ -262,6 +305,13 @@ class Fuente(models.Model):
     def vuelve_a_probarse(self):
         """Cuándo deja de estar oculta (y la app la vuelve a intentar)."""
         return self.oculta_desde + timedelta(days=DIAS_OCULTA) if self.oculta_desde else None
+
+    @property
+    def cortes_por_hora(self):
+        """Cada cuánto se corta en los aparatos (None = todavía se vio poco para saberlo)."""
+        if self.segundos_en_aparatos < MINIMO_VISTO_PARA_JUZGAR:
+            return None
+        return round(self.cortes_en_aparatos * 3600 / self.segundos_en_aparatos, 1)
 
 
 class Importacion(models.Model):

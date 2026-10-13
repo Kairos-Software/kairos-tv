@@ -36,7 +36,10 @@ class EstiloBootstrapMixin:
 
             # La opción vacía de los desplegables viene en inglés
             # ("Select an option"): se reemplaza por un texto propio.
-            if isinstance(campo, forms.ChoiceField) and not isinstance(campo, forms.ModelChoiceField):
+            if isinstance(campo, forms.ModelChoiceField):
+                if campo.empty_label is not None:
+                    campo.empty_label = self.TEXTO_OPCION_VACIA
+            elif isinstance(campo, forms.ChoiceField):
                 opciones = list(campo.choices)
                 if opciones and opciones[0][0] == '':
                     campo.choices = [('', self.TEXTO_OPCION_VACIA)] + opciones[1:]

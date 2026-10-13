@@ -62,7 +62,7 @@
                 {% csrf_token %}
                 {% include "parciales/_campo.html" with campo=form_renovar.dispositivos ancho="col-sm-5" %}
                 {% include "parciales/_campo.html" with campo=form_renovar.monto_cobrado ancho="col-sm-7" %}
-                <p class="form-text mb-0">Precio sugerido por dispositivo: $ {{ precio_dispositivo|floatformat:2|intcomma }}</p>
+                <p class="col-12 form-text mb-0">Precio sugerido por dispositivo: $ {{ precio_dispositivo|floatformat:2|intcomma }}</p>
                 <div class="col-12"><button type="submit" class="btn btn-primary">{% if cliente.vence %}Renovar{% else %}Activar{% endif %}</button></div>
             </form>
             {% endif %}

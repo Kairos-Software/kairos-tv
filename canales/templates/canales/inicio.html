@@ -8,39 +8,46 @@
 {% endcomment %}
 
 {% block titulo %}Contenido{% endblock %}
+{% block clase_body %}pagina-contenido{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
     <div>
         <h1 class="pagina-titulo">Contenido</h1>
-        <p class="pagina-bajada">Canales en vivo, películas y series. Subí listas M3U: cada entrada se prueba a fondo y solo cargás las aptas. En el catálogo ves todo como en la app y quitás lo que no te sirve.</p>
+        <p class="pagina-bajada">Administrá lo que ven tus clientes, sin perder de vista el estado de las señales.</p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="contenido-acciones-principales">
+        <a href="{% url 'canales:organizar' %}" class="btn btn-acento">
+            <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> Organizar contenido
+        </a>
         {% if puede_importar %}
+        <a href="#importar-lista" class="btn btn-primary" data-abrir-detalle="importar-lista">
+            <i class="bi bi-upload" aria-hidden="true"></i> Importar lista
+        </a>
         <a href="{% url 'canales:probar' %}" class="btn btn-outline-secondary">
             <i class="bi bi-plug" aria-hidden="true"></i> Probar un link
         </a>
-        {% endif %}
-        {% if puede_importar %}
         <a href="{% url 'canales:youtube' %}" class="btn btn-outline-secondary">
             <i class="bi bi-youtube" aria-hidden="true"></i> Traer de YouTube
         </a>
         {% endif %}
-        {% if permisos.ver_estadisticas %}
-        <a href="{% url 'canales:lo_mas_visto' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Lo más visto
-        </a>
-        {% endif %}
-        <a href="{% url 'canales:organizar' %}" class="btn btn-acento">
-            <i class="bi bi-diagram-3" aria-hidden="true"></i> Organizar contenido
-        </a>
     </div>
 </div>
 {% endblock %}
 
 {% block contenido %}
-<section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">Resumen</h2>
+<section class="contenido-resumen mb-4" aria-labelledby="resumen-titulo">
+    <div class="contenido-seccion-encabezado">
+        <div>
+            <span class="seccion-sobrelinea">Estado actual</span>
+            <h2 id="resumen-titulo">Tu catálogo</h2>
+        </div>
+        {% if permisos.ver_estadisticas %}
+        <a href="{% url 'canales:lo_mas_visto' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Ver consumo
+        </a>
+        {% endif %}
+    </div>
     <div class="resumen-contenidos">
         {% for bloque in resumen.por_contenido %}
         <article class="resumen-contenido">
@@ -63,65 +70,108 @@
         </article>
         {% endfor %}
     </div>
-
-    {% if puede_importar %}
-    <hr>
-    <div id="verificar-todas" class="d-grid gap-3">
-        <div class="d-flex flex-wrap align-items-center gap-3">
-            {% csrf_token %}
-            <button type="button" class="btn btn-outline-secondary" data-accion="verificar">
-                <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span>Volver a verificar todas</span>
-            </button>
-            <span class="texto-suave small">Se prueban de a 50 y se ve el avance. Las caídas que volvieron se reactivan solas, y las que antes no se reconocían (video directo, como en VLC) ahora se detectan.</span>
-        </div>
-        <form method="post" action="{% url 'canales:limpiar_nombres' %}" class="d-flex flex-wrap align-items-center gap-3"
-              onsubmit="return confirm('¿Limpiar los nombres de todos los canales? Ej: «ES: (FHD) DAZN 1» pasa a «DAZN 1». Si dos quedan iguales, se juntan en uno (con las fuentes de los dos).');">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-secondary">
-                <i class="bi bi-magic" aria-hidden="true"></i> Limpiar nombres
-            </button>
-            <span class="texto-suave small">Saca prefijos de país y calidades ("ES:", "(FHD)", "REPUESTO") de los canales cargados antes, y junta los que quedan repetidos.</span>
-        </form>
-        <div class="avance" hidden>
-            <div class="avance-barra" role="progressbar" aria-label="Avance de la verificación" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div class="avance-relleno"></div>
-            </div>
-            <div class="avance-texto"><strong data-texto="porcentaje">0 %</strong><span data-texto="detalle"></span></div>
-        </div>
-    </div>
-    {% endif %}
 </section>
 
 {% if puede_importar %}
-<section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">Importar una lista</h2>
-    <p class="texto-suave">Al subirla se analiza toda (idioma, país, si es en vivo o película, formato) y después se <strong>prueba cada entrada</strong> de a tandas, mostrando el avance. Todavía no se carga nada: al terminar ves cuáles son aptas y por qué las demás no pasaron, y recién ahí cargás las aptas. Si un canal ya existe, la dirección se suma como fuente alternativa.</p>
-    <form method="post" enctype="multipart/form-data" class="row g-3 align-items-start" novalidate id="form-importar">
-        {% csrf_token %}
-        {% include "parciales/_campo.html" with campo=form.archivo ancho="col-12" %}
-        {% include "parciales/_campo.html" with campo=form.a_fondo ancho="col-12" %}
-        {% include "parciales/_campo.html" with campo=form.descartar_vod ancho="col-md-6 col-xl-3" %}
-        {% include "parciales/_campo.html" with campo=form.solo_espanol ancho="col-md-6 col-xl-3" %}
-        {% include "parciales/_campo.html" with campo=form.descartar_adultos ancho="col-md-6 col-xl-3" %}
-        {% include "parciales/_campo.html" with campo=form.descartar_sin_logo ancho="col-md-6 col-xl-3" %}
-        {% if form.seccion_destino.field.choices|length > 1 %}{% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-4" %}{% endif %}
-        {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-4" %}
-        <div class="col-12">
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-upload" aria-hidden="true"></i> Subir y analizar
-            </button>
+<div class="contenido-herramientas mb-4">
+    <details class="tarjeta tarjeta-plegable" id="importar-lista" {% if form.errors %}open{% endif %}>
+        <summary>
+            <span class="tarjeta-plegable-icono"><i class="bi bi-upload" aria-hidden="true"></i></span>
+            <span><strong>Importar una lista</strong><small>Subí un archivo M3U, revisalo y cargá solo lo apto.</small></span>
+            <i class="bi bi-chevron-down tarjeta-plegable-flecha" aria-hidden="true"></i>
+        </summary>
+        <div class="tarjeta-plegable-cuerpo">
+            <p class="texto-suave">La lista se analiza y después se prueba de a tandas. No se publica nada hasta que revises el resultado y confirmes qué cargar.</p>
+            <form method="post" enctype="multipart/form-data" class="row g-3 align-items-start" novalidate id="form-importar">
+                {% csrf_token %}
+                {% if form.non_field_errors %}<div class="col-12 alert alert-danger mb-0">{{ form.non_field_errors }}</div>{% endif %}
+                {% include "parciales/_campo.html" with campo=form.archivo ancho="col-12" %}
+                <details class="col-12 importar-opciones" {% if form.errors %}open{% endif %}>
+                    <summary>
+                        <span><i class="bi bi-shield-check" aria-hidden="true"></i> Prueba y filtros</span>
+                        <small>Recomendado: prueba a fondo, español y sin contenido adulto</small>
+                    </summary>
+                    <div class="row g-3 importar-opciones-cuerpo">
+                        {% include "parciales/_campo.html" with campo=form.a_fondo ancho="col-12" %}
+                        {% include "parciales/_campo.html" with campo=form.descartar_vod ancho="col-md-6 col-xl-3" %}
+                        {% include "parciales/_campo.html" with campo=form.solo_espanol ancho="col-md-6 col-xl-3" %}
+                        {% include "parciales/_campo.html" with campo=form.descartar_adultos ancho="col-md-6 col-xl-3" %}
+                        {% include "parciales/_campo.html" with campo=form.descartar_sin_logo ancho="col-md-6 col-xl-3" %}
+                    </div>
+                </details>
+                <details class="col-12 importar-opciones" {% if form.errors %}open{% endif %}>
+                    <summary>
+                        <span><i class="bi bi-folder2-open" aria-hidden="true"></i> Destino opcional</span>
+                        <small>Sin cambiar nada, se respetan la sección y categoría de cada entrada</small>
+                    </summary>
+                    <div class="row g-3 importar-opciones-cuerpo">
+                        {% if form.seccion_destino.field.choices|length > 1 %}{% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-4" %}{% endif %}
+                        {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-4" %}
+                        {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-4" %}
+                    </div>
+                </details>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload" aria-hidden="true"></i> Subir y analizar
+                    </button>
+                </div>
+            </form>
         </div>
-    </form>
-</section>
+    </details>
+
+    <details class="tarjeta tarjeta-plegable" id="mantenimiento-contenido">
+        <summary>
+            <span class="tarjeta-plegable-icono"><i class="bi bi-wrench-adjustable" aria-hidden="true"></i></span>
+            <span><strong>Mantenimiento del catálogo</strong><small>Revisá señales o normalizá nombres cuando haga falta.</small></span>
+            <i class="bi bi-chevron-down tarjeta-plegable-flecha" aria-hidden="true"></i>
+        </summary>
+        <div class="tarjeta-plegable-cuerpo d-grid gap-3" id="verificar-todas">
+            <div class="contenido-tarea">
+                <div>
+                    <strong>Comprobar todas las señales</strong>
+                    <span>Las caídas que volvieron se reactivan solas.</span>
+                </div>
+                <div>
+                    {% csrf_token %}
+                    <button type="button" class="btn btn-outline-secondary" data-accion="verificar">
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span>Verificar todas</span>
+                    </button>
+                </div>
+            </div>
+            <form method="post" action="{% url 'canales:limpiar_nombres' %}" class="contenido-tarea"
+                  onsubmit="return confirm('¿Limpiar los nombres de todos los canales? Ej: «ES: (FHD) DAZN 1» pasa a «DAZN 1». Si dos quedan iguales, se juntan en uno (con las fuentes de los dos).');">
+                {% csrf_token %}
+                <div>
+                    <strong>Ordenar nombres antiguos</strong>
+                    <span>Saca país, calidad y palabras como «REPUESTO»; también une duplicados.</span>
+                </div>
+                <button type="submit" class="btn btn-outline-secondary">
+                    <i class="bi bi-magic" aria-hidden="true"></i> Limpiar nombres
+                </button>
+            </form>
+            <div class="avance" hidden>
+                <div class="avance-barra" role="progressbar" aria-label="Avance de la verificación" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div class="avance-relleno"></div>
+                </div>
+                <div class="avance-texto"><strong data-texto="porcentaje">0 %</strong><span data-texto="detalle"></span></div>
+            </div>
+        </div>
+    </details>
+</div>
 {% endif %}
 
 <section class="tarjeta p-0">
-    <h2 class="tarjeta-titulo px-4 pt-4">Listas importadas</h2>
+    <div class="contenido-seccion-encabezado contenido-listas-encabezado">
+        <div>
+            <span class="seccion-sobrelinea">Historial</span>
+            <h2>Listas importadas</h2>
+        </div>
+        <span class="texto-suave small">Abrí una lista para continuar una revisión pendiente.</span>
+    </div>
     {% if importaciones %}
     <div class="table-responsive">
         <table class="table tabla mb-0">
-            <thead><tr><th scope="col">Lista</th><th scope="col">Subida</th><th scope="col">Canales</th><th scope="col">Estado</th></tr></thead>
+            <thead><tr><th scope="col">Lista</th><th scope="col">Subida</th><th scope="col">Canales</th><th scope="col">Estado</th><th scope="col"><span class="visually-hidden">Acción</span></th></tr></thead>
             <tbody>
                 {% for i in importaciones %}
                 <tr>
@@ -132,6 +182,7 @@
                         {% if i.terminada %}<span class="chip chip-agregada">Terminada</span>
                         {% else %}<span class="chip chip-pendiente">A medio verificar</span>{% endif %}
                     </td>
+                    <td class="text-end"><a href="{% url 'canales:importacion' i.pk %}" class="btn btn-sm btn-outline-secondary">{% if i.terminada %}Revisar{% else %}Continuar{% endif %}</a></td>
                 </tr>
                 {% endfor %}
             </tbody>

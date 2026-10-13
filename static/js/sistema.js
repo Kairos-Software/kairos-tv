@@ -104,7 +104,34 @@
         actualizarBotones();
     });
 
-    // ── Mostrar / ocultar contraseña ───────────────────────────────
+    // ── Paneles plegables enlazables ────────────────────────────
+    function abrirDetalle(id, moverFoco) {
+        const detalle = document.getElementById(id);
+        if (!detalle || detalle.tagName !== 'DETAILS') return false;
+        detalle.open = true;
+        requestAnimationFrame(function () {
+            detalle.scrollIntoView({behavior: 'smooth', block: 'start'});
+            if (moverFoco) {
+                const control = detalle.querySelector('input:not([type="hidden"]), select, button, textarea');
+                if (control) control.focus({preventScroll: true});
+            }
+        });
+        return true;
+    }
+
+    document.querySelectorAll('[data-abrir-detalle]').forEach(function (enlace) {
+        enlace.addEventListener('click', function (evento) {
+            const id = enlace.dataset.abrirDetalle;
+            if (!abrirDetalle(id, true)) return;
+            evento.preventDefault();
+            if (window.location.hash !== '#' + id) history.pushState(null, '', '#' + id);
+        });
+    });
+    if (window.location.hash) {
+        try { abrirDetalle(decodeURIComponent(window.location.hash.slice(1)), false); } catch (_) { /* hash inválido */ }
+    }
+
+    // ── Mostrar / ocultar contraseña ──────────────────────────────
     document.querySelectorAll('[data-accion="ver-password"]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             const input = document.getElementById(btn.dataset.objetivo);
@@ -180,6 +207,25 @@
         if (!contenedor.getAttribute('aria-label')) {
             contenedor.setAttribute('aria-label', 'Tabla desplazable horizontalmente');
         }
+    });
+
+    // Atajo de operador: "/" lleva al buscador de la pantalla actual.
+    const buscadores = Array.from(document.querySelectorAll('input[type="search"]:not([data-buscador-secundario])'));
+    buscadores.forEach(function (campo) {
+        campo.setAttribute('aria-keyshortcuts', '/');
+        if (!campo.title) campo.title = 'Atajo: /';
+    });
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key !== '/' || evento.ctrlKey || evento.metaKey || evento.altKey) return;
+        const activo = document.activeElement;
+        if (activo && (activo.matches('input, textarea, select') || activo.isContentEditable)) return;
+        const buscador = buscadores.find(function (campo) {
+            return !campo.disabled && campo.offsetParent !== null;
+        });
+        if (!buscador) return;
+        evento.preventDefault();
+        buscador.focus();
+        buscador.select();
     });
 
     // Categoría: "elegí de la lista" u "o una nueva" — vale UNA sola. Escribir

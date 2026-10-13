@@ -32,3 +32,31 @@ class EstadoMantenimiento(models.Model):
     def obtener(cls):
         estado, _ = cls.objects.get_or_create(pk=1)
         return estado
+
+
+class Trabajo(models.Model):
+    """
+    Un trabajo pesado que está corriendo: probar o cargar una lista, volver a
+    verificar todas las fuentes... Lo ven todos los que entran al panel (en
+    cualquier navegador) y, mientras corre, los demás trabajos pesados esperan
+    su turno. Ver core/trabajos.py.
+    """
+    clave = models.CharField(max_length=60, unique=True)   # 'importacion:7', 'verificacion'
+    titulo = models.CharField(max_length=150)
+    detalle = models.CharField(max_length=150, blank=True)
+    porcentaje = models.PositiveSmallIntegerField(default=0)
+    url = models.CharField(max_length=300, blank=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    empezado = models.DateTimeField(auto_now_add=True)
+    # Si no avisa que sigue antes de esto, se da por cortado (cerraron la pestaña, se cortó internet...)
+    vence = models.DateTimeField()
+
+    class Meta:
+        verbose_name = 'trabajo en curso'
+        verbose_name_plural = 'trabajos en curso'
+        ordering = ['empezado']
+
+    def __str__(self):
+        return self.titulo

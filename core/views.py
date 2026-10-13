@@ -4,12 +4,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse, HttpResponseServerError
+from django.http import HttpResponse, HttpResponseServerError, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.template import loader
 
-from . import herramientas_dev, mantenimiento
+from . import herramientas_dev, mantenimiento, trabajos
 from .forms import EstadoMantenimientoForm
 from .models import EstadoMantenimiento
 
@@ -23,6 +23,12 @@ def inicio(request):
 
 
 # ── Modo mantenimiento (solo superusuarios) ───────────────────────
+
+@login_required
+def trabajos_en_curso(request):
+    """Los trabajos pesados en curso (JSON): el aviso de arriba del panel pregunta cada 10 s."""
+    return JsonResponse({'trabajos': [trabajos.como_dato(t) for t in trabajos.en_curso()]})
+
 
 def _solo_superusuario(request):
     if not request.user.is_superuser:

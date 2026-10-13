@@ -31,6 +31,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../api/cliente.dart';
 import '../api/modelos.dart';
 import '../sesion.dart';
+import '../tv/escala.dart' show TamanioReal;
 import 'datos.dart';
 import 'estilo.dart';
 import 'medidor.dart';
@@ -218,9 +219,11 @@ class ControlYoutube extends ChangeNotifier {
   /// Si en este tiempo no cargó, casi siempre es la conexión.
   static const _sinRespuesta = Duration(seconds: 25);
 
-  /// En la TV el video se pide como mucho en Full HD (1920 de ancho): en una
-  /// TV 4K, más calidad no se nota desde el sillón y le pide de más al aparato.
-  static const limiteTv = 1920;
+  /// En la TV el video se pide como mucho en 720p (1280 de ancho). El
+  /// navegador interno de muchas TVs (el WebView, con el que se ve YouTube
+  /// dentro de la app) no da abasto con Full HD y el video se traba; desde el
+  /// sillón 720p casi no se distingue.
+  static const limiteTv = 1280;
 
   final ApiCliente api;
   final Biblioteca biblioteca;
@@ -234,6 +237,8 @@ class ControlYoutube extends ChangeNotifier {
 
   Timer? _guardar;
   Timer? _vigia;
+  AppLifecycleListener? _ciclo;
+  bool _seguirAlVolver = false;
   bool _avisado = false;
   bool _siguienteLanzado = false;
   bool _cerrado = false;
@@ -283,6 +288,18 @@ class ControlYoutube extends ChangeNotifier {
     });
     web = nuevo;
     estado.reiniciar();
+    // Si la app se va al fondo, el video se pausa (el WebView seguiría sonando)
+    _ciclo ??= AppLifecycleListener(
+      onHide: () {
+        _seguirAlVolver = estado.reproduciendo;
+        if (_seguirAlVolver) _js('reproductor.pauseVideo();');
+        guardarProgreso();
+      },
+      onShow: () {
+        if (_seguirAlVolver) _js('reproductor.playVideo();');
+        _seguirAlVolver = false;
+      },
+    );
   }
 
   /// Después de un error: lo vuelve a cargar desde donde iba.
@@ -377,6 +394,7 @@ class ControlYoutube extends ChangeNotifier {
     _cerrado = true;
     _guardar?.cancel();
     _vigia?.cancel();
+    _ciclo?.dispose();
     estado
       ..removeListener(_alCambiarEstado)
       ..dispose();
@@ -414,22 +432,13 @@ class VistaYoutube extends StatelessWidget {
             )
           : WebViewWidget(controller: web),
     );
-    if (control.tv) video = ExcludeFocus(child: IgnorePointer(child: _aTamanioReal(context, video)));
+    if (control.tv) {
+      video = ExcludeFocus(
+        child: IgnorePointer(child: TamanioReal(child: video)),
+      );
+    }
     return Center(
       child: AspectRatio(aspectRatio: 16 / 9, child: video),
-    );
-  }
-
-  Widget _aTamanioReal(BuildContext context, Widget hijo) {
-    final vista = View.of(context);
-    final anchoReal = vista.physicalSize.width / vista.devicePixelRatio; // una TV Full HD dice 960
-    final escala = anchoReal <= 0 ? 1.0 : MediaQuery.sizeOf(context).width / anchoReal; // 1920 / 960 = 2
-    if (escala <= 1.01) return hijo;
-    return LayoutBuilder(
-      builder: (context, limites) => FittedBox(
-        fit: BoxFit.fill,
-        child: SizedBox(width: limites.maxWidth / escala, height: limites.maxHeight / escala, child: hijo),
-      ),
     );
   }
 }

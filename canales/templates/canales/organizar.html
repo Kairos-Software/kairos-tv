@@ -15,20 +15,26 @@
 {% endcomment %}
 
 {% block titulo %}Organizar contenido{% endblock %}
+{% block clase_body %}pagina-organizar{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
     <div>
         <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
         <h1 class="pagina-titulo">Organizar contenido</h1>
-        <p class="pagina-bajada">Elegí la sección y después una categoría. Tocá las tarjetas para elegirlas y usá la barra de abajo, o «Editar» para cambiar una sola.</p>
+        <p class="pagina-bajada">Buscá, editá o mové contenido desde un solo lugar.</p>
     </div>
     {% if puede_editar %}
-    <div class="d-flex flex-wrap gap-2">
+    <div class="acciones-pagina organizar-acciones">
         <a href="{% url 'canales:youtube' %}" class="btn btn-outline-secondary"><i class="bi bi-youtube" aria-hidden="true"></i> Traer de YouTube</a>
-        <a href="{% url 'canales:inicio' %}#form-importar" class="btn btn-outline-secondary"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
-        <button type="button" class="btn btn-outline-secondary" data-abrir-exportar><i class="bi bi-download" aria-hidden="true"></i> Exportar</button>
-        <a href="{% url 'canales:eliminados' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Eliminados</a>
+        <a href="{% url 'canales:inicio' %}#importar-lista" class="btn btn-acento"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
+        <details class="filtros-mas">
+            <summary class="btn btn-outline-secondary"><i class="bi bi-three-dots" aria-hidden="true"></i> Más</summary>
+            <div class="filtros-mas-panel organizar-menu-panel">
+                <button type="button" class="btn btn-outline-secondary" data-abrir-exportar><i class="bi bi-download" aria-hidden="true"></i> Exportar contenido</button>
+                <a href="{% url 'canales:eliminados' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Ver eliminados</a>
+            </div>
+        </details>
     </div>
     {% endif %}
 </div>
@@ -120,8 +126,8 @@
         <p class="espejo-ayuda">Son las que ve el cliente en {{ seccion }}. El número es cuántos{% if contenido == 'serie' %} series{% endif %} tiene cada una.</p>
 
         {% if puede_editar and parecidas %}
-        <div class="espejo-parecidas">
-            <p class="espejo-parecidas-titulo"><i class="bi bi-lightbulb" aria-hidden="true"></i> Parecen la misma</p>
+        <details class="espejo-parecidas">
+            <summary class="espejo-parecidas-titulo"><i class="bi bi-lightbulb" aria-hidden="true"></i> Parecen la misma <span>{{ parecidas|length }}</span></summary>
             {% for grupo in parecidas %}
             <form method="post" action="{% url 'canales:categorias' %}" class="espejo-parecida">
                 {% csrf_token %}
@@ -139,6 +145,14 @@
                 </div>
             </form>
             {% endfor %}
+        </details>
+        {% endif %}
+
+        {% if datos.nodos %}
+        <div class="filtros-buscar categorias-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <label for="buscar-categorias" class="visually-hidden">Buscar categoría</label>
+            <input type="search" id="buscar-categorias" class="form-control form-control-sm" placeholder="Buscar categoría" autocomplete="off" data-buscador-secundario>
         </div>
         {% endif %}
 
@@ -147,7 +161,7 @@
             <input type="hidden" name="accion" value="juntar">
             <input type="hidden" name="volver" value="{{ request.get_full_path }}">
             <nav class="espejo-lista">
-                <div class="espejo-fila">
+                <div class="espejo-fila" data-categoria-fila>
                     <span class="espejo-fila-casilla"></span>
                     <a href="?{{ base }}&amp;categoria=todas" class="espejo-categoria{% if datos.elegida == 'todas' %} activa{% endif %}">
                         <span class="espejo-categoria-nombre">Todas</span>
@@ -155,7 +169,7 @@
                     </a>
                 </div>
                 {% for n in datos.nodos %}
-                <div class="espejo-fila">
+                <div class="espejo-fila" data-categoria-fila>
                     <span class="espejo-fila-casilla">
                         {% if puede_editar and n.categoria %}<input type="checkbox" class="form-check-input" name="elegida" value="{{ n.categoria.pk }}" data-nombre="{{ n.categoria.nombre }}" aria-label="Elegir {{ n.categoria.nombre }} para juntar">{% endif %}
                     </span>
@@ -170,6 +184,7 @@
                 </div>
                 {% endfor %}
             </nav>
+            <p class="espejo-ayuda text-center mt-2" id="categorias-vacio" hidden>No hay categorías con ese nombre.</p>
             {% if puede_editar %}
             <div class="espejo-juntar" id="juntar-barra" hidden>
                 <p class="small mb-2"><strong id="juntar-cuantas"></strong> elegidas. Juntarlas en:</p>
@@ -200,7 +215,7 @@
 
     <section class="espejo-contenido" aria-label="Contenido">
         {# ── Filtros ── #}
-        <form method="get" class="filtros mb-3" role="search">
+        <form method="get" class="filtros organizar-filtros mb-3" role="search">
             <input type="hidden" name="contenido" value="{{ contenido }}">
             {% if datos.elegida != 'todas' %}<input type="hidden" name="categoria" value="{{ datos.elegida }}">{% endif %}
             <div class="filtros-buscar">
@@ -214,27 +229,35 @@
                     {% for valor, texto in que_mostrar %}<option value="{{ valor }}" {% if filtros.mostrar == valor %}selected{% endif %}>{{ texto }}</option>{% endfor %}
                 </select>
             </div>
-            <div>
-                <label for="idioma" class="visually-hidden">Idioma</label>
-                <select id="idioma" name="idioma" class="form-select">
-                    <option value="">Cualquier idioma</option>
-                    <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
-                    <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
-                    <option value="sin_dato" {% if filtros.idioma == 'sin_dato' %}selected{% endif %}>Idioma: no se sabe</option>
-                </select>
-            </div>
-            <div>
-                <label for="origen" class="visually-hidden">De dónde salió</label>
-                <select id="origen" name="origen" class="form-select">
-                    <option value="">Cualquier origen</option>
-                    {% for o in origenes %}<option value="{{ o }}" {% if filtros.origen == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-check d-flex align-items-center gap-2 mb-0">
-                <input class="form-check-input mt-0" type="checkbox" name="sin_logo" value="1" id="sin_logo" {% if filtros.sin_logo %}checked{% endif %}>
-                <label class="form-check-label" for="sin_logo">Sin imagen</label>
-            </div>
-            <button type="submit" class="btn btn-primary">Filtrar</button>
+            <details class="filtros-mas">
+                <summary class="btn btn-outline-secondary">
+                    <i class="bi bi-sliders" aria-hidden="true"></i> Más filtros
+                    {% if filtros.idioma or filtros.origen or filtros.sin_logo %}<span class="filtro-activo" aria-label="Hay filtros adicionales activos"></span>{% endif %}
+                </summary>
+                <div class="filtros-mas-panel">
+                    <div>
+                        <label for="idioma" class="form-label">Idioma</label>
+                        <select id="idioma" name="idioma" class="form-select">
+                            <option value="">Cualquier idioma</option>
+                            <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
+                            <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
+                            <option value="sin_dato" {% if filtros.idioma == 'sin_dato' %}selected{% endif %}>Idioma: no se sabe</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="origen" class="form-label">Origen</label>
+                        <select id="origen" name="origen" class="form-select">
+                            <option value="">Cualquier origen</option>
+                            {% for o in origenes %}<option value="{{ o }}" {% if filtros.origen == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="sin_logo" value="1" id="sin_logo" {% if filtros.sin_logo %}checked{% endif %}>
+                        <label class="form-check-label" for="sin_logo">Solo sin imagen</label>
+                    </div>
+                </div>
+            </details>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
             {% if hay_filtros %}<a href="?contenido={{ contenido }}{% if datos.elegida != 'todas' %}&amp;categoria={{ datos.elegida }}{% endif %}" class="btn btn-link">Limpiar</a>{% endif %}
         </form>
 
@@ -244,6 +267,11 @@
                 {% if datos.elegida == 'todas' %}Todas las categorías{% elif nodo.categoria %}{{ nodo.categoria.nombre }}{% else %}Sin categoría{% endif %}
                 <span>{% if nodo %}{{ nodo.total }}{% else %}{{ datos.pagina.paginator.count }}{% endif %}</span>
             </h2>
+            {% if puede_editar and datos.pagina.object_list %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="elegir-pagina">
+                <i class="bi bi-check2-square" aria-hidden="true"></i> Seleccionar esta página
+            </button>
+            {% endif %}
         </div>
 
         {% if puede_editar and nodo.categoria %}
@@ -333,14 +361,15 @@
             {% endif %}
             <div class="espejo-grilla{% if forma != 'vivo' %} con-poster{% endif %}">
                 {% for item in items %}
-                <label class="espejo-tarjeta{% if contenido == 'serie' %}{% if not item.completa %} fuera{% endif %}{% elif item.no_se_ve %} fuera{% endif %}">
+                <article class="espejo-tarjeta{% if contenido == 'serie' %}{% if not item.completa %} fuera{% endif %}{% elif item.no_se_ve %} fuera{% endif %}">
                     {% if puede_editar %}
                     {% if contenido == 'serie' %}
-                    <input type="checkbox" class="form-check-input canal-elegir" name="serie" value="{{ item.nombre }}">
+                    <input type="checkbox" class="form-check-input canal-elegir" name="serie" value="{{ item.nombre }}" id="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" aria-label="Elegir {{ item.nombre }}">
                     {% else %}
-                    <input type="checkbox" class="form-check-input canal-elegir" name="canal" value="{{ item.pk }}">
+                    <input type="checkbox" class="form-check-input canal-elegir" name="canal" value="{{ item.pk }}" id="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" aria-label="Elegir {{ item.nombre }}">
                     {% endif %}
                     {% endif %}
+                    {% if puede_editar %}<label class="espejo-seleccionar" for="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}">{% else %}<div class="espejo-seleccionar">{% endif %}
                     <span class="espejo-imagen" data-iniciales="{{ item.nombre|iniciales }}">{% if item.logo %}<img src="{{ item.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ item.nombre|iniciales }}{% endif %}</span>
                     <span class="espejo-nombre" title="{{ item.nombre }}">{{ item.nombre }}</span>
                     <span class="espejo-detalle">
@@ -350,8 +379,9 @@
                         {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<span class="estado-mal" title="{{ item.no_se_ve }}">No se ve</span>{% else %}Se ve en la app{% endif %}
                         {% endif %}
                     </span>
+                    {% if puede_editar %}</label>{% else %}</div>{% endif %}
                     <button type="button" class="espejo-editar" data-datos="{{ item.datos }}">{% if puede_editar %}Editar{% else %}Ver{% endif %}</button>
-                </label>
+                </article>
                 {% endfor %}
             </div>
             {% endfor %}
@@ -365,7 +395,7 @@
                         <input class="form-check-input" type="checkbox" id="elegir-todos">
                         <label class="form-check-label" for="elegir-todos">Toda la página</label>
                     </div>
-                    <strong class="small" id="cantidad-elegidos">Ninguno elegido</strong>
+                    <strong class="small" id="cantidad-elegidos" aria-live="polite">Ninguno elegido</strong>
                     <span class="texto-suave small">Elegí una acción:</span>
                     <select id="accion" class="form-select form-select-sm w-auto">
                         <option value="">—</option>
@@ -381,6 +411,7 @@
                         <option value="eliminar">Eliminar</option>
                         <option value="exportar">Exportar (M3U8 o Excel)</option>
                     </select>
+                    <button type="button" class="btn btn-sm btn-link" id="limpiar-seleccion"><i class="bi bi-x-lg" aria-hidden="true"></i> Cancelar selección</button>
                 </div>
 
                 {# Lo que pide cada acción y qué va a pasar #}
@@ -515,7 +546,7 @@
         </div>
         <h3 class="h6 mt-4">Señales (la app las prueba en este orden)</h3>
         <ul class="espejo-origenes" id="editar-origenes"></ul>
-        <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+        <div class="dialogo-acciones d-flex flex-wrap align-items-center gap-2 mt-3">
             {% if puede_editar %}<button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>{% endif %}
             <button type="button" class="btn btn-link" data-cerrar>Cerrar</button>
             <a href="#" class="btn btn-link" id="editar-mas">Más opciones (señales, idioma…)</a>
@@ -617,7 +648,7 @@
         </fieldset>
 
         <p class="espejo-ayuda mx-0">Lo de YouTube no se exporta (solo lo abre el reproductor de YouTube). En la lista, un canal con varias señales aparece una vez por señal con el mismo nombre: al volver a importarla se juntan solas.</p>
-        <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="dialogo-acciones d-flex flex-wrap align-items-center gap-2">
             <button type="submit" class="btn btn-primary"><i class="bi bi-download" aria-hidden="true"></i> Exportar</button>
             <button type="button" class="btn btn-link" data-cerrar>Cancelar</button>
             <span class="small estado-mal" id="exportar-aviso" role="alert"></span>
@@ -659,6 +690,27 @@
         actualizarJuntar();
     }
 
+    // Buscar categorías sin recargar ni perder los filtros del contenido.
+    var buscarCategorias = document.getElementById('buscar-categorias');
+    if (buscarCategorias) {
+        var filasCategorias = Array.prototype.slice.call(document.querySelectorAll('[data-categoria-fila]'));
+        var categoriasVacio = document.getElementById('categorias-vacio');
+        var normalizar = function (texto) {
+            return (texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        };
+        buscarCategorias.addEventListener('input', function () {
+            var texto = normalizar(buscarCategorias.value.trim());
+            var visibles = 0;
+            filasCategorias.forEach(function (fila, indice) {
+                var coincide = !texto || normalizar(fila.textContent).indexOf(texto) >= 0;
+                // "Todas" queda visible cuando no se está buscando.
+                fila.hidden = texto ? !coincide : false;
+                if (!fila.hidden && (texto || indice > 0)) visibles += 1;
+            });
+            categoriasVacio.hidden = !texto || visibles > 0;
+        });
+    }
+
     // "Nueva sección" en las pestañas abre el formulario de crear
     document.querySelectorAll('[data-abrir-seccion]').forEach(function (enlace) {
         enlace.addEventListener('click', function (evento) {
@@ -675,13 +727,17 @@
     if (form) {
         var casillas = form.querySelectorAll('.canal-elegir');
         var todos = document.getElementById('elegir-todos');
+        var elegirPagina = document.getElementById('elegir-pagina');
+        var limpiarSeleccion = document.getElementById('limpiar-seleccion');
         var cantidad = document.getElementById('cantidad-elegidos');
         var accion = document.getElementById('accion');
+        var barraAcciones = form.querySelector('.espejo-barra');
         var seccion = document.getElementById('seccion-destino');
         var ayudaSeccion = document.getElementById('seccion-ayuda');
         var actualizar = function () {
             var elegidos = Array.prototype.filter.call(casillas, function (c) { return c.checked; }).length;
             if (cantidad) cantidad.textContent = elegidos ? elegidos + ' elegido' + (elegidos > 1 ? 's' : '') : 'Ninguno elegido';
+            if (barraAcciones) barraAcciones.classList.toggle('tiene-seleccion', elegidos > 0);
             if (todos) {
                 todos.checked = elegidos > 0 && elegidos === casillas.length;
                 todos.indeterminate = elegidos > 0 && elegidos < casillas.length;
@@ -704,6 +760,19 @@
             if (unir) unir.required = !form.querySelector('[data-accion=unir]').hidden;
         };
         casillas.forEach(function (c) { c.addEventListener('change', actualizar); });
+        if (elegirPagina) {
+            elegirPagina.addEventListener('click', function () {
+                casillas.forEach(function (c) { c.checked = true; });
+                actualizar();
+            });
+        }
+        if (limpiarSeleccion) {
+            limpiarSeleccion.addEventListener('click', function () {
+                casillas.forEach(function (c) { c.checked = false; });
+                if (accion) accion.value = '';
+                actualizar();
+            });
+        }
         if (accion) accion.addEventListener('change', actualizar);
         if (seccion) seccion.addEventListener('change', actualizar);
         if (todos) {

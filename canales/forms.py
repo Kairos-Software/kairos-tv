@@ -41,8 +41,11 @@ def _elegir_categoria_con_su_seccion(campo):
 
 def _elegir_seccion(campo):
     """La sección de un canal o película: las fijas y las nuevas (Música, Radio...)."""
-    return forms.ChoiceField(label='Sección', choices=secciones.todas(), required=bool(campo.required),
-                             initial=campo.initial)
+    nuevo = forms.ChoiceField(label='Sección', choices=secciones.todas(), required=bool(campo.required),
+                              initial=campo.initial)
+    # Este campo se reemplaza después de que el mixin aplicó los estilos.
+    nuevo.widget.attrs['class'] = 'form-select'
+    return nuevo
 
 
 def _categoria_de_su_seccion(datos, canal):

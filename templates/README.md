@@ -12,6 +12,7 @@ HTML generales, compartidos por todo el sistema.
 | `parciales/_campanita.html` | Campanita de notificaciones de la barra superior. |
 | `parciales/_menu.html` | Menú lateral. Cada opción se muestra según los permisos del usuario. |
 | `parciales/_mensajes.html` | Mensajes de éxito, error o aviso (`messages` de Django). |
+| `parciales/_trabajos.html` | Los trabajos pesados en curso (probar o cargar una lista, verificar fuentes), arriba de todas las pantallas: se actualiza solo (`static/js/trabajos.js`, `static/css/trabajos.css`; ver `core/trabajos.py`). |
 | `parciales/_campo.html` | Un campo de formulario completo (etiqueta, control, ayuda, errores): `{% include "parciales/_campo.html" with campo=form.email %}` |
 | `parciales/_paginacion.html` | Paginación que conserva los filtros de la búsqueda. |
 | `parciales/_avatar.html` | Foto del usuario o sus iniciales si no tiene. |

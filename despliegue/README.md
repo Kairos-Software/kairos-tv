@@ -100,7 +100,10 @@ Verificar: abrir https://kairostv.grupokairosarg.com en el navegador → login d
 0 */6 * * * cd /proyectos-ks/kairosTV/kairos-tv && ../venv/bin/python manage.py verificar_fuentes >> /var/log/kairostv-cron.log 2>&1
 30 3 * * * cd /proyectos-ks/kairosTV/kairos-tv && ../venv/bin/python manage.py limpiar_registros >> /var/log/kairostv-cron.log 2>&1
 ```
-- `verificar_fuentes` (cada 6 h): prueba las fuentes de los canales y marca las caídas.
+- `verificar_fuentes` (cada 6 h): prueba las fuentes de los canales y marca las caídas. En la
+  corrida de madrugada (la de las 0 y la de las 6) además mide una tanda de fuentes de los canales
+  que tienen varias, para que la app arranque por la mejor (no hay que agregar nada). Mientras corre,
+  el panel lo muestra arriba y las cargas de listas esperan a que termine (`core/trabajos.py`).
 - `limpiar_registros` (todos los días 3:30): borra actividad y avisos viejos.
 
 ## Actualizar (cada vez que hay cambios)

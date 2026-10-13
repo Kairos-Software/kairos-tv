@@ -54,6 +54,7 @@ urlpatterns = [
     path('canales/', canales.lista, name='canales'),
     path('canales/secciones/', canales.secciones_de_la_app, name='canales_secciones'),
     path('canales/fuentes/<int:pk>/falla/', canales.avisar_falla, name='fuente_falla'),
+    path('canales/fuentes/<int:pk>/estabilidad/', canales.estabilidad, name='fuente_estabilidad'),
     path('canales/visto/', canales.visto, name='canales_visto'),
     path('canales/fuentes/<int:pk>/resolver/', canales.resolver, name='fuente_resolver'),
 

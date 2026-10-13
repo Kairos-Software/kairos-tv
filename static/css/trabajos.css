@@ -1,0 +1,70 @@
+/* ═══════════════════════════════════════════════════════════════
+   trabajos.css — el aviso de trabajos en curso (parciales/_trabajos.html).
+   Usa los colores del panel (kairos.css); los valores de respaldo son los
+   mismos, por si alguna variable cambia de nombre.
+   ═══════════════════════════════════════════════════════════════ */
+
+.trabajos-en-curso {
+    display: grid; gap: .5rem;
+    margin: 1rem 2.5rem 0;
+}
+.trabajos-en-curso[hidden] { display: none; }
+
+.trabajo {
+    display: grid; align-items: center; gap: .9rem;
+    grid-template-columns: auto minmax(0, 1fr) minmax(90px, 220px) auto;
+    padding: .75rem 1.1rem;
+    border-radius: var(--radio, 12px);
+    border: 1px solid var(--celeste-borde, rgba(0, 240, 255, .32));
+    background:
+        linear-gradient(90deg, var(--celeste-fondo, rgba(0, 240, 255, .1)), transparent 70%),
+        var(--capa-baja, #1B1B20);
+    color: var(--texto, #E4E1E8);
+    text-decoration: none;
+}
+a.trabajo:hover { border-color: var(--celeste, #00F0FF); color: var(--texto, #E4E1E8); }
+
+.trabajo-punto {
+    width: .65rem; height: .65rem; border-radius: 50%;
+    background: var(--celeste, #00F0FF);
+    box-shadow: 0 0 0 0 rgba(0, 240, 255, .6);
+    animation: trabajo-late 1.6s ease-out infinite;
+}
+@keyframes trabajo-late {
+    0% { box-shadow: 0 0 0 0 rgba(0, 240, 255, .55); }
+    70% { box-shadow: 0 0 0 .55rem rgba(0, 240, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .trabajo-punto { animation: none; } }
+
+.trabajo-cuerpo { display: flex; flex-direction: column; min-width: 0; }
+.trabajo-titulo {
+    font-weight: 600; font-size: .9rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trabajo-datos {
+    font-size: .8rem; color: var(--texto-suave, #B9CACB);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.trabajo-barra {
+    height: .4rem; border-radius: 99px; overflow: hidden;
+    background: var(--capa-maxima, #353439);
+}
+.trabajo-barra > span {
+    display: block; height: 100%; border-radius: inherit;
+    background: linear-gradient(90deg, var(--celeste, #00F0FF), var(--celeste-claro, #DBFCFF));
+    transition: width .6s ease;
+}
+.trabajo-porcentaje {
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: .85rem;
+    color: var(--celeste, #00F0FF); min-width: 3.2rem; text-align: right;
+}
+
+.trabajos-nota { font-size: .75rem; color: var(--texto-apagado, #849495); padding-left: .25rem; }
+
+@media (max-width: 768px) {
+    .trabajos-en-curso { margin: .75rem 1rem 0; }
+    .trabajo { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .trabajo-barra { grid-column: 1 / -1; grid-row: 2; }
+}

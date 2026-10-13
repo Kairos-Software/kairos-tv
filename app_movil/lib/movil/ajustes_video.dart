@@ -16,6 +16,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../tv/escala.dart' show TamanioReal;
 import 'control_senal.dart';
 import 'estilo.dart';
 
@@ -122,26 +123,35 @@ class VideoAjustado extends StatelessWidget {
   final VideoPlayerController video;
   final AjusteImagen ajuste;
 
+  /// El tamaño del video dentro de [caja], según el ajuste.
+  static Size medida(Size caja, double proporcion, AjusteImagen ajuste) {
+    if (ajuste == AjusteImagen.estirar || caja.isEmpty) return caja;
+    final masAncha = caja.width / caja.height > proporcion;
+    // Ajustar: entra entero (franjas negras). Llenar: cubre todo (se recortan los bordes).
+    final porAlto = ajuste == AjusteImagen.ajustar ? masAncha : !masAncha;
+    return porAlto ? Size(caja.height * proporcion, caja.height) : Size(caja.width, caja.width / proporcion);
+  }
+
   @override
   Widget build(BuildContext context) {
     final valor = video.value;
     final proporcion = valor.aspectRatio == 0 ? 16 / 9 : valor.aspectRatio;
-    switch (ajuste) {
-      case AjusteImagen.ajustar:
-        return Center(
-          child: AspectRatio(aspectRatio: proporcion, child: VideoPlayer(video)),
+    // El tamaño se calcula acá, sin FittedBox ni AspectRatio alrededor del
+    // video: en la TV el video lo dibuja Android, que no ve esas
+    // transformaciones (ver TamanioReal).
+    return LayoutBuilder(
+      builder: (context, limites) {
+        final tamanio = medida(limites.biggest, proporcion, ajuste);
+        final hijo = OverflowBox(
+          minWidth: tamanio.width,
+          maxWidth: tamanio.width,
+          minHeight: tamanio.height,
+          maxHeight: tamanio.height,
+          child: TamanioReal(child: VideoPlayer(video)),
         );
-      case AjusteImagen.llenar:
-        final tamanio = valor.size.isEmpty ? Size(1600, 1600 / proporcion) : valor.size;
-        return ClipRect(
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(width: tamanio.width, height: tamanio.height, child: VideoPlayer(video)),
-          ),
-        );
-      case AjusteImagen.estirar:
-        return SizedBox.expand(child: VideoPlayer(video));
-    }
+        return ajuste == AjusteImagen.llenar ? ClipRect(child: hijo) : hijo;
+      },
+    );
   }
 }
 

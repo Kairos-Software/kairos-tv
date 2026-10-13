@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block titulo %}Clientes{% endblock %}
+{% block clase_body %}pagina-listado{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -33,18 +34,26 @@
         </select>
     </div>
     {% if revendedores is not None %}
-    <div>
-        <label for="revendedor" class="visually-hidden">Revendedor</label>
-        <select id="revendedor" name="revendedor" class="form-select">
-            <option value="">Todos los revendedores</option>
-            <option value="directos" {% if filtros.revendedor == 'directos' %}selected{% endif %}>Clientes directos</option>
-            {% for r in revendedores %}
-            <option value="{{ r.pk }}" {% if filtros.revendedor == r.pk|stringformat:"d" %}selected{% endif %}>{{ r }}</option>
-            {% endfor %}
-        </select>
-    </div>
+    <details class="filtros-mas">
+        <summary class="btn btn-outline-secondary">
+            <i class="bi bi-shop" aria-hidden="true"></i> Revendedor
+            {% if filtros.revendedor %}<span class="filtro-activo" aria-label="Hay un filtro de revendedor activo"></span>{% endif %}
+        </summary>
+        <div class="filtros-mas-panel">
+            <div>
+                <label for="revendedor" class="form-label">Revendedor</label>
+                <select id="revendedor" name="revendedor" class="form-select">
+                    <option value="">Todos los revendedores</option>
+                    <option value="directos" {% if filtros.revendedor == 'directos' %}selected{% endif %}>Clientes directos</option>
+                    {% for r in revendedores %}
+                    <option value="{{ r.pk }}" {% if filtros.revendedor == r.pk|stringformat:"d" %}selected{% endif %}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </details>
     {% endif %}
-    <button type="submit" class="btn btn-primary">Filtrar</button>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
     {% if hay_filtros %}<a href="{% url 'reventa:clientes' %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 

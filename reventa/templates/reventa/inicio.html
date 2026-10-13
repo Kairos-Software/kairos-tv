@@ -2,17 +2,26 @@
 {% load humanize %}
 
 {% block titulo %}Reventa{% endblock %}
+{% block clase_body %}pagina-reventa{% endblock %}
 
 {% block encabezado %}
-<div class="pagina-encabezado">
-    <h1 class="pagina-titulo">Reventa</h1>
-    <p class="pagina-bajada">1 crédito = 1 pantalla durante 30 días. Los créditos sin usar no vencen.</p>
+<div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
+    <div>
+        <h1 class="pagina-titulo">Reventa</h1>
+        <p class="pagina-bajada">1 crédito = 1 pantalla durante 30 días. Los créditos sin usar no vencen.</p>
+    </div>
+    {% if general %}
+    <div class="acciones-pagina">
+        <a href="{% url 'reventa:cliente_nuevo' %}" class="btn btn-acento"><i class="bi bi-person-plus" aria-hidden="true"></i> Nuevo cliente</a>
+        <a href="{% url 'reventa:compras' %}" class="btn btn-outline-secondary"><i class="bi bi-receipt" aria-hidden="true"></i> Compras</a>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block contenido %}
 {% if general %}
-<section class="tarjeta tarjeta-datos mb-4">
+<section class="tarjeta tarjeta-datos reventa-resumen mb-4">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
         <h2 class="tarjeta-titulo">El negocio</h2>
         <a href="{% url 'reventa:estadisticas' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Estadísticas mes a mes</a>

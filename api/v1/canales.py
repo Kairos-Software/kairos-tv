@@ -40,6 +40,15 @@ reproducir esa versión de la app (sin `formatos` = solo HLS, como la 1.0.0).
       oculta unos días igual ("caida"). motivo: formato | rechazo | tiempo |
       conexion | error (ver servicios.MOTIVOS_DE_LOS_APARATOS).
 
+    POST /api/v1/canales/fuentes/<id>/estabilidad/   {"segundos": 900, "cortes": 2, "proporcion": 1.78}
+      -> {"cortes_por_hora": 8.0 | null}
+      La app dejó de ver esa fuente: cuánto la vio, cuántas veces se cortó
+      (se frenó a cargar, o se cayó y se reconectó) y la forma de la imagen
+      (ancho / alto, opcional: 1.33 = 4:3, "cuadrada"). Con lo de todos los
+      aparatos, la lista de canales manda primero las fuentes que no se
+      cortan y llenan la pantalla (consultas.ordenadas_por_estabilidad). Las
+      apps anteriores a la 1.2.16 no lo mandan.
+
     POST /api/v1/canales/visto/
       {"vistos": [{"id": 12, "segundos": 300, "vista": true}], "favoritos": ["c:12", "s:Flash Gordon"]}
       -> {"sumados": 3}
@@ -57,7 +66,7 @@ from rest_framework.response import Response
 from canales import clasificar, estadisticas, imagenes, paginas, secciones
 from canales.consultas import agrupar_por_categoria, canales_disponibles, fuentes_usables, tipos_pedidos
 from canales.models import Contenido, Fuente
-from canales.servicios import registrar_falla_en_aparato, reverificar_por_aviso
+from canales.servicios import registrar_estabilidad, registrar_falla_en_aparato, reverificar_por_aviso
 from canales.verificacion import verificar_url
 
 from .serializers import CanalSerializer
@@ -104,6 +113,20 @@ def avisar_falla(request, pk):
         if registrar_falla_en_aparato(fuente, quien, motivo, detalle):
             estado = Fuente.Estado.CAIDA
     return Response({'estado': estado})
+
+
+@api_view(['POST'])
+def estabilidad(request, pk):
+    fuente = get_object_or_404(Fuente, pk=pk)
+    datos = request.data if isinstance(request.data, dict) else {}
+    try:
+        segundos, cortes = int(datos.get('segundos', 0)), int(datos.get('cortes', 0))
+        proporcion = float(datos['proporcion']) if datos.get('proporcion') is not None else None
+    except (TypeError, ValueError):
+        return Response({'detalle': 'segundos, cortes y proporcion tienen que ser números.'}, status=400)
+    registrar_estabilidad(fuente, segundos, cortes, proporcion)
+    fuente.refresh_from_db(fields=['segundos_en_aparatos', 'cortes_en_aparatos'])
+    return Response({'cortes_por_hora': fuente.cortes_por_hora})
 
 
 @api_view(['POST'])

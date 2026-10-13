@@ -38,7 +38,7 @@ from actividad.models import Accion
 from actividad.registro import registrar
 
 from . import clasificar, imagenes, secciones
-from .models import Canal, Categoria, Contenido, EntradaImportada, Fuente
+from .models import Canal, Categoria, Contenido, EntradaImportada, Fuente, medidas_de_calidad
 
 
 class NoSePuede(Exception):
@@ -518,7 +518,8 @@ def restaurar_eliminados(muestra, usuario=None):
             fuentes.append(Fuente(canal=canal, url=entrada.url, tipo=entrada.tipo or Fuente.Tipo.HLS,
                                   prioridad=len(fuentes) + 1, origen=entrada.importacion.archivo[:150],
                                   user_agent=entrada.user_agent, referer=entrada.referer, codec=entrada.codec,
-                                  calidad=entrada.calidad, estado=Fuente.Estado.SIN_VERIFICAR))
+                                  calidad=entrada.calidad, **medidas_de_calidad(entrada.calidad),
+                                  estado=Fuente.Estado.SIN_VERIFICAR))
         if not fuentes:
             resultado.sin_senales += 1
             continue

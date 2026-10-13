@@ -770,11 +770,12 @@ class _PantallaEnVivoCompletaState extends State<PantallaEnVivoCompleta> {
   KeyEventResult _tecla(FocusNode nodo, KeyEvent evento) {
     if (evento is! KeyDownEvent) return KeyEventResult.ignored;
     final tecla = evento.logicalKey;
-    if (tecla == LogicalKeyboardKey.arrowUp || tecla == LogicalKeyboardKey.channelUp) {
+    // Como en la lista: Arriba, el de arriba; Abajo, el de abajo. CH+ sube el número, como en cualquier TV.
+    if (tecla == LogicalKeyboardKey.arrowDown || tecla == LogicalKeyboardKey.channelUp) {
       _zapping(1);
       return KeyEventResult.handled;
     }
-    if (tecla == LogicalKeyboardKey.arrowDown || tecla == LogicalKeyboardKey.channelDown) {
+    if (tecla == LogicalKeyboardKey.arrowUp || tecla == LogicalKeyboardKey.channelDown) {
       _zapping(-1);
       return KeyEventResult.handled;
     }

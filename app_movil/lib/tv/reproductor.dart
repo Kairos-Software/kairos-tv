@@ -259,8 +259,10 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
       _esperarParaCerrar(); // se está usando: no se cierra
       return KeyEventResult.ignored; // las flechas recorren la guía o las opciones
     }
+    // Como en la guía: Arriba, el canal de arriba (el anterior); Abajo, el de abajo (el siguiente).
+    // CH+ / CH- siguen como en cualquier TV: CH+ sube el número.
     if (tecla == LogicalKeyboardKey.arrowUp || tecla == LogicalKeyboardKey.arrowDown) {
-      _zapping(tecla == LogicalKeyboardKey.arrowUp ? 1 : -1);
+      _zapping(tecla == LogicalKeyboardKey.arrowDown ? 1 : -1);
       return KeyEventResult.handled;
     }
     // Con el error a la vista, Izquierda/Derecha recorren sus botones ("Probar de nuevo", "Ver la guía")
@@ -298,12 +300,16 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
 
     final datosDelCanal = [
       Container(
-        width: 84,
-        height: 62,
-        decoration: BoxDecoration(color: Tono.capa, borderRadius: BorderRadius.circular(Curva.grande)),
-        child: LogoCanalTv(canal: canal, tamanioIniciales: 22, relleno: const EdgeInsets.all(8)),
+        width: 104,
+        height: 74,
+        decoration: BoxDecoration(
+          color: Tono.capa.withValues(alpha: .85),
+          borderRadius: BorderRadius.circular(Curva.grande),
+          border: Border.all(color: Colors.white.withValues(alpha: .12)),
+        ),
+        child: LogoCanalTv(canal: canal, tamanioIniciales: 24, relleno: const EdgeInsets.all(9)),
       ),
-      const SizedBox(width: 18),
+      const SizedBox(width: 22),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,12 +318,23 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
               canal.nombre,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: LetraTv.tarjeta.copyWith(fontSize: 24),
+              style: LetraTv.tarjeta.copyWith(fontSize: 30, height: 1.1),
             ),
-            const SizedBox(height: 2),
-            Text(
-              [if (numero.isNotEmpty) 'Canal $numero', if (categoria.isNotEmpty) categoria].join(' · '),
-              style: LetraTv.ayuda.copyWith(fontSize: 17, color: Tono.textoSuave),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (numero.isNotEmpty) _Insignia('CANAL $numero', destacada: true),
+                for (final texto in _insigniasDeLaSenal(_control)) _Insignia(texto),
+                if (categoria.isNotEmpty)
+                  Flexible(
+                    child: Text(
+                      categoria,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LetraTv.ayuda.copyWith(fontSize: 17, color: Tono.textoSuave),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -356,9 +373,9 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
               // El cartel: solo informa
               if (_cartel && _capa == _CapaVivo.nada && _control.error == null)
                 Positioned(
-                  left: MargenTv.derecha,
-                  right: MargenTv.derecha,
-                  bottom: MargenTv.abajo,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: _PanelControles(
                     ayuda: 'OK: guía  ·  ↑ ↓ cambiar de canal  ·  ← →: opciones  ·  Atrás: salir',
                     fila: datosDelCanal,
@@ -366,9 +383,9 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
                 ),
               if (_capa == _CapaVivo.opciones)
                 Positioned(
-                  left: MargenTv.derecha,
-                  right: MargenTv.derecha,
-                  bottom: MargenTv.abajo,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: _PanelControles(
                     ayuda: '← → elegir  ·  OK: confirmar  ·  Atrás: cerrar',
                     alMoverse: _esperarParaCerrar,
@@ -936,9 +953,9 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
               // El cartel del principio: título y cómo se maneja (solo informa)
               if (_cartel && !_controles && _control.error == null)
                 Positioned(
-                  left: MargenTv.derecha,
-                  right: MargenTv.derecha,
-                  bottom: MargenTv.abajo,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: _PanelControles(
                     fila: [Expanded(child: textoDelTitulo)],
                     ayuda: 'OK: pausa  ·  ← →: atrasar / adelantar 10 s  ·  ↑ ↓: opciones  ·  Atrás: salir',
@@ -946,9 +963,9 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
                 ),
               if (_controles)
                 Positioned(
-                  left: MargenTv.derecha,
-                  right: MargenTv.derecha,
-                  bottom: MargenTv.abajo,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: _PanelControles(
                     ayuda: '← →: elegir  ·  ↓: línea de tiempo  ·  Atrás: ocultar',
                     alMoverse: _reiniciarEspera,
@@ -965,10 +982,9 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
                       const SizedBox(width: 20),
                       Expanded(child: textoDelTitulo),
                       if (siguiente != null) ...[
-                        BotonTv(
-                          texto: 'Siguiente episodio',
+                        _BotonCuadrado(
                           icono: Icons.skip_next_rounded,
-                          alto: 62,
+                          etiqueta: 'Siguiente episodio',
                           alOk: () => _pasarA(siguiente),
                         ),
                         const SizedBox(width: 18),
@@ -1278,9 +1294,9 @@ class _ReproductorYoutubeTvState extends State<ReproductorYoutubeTv> {
               // El cartel del principio: título y cómo se maneja (solo informa)
               if (_cartel && !_controles && error == null)
                 Positioned(
-                  left: MargenTv.derecha,
-                  right: MargenTv.derecha,
-                  bottom: MargenTv.abajo,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: _PanelControles(
                     fila: [Expanded(child: textoDelTitulo)],
                     ayuda: 'OK: pausa  ·  ← →: atrasar / adelantar 10 s  ·  ↑ ↓: opciones  ·  Atrás: salir',
@@ -1288,9 +1304,9 @@ class _ReproductorYoutubeTvState extends State<ReproductorYoutubeTv> {
                 ),
               if (_controles)
                 Positioned(
-                  left: MargenTv.derecha,
-                  right: MargenTv.derecha,
-                  bottom: MargenTv.abajo,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: _PanelControles(
                     ayuda: '← →: elegir  ·  ↓: línea de tiempo  ·  Atrás: ocultar',
                     alMoverse: _reiniciarEspera,
@@ -1307,10 +1323,9 @@ class _ReproductorYoutubeTvState extends State<ReproductorYoutubeTv> {
                       const SizedBox(width: 20),
                       Expanded(child: textoDelTitulo),
                       if (siguiente != null && fuenteDeYoutube(siguiente.canal) != null) ...[
-                        BotonTv(
-                          texto: 'Siguiente episodio',
+                        _BotonCuadrado(
                           icono: Icons.skip_next_rounded,
-                          alto: 62,
+                          etiqueta: 'Siguiente episodio',
                           alOk: () => _pasarA(siguiente),
                         ),
                         const SizedBox(width: 18),
@@ -1631,12 +1646,17 @@ class _EstadoSenal extends StatelessWidget {
   }
 }
 
-/// El panel de abajo con los controles (vidrio oscuro) y una ayuda de las teclas.
+/// La barra de abajo del reproductor: un degradé que sube desde el borde
+/// (el video se sigue viendo arriba), la fila de controles, lo que vaya
+/// debajo (la línea de tiempo) y la ayuda de las teclas como teclas
+/// dibujadas. Ocupa todo el ancho de la pantalla.
 class _PanelControles extends StatelessWidget {
   const _PanelControles({required this.fila, this.debajo, this.ayuda, this.alMoverse});
 
   final List<Widget> fila;
   final Widget? debajo;
+
+  /// 'OK: guía  ·  ↑ ↓ cambiar de canal  ·  Atrás: salir' (ver [_AyudaDeTeclas]).
   final String? ayuda;
 
   /// Avisa que se movió por la fila (para que la barra no se esconda mientras se usa).
@@ -1663,16 +1683,19 @@ class _PanelControles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(32, 26, 32, 22),
-      decoration: BoxDecoration(
-        color: Tono.capaMinima.withValues(alpha: .9),
-        borderRadius: BorderRadius.circular(Curva.panel),
-        border: Border.all(color: Tono.bordeSuave.withValues(alpha: .45)),
-        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 40)],
+      padding: const EdgeInsets.fromLTRB(MargenTv.derecha, 150, MargenTv.derecha, MargenTv.abajo),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x0007090C), Color(0xA607090C), Color(0xEB07090C)],
+          stops: [0, .42, 1],
+        ),
       ),
       child: FocusTraversalGroup(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Focus(
               canRequestFocus: false,
@@ -1680,10 +1703,20 @@ class _PanelControles extends StatelessWidget {
               onKeyEvent: _moverEnLaFila,
               child: Row(children: fila),
             ),
-            if (debajo != null) ...[const SizedBox(height: 22), debajo!],
+            if (debajo != null) ...[const SizedBox(height: 26), debajo!],
             if (ayuda != null) ...[
-              const SizedBox(height: 16),
-              Text(ayuda!, style: LetraTv.ayuda.copyWith(fontSize: 15)),
+              const SizedBox(height: 22),
+              // Una línea fina celeste que se apaga hacia los costados separa la ayuda
+              Container(
+                height: 1,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Tono.celeste.withValues(alpha: .55), Tono.celeste.withValues(alpha: 0)],
+                  ),
+                ),
+              ),
+              _AyudaDeTeclas(ayuda!),
             ],
           ],
         ),
@@ -1692,7 +1725,116 @@ class _PanelControles extends StatelessWidget {
   }
 }
 
-class _BotonCuadrado extends StatelessWidget {
+/// La ayuda de las teclas, con cada tecla dibujada: [OK] guía   [↑ ↓] cambiar de canal ...
+/// Lee el texto de siempre: partes separadas por '·'; en cada parte, la
+/// tecla va antes de ':' (o son las flechas del principio).
+class _AyudaDeTeclas extends StatelessWidget {
+  const _AyudaDeTeclas(this.texto);
+
+  final String texto;
+
+  static (String, String) separar(String parte) {
+    final dosPuntos = parte.indexOf(':');
+    if (dosPuntos > 0) return (parte.substring(0, dosPuntos).trim(), parte.substring(dosPuntos + 1).trim());
+    final flechas = RegExp(r'^([←→↑↓ ]+)').firstMatch(parte);
+    if (flechas != null) return (flechas.group(1)!.trim(), parte.substring(flechas.end).trim());
+    return ('', parte.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final partes = texto.split('·').map((p) => p.trim()).where((p) => p.isNotEmpty);
+    return Wrap(
+      spacing: 30,
+      runSpacing: 10,
+      children: [
+        for (final parte in partes)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (separar(parte).$1.isNotEmpty) ...[
+                Container(
+                  constraints: const BoxConstraints(minWidth: 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: Colors.white.withValues(alpha: .28)),
+                  ),
+                  child: Text(
+                    separar(parte).$1,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: Letra.texto,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Tono.texto,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 9),
+              ],
+              Text(separar(parte).$2, style: LetraTv.ayuda.copyWith(fontSize: 16, color: Tono.textoSuave)),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Una insignia chica: 'CANAL 12' (dorada), 'FULL HD', '4:3', 'SEÑAL 2/3'.
+class _Insignia extends StatelessWidget {
+  const _Insignia(this.texto, {this.destacada = false});
+
+  final String texto;
+  final bool destacada;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destacada ? Tono.dorado : Tono.textoSuave;
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: .45)),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(
+          fontFamily: Letra.texto,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          letterSpacing: .8,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Lo que se sabe de la señal que se está viendo: la calidad ('FULL HD'),
+/// si es "cuadrada" ('4:3') y, si el canal tiene varias, cuál es ('SEÑAL 2/3').
+List<String> _insigniasDeLaSenal(ControlSenal control) {
+  final tamanio = control.video?.value.size ?? Size.zero;
+  final cuantas = control.fuentes.length;
+  return [
+    if (tamanio.height > 0)
+      switch (tamanio.height) {
+        >= 2000 => '4K',
+        >= 1000 => 'FULL HD',
+        >= 700 => 'HD',
+        _ => 'SD',
+      },
+    if (tamanio.height > 0 && tamanio.width / tamanio.height < 1.5) '4:3',
+    if (cuantas > 1) 'SEÑAL ${control.fuente + 1}/$cuantas',
+  ];
+}
+
+/// Un botón de la barra: redondo con su ícono; con el foco se llena de
+/// celeste y se abre para mostrar qué hace ("Agregar a favoritos").
+class _BotonCuadrado extends StatefulWidget {
   const _BotonCuadrado({required this.icono, required this.etiqueta, required this.alOk, this.color, this.nodo});
 
   final IconData icono;
@@ -1704,24 +1846,56 @@ class _BotonCuadrado extends StatelessWidget {
   final FocusNode? nodo;
 
   @override
+  State<_BotonCuadrado> createState() => _BotonCuadradoState();
+}
+
+class _BotonCuadradoState extends State<_BotonCuadrado> {
+  bool _enfocado = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: etiqueta,
-      child: Enfocable(
-        alOk: alOk,
-        nodo: nodo,
-        curva: Curva.boton,
-        escala: 1.08,
-        etiqueta: etiqueta,
-        child: Container(
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            color: Tono.capaAlta,
-            borderRadius: BorderRadius.circular(Curva.boton),
-            border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
+    const alto = 64.0;
+    final sobreCeleste = Tono.sobreCelesteOscuro;
+    return Enfocable(
+      alOk: widget.alOk,
+      nodo: widget.nodo,
+      curva: alto / 2,
+      escala: 1.0,
+      etiqueta: widget.etiqueta,
+      alEnfocar: (enfocado) => setState(() => _enfocado = enfocado),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        height: alto,
+        padding: EdgeInsets.symmetric(horizontal: _enfocado ? 22 : 0),
+        constraints: const BoxConstraints(minWidth: alto),
+        decoration: BoxDecoration(
+          color: _enfocado ? Tono.celeste : Colors.white.withValues(alpha: .1),
+          borderRadius: BorderRadius.circular(alto / 2),
+          border: Border.all(color: Colors.white.withValues(alpha: _enfocado ? 0 : .22)),
+        ),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(widget.icono, size: 30, color: _enfocado ? sobreCeleste : (widget.color ?? Tono.texto)),
+              if (_enfocado) ...[
+                const SizedBox(width: 10),
+                Text(
+                  widget.etiqueta,
+                  style: TextStyle(
+                    fontFamily: Letra.texto,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: sobreCeleste,
+                  ),
+                ),
+              ],
+            ],
           ),
-          child: Icon(icono, size: 30, color: color ?? Tono.texto),
         ),
       ),
     );

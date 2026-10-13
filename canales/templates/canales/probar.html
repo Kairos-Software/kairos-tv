@@ -1,111 +1,146 @@
 {% extends "base.html" %}
 {% comment %}
-    Probar un link: se pega una dirección, se prueba como en la importación
-    (formato real, como la app y como VLC, YouTube y páginas con yt-dlp) y,
-    si anda, se agrega como canal nuevo con nombre, logo, categoría...
+    Prueba una dirección como la app y permite crear un canal con el mismo
+    resultado, aun cuando la fuente esté momentáneamente caída.
 {% endcomment %}
 
 {% block titulo %}Probar un link · Contenido{% endblock %}
+{% block clase_body %}pagina-herramienta-contenido pagina-probar-link{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
     <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
     <h1 class="pagina-titulo">Probar un link</h1>
-    <p class="pagina-bajada">Pegá una dirección para saber si tiene señal y de qué tipo es. Si anda, la agregás como canal con su nombre, logo y categoría.</p>
+    <p class="pagina-bajada">Comprobá una señal y, si te sirve, agregala como canal desde la misma pantalla.</p>
 </div>
 {% endblock %}
 
 {% block contenido %}
-<section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">1. La dirección</h2>
-    <form method="post" class="row g-3 align-items-start" novalidate id="form-probar">
-        {% csrf_token %}
-        <input type="hidden" name="paso" value="probar">
-        {% include "parciales/_campo.html" with campo=prueba.url ancho="col-12" %}
-        <div class="col-12">
-            <details {% if prueba.user_agent.value or prueba.referer.value %}open{% endif %}>
-                <summary class="texto-suave small">Opciones avanzadas (User-Agent / Referer)</summary>
-                <div class="row g-3 mt-1">
-                    {% include "parciales/_campo.html" with campo=prueba.user_agent %}
-                    {% include "parciales/_campo.html" with campo=prueba.referer %}
-                </div>
-            </details>
-        </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-plug" aria-hidden="true"></i> Probar</button>
-        </div>
-    </form>
-</section>
+<details class="tarjeta tarjeta-plegable probar-direccion mb-4" {% if not resultado or prueba.errors %}open{% endif %}>
+    <summary>
+        <span class="tarjeta-plegable-icono"><i class="bi bi-link-45deg" aria-hidden="true"></i></span>
+        <span>
+            <strong>{% if resultado %}Dirección probada{% else %}1. Pegá la dirección{% endif %}</strong>
+            <small>{% if resultado %}{{ prueba.url.value }}{% else %}Link directo, lista HLS, transmisión o página de YouTube{% endif %}</small>
+        </span>
+        <span class="tarjeta-plegable-flecha"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+    </summary>
+    <div class="tarjeta-plegable-cuerpo">
+        <form method="post" class="row g-3 align-items-start" novalidate id="form-probar">
+            {% csrf_token %}
+            <input type="hidden" name="paso" value="probar">
+            {% if prueba.non_field_errors %}<div class="col-12 alert alert-danger">{{ prueba.non_field_errors }}</div>{% endif %}
+            {% include "parciales/_campo.html" with campo=prueba.url ancho="col-12" %}
+            <div class="col-12">
+                <details class="importar-opciones" {% if prueba.user_agent.value or prueba.referer.value or prueba.user_agent.errors or prueba.referer.errors %}open{% endif %}>
+                    <summary>
+                        <span><i class="bi bi-sliders" aria-hidden="true"></i> Opciones avanzadas</span>
+                        <small>Solo para links que exigen User-Agent o Referer</small>
+                    </summary>
+                    <div class="importar-opciones-cuerpo">
+                        <div class="row g-3">
+                            {% include "parciales/_campo.html" with campo=prueba.user_agent %}
+                            {% include "parciales/_campo.html" with campo=prueba.referer %}
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <div class="col-12 d-flex flex-wrap align-items-center gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-plug" aria-hidden="true"></i> Probar ahora</button>
+                <span class="texto-suave small">La prueba a fondo puede demorar unos segundos.</span>
+            </div>
+        </form>
+    </div>
+</details>
 
 {% if resultado %}
-<section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">Resultado</h2>
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-        {% if resultado.estado == 'funciona' %}
-            <span class="chip chip-agregada"><i class="bi bi-check-circle me-1" aria-hidden="true"></i> Funciona</span>
-        {% elif resultado.estado == 'caida' %}
-            <span class="chip chip-caida"><i class="bi bi-x-circle me-1" aria-hidden="true"></i> No funciona</span>
-        {% else %}
-            <span class="chip chip-pendiente">No se pudo verificar</span>
-        {% endif %}
-        {% if tipo_texto %}<span class="chip">{{ tipo_texto }}</span>{% endif %}
-        {% if resultado.user_agent %}<span class="chip">Anda presentándose como VLC</span>{% endif %}
-    </div>
-    {% if resultado.error %}<p class="mb-2">{{ resultado.error }}</p>{% endif %}
-    {% if resultado.calidad %}<p class="mb-2"><strong>Prueba a fondo:</strong> {{ resultado.calidad }}</p>{% endif %}
-    {% if no_pasa %}<div class="alert alert-warning mb-2">No pasaría la prueba al importar: {{ no_pasa }}</div>{% endif %}
-    {% if resultado.estado == 'funciona' %}
-    <p class="texto-suave small mb-0">La app 1.1.0 la puede reproducir.{% if resultado.tipo != 'hls' %} La 1.0.0 no (solo reproduce HLS).{% endif %}</p>
-    {% elif resultado.estado == 'caida' %}
-    <p class="texto-suave small mb-0">Si en VLC anda, probá poniendo en "Opciones avanzadas" el User-Agent o Referer que pide el canal. Igual la podés agregar: no se va a ver en la app hasta que una verificación la encuentre funcionando.</p>
-    {% endif %}
-    {% if ya_cargada %}
-    <div class="alert alert-warning mt-3 mb-0">
-        Esta dirección ya está cargada en el canal <a href="{% url 'canales:canal_editar' ya_cargada.canal.pk %}">{{ ya_cargada.canal.nombre }}</a>.
-    </div>
-    {% endif %}
-</section>
-{% endif %}
-
-{% if canal_form and not ya_cargada %}
-<section class="tarjeta">
-    <h2 class="tarjeta-titulo">2. Agregarla como canal</h2>
-    <form method="post" class="row g-3" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="paso" value="agregar">
-        <input type="hidden" name="url" value="{{ prueba.url.value }}">
-        <input type="hidden" name="user_agent" value="{{ prueba.user_agent.value|default:'' }}">
-        <input type="hidden" name="referer" value="{{ prueba.referer.value|default:'' }}">
-        <input type="hidden" name="estado" value="{{ resultado.estado }}">
-        <input type="hidden" name="error" value="{{ resultado.error }}">
-        <input type="hidden" name="tipo" value="{{ resultado.tipo }}">
-        <input type="hidden" name="ua_que_anduvo" value="{{ resultado.user_agent }}">
-        {% if canal_form.non_field_errors %}<div class="col-12 alert alert-danger">{{ canal_form.non_field_errors }}</div>{% endif %}
-        {% include "parciales/_campo.html" with campo=canal_form.nombre ancho="col-md-8" %}
-        {% include "parciales/_campo.html" with campo=canal_form.numero ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=canal_form.logo ancho="col-12" %}
-        {% include "parciales/_campo.html" with campo=canal_form.categoria %}
-        {% include "parciales/_campo.html" with campo=canal_form.nueva_categoria %}
-        {% include "parciales/_campo.html" with campo=canal_form.contenido ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=canal_form.idioma ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=canal_form.pais ancho="col-md-4" %}
-        <div class="col-12">
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-plus-lg" aria-hidden="true"></i> {% if resultado.estado == 'caida' %}Agregar igual{% else %}Agregar canal{% endif %}
-            </button>
+<div class="probar-flujo{% if canal_form and not ya_cargada %} probar-flujo-doble{% endif %}">
+    <section class="tarjeta probar-resultado" id="resultado" aria-labelledby="resultado-titulo">
+        <div class="probar-resultado-encabezado">
+            <span class="probar-resultado-icono {% if resultado.estado == 'funciona' %}estado-funciona{% elif resultado.estado == 'caida' %}estado-caida{% endif %}">
+                {% if resultado.estado == 'funciona' %}<i class="bi bi-check-lg" aria-hidden="true"></i>
+                {% elif resultado.estado == 'caida' %}<i class="bi bi-x-lg" aria-hidden="true"></i>
+                {% else %}<i class="bi bi-question-lg" aria-hidden="true"></i>{% endif %}
+            </span>
+            <div>
+                <span class="seccion-sobrelinea">Resultado de la prueba</span>
+                <h2 class="tarjeta-titulo mb-0" id="resultado-titulo">
+                    {% if resultado.estado == 'funciona' %}Funciona
+                    {% elif resultado.estado == 'caida' %}No funciona
+                    {% else %}No se pudo verificar{% endif %}
+                </h2>
+            </div>
         </div>
-    </form>
-</section>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            {% if tipo_texto %}<span class="chip">{{ tipo_texto }}</span>{% endif %}
+            {% if resultado.user_agent %}<span class="chip">Anda presentándose como VLC</span>{% endif %}
+        </div>
+        {% if resultado.error %}<p class="mb-2">{{ resultado.error }}</p>{% endif %}
+        {% if resultado.calidad %}<p class="mb-2"><strong>Prueba a fondo:</strong> {{ resultado.calidad }}</p>{% endif %}
+        {% if no_pasa %}<div class="alert alert-warning mb-2">No pasaría la prueba al importar: {{ no_pasa }}</div>{% endif %}
+        {% if resultado.estado == 'funciona' %}
+        <p class="texto-suave small mb-0">La app 1.1.0 o posterior puede reproducirla.{% if resultado.tipo != 'hls' %} La versión 1.0.0 no, porque solo reproduce HLS.{% endif %}</p>
+        {% elif resultado.estado == 'caida' %}
+        <p class="texto-suave small mb-0">Si funciona en VLC, abrí la dirección probada y completá el User-Agent o Referer. También podés agregarla igual para verificarla más adelante.</p>
+        {% endif %}
+        {% if ya_cargada %}
+        <div class="alert alert-warning mt-3 mb-0">
+            Esta dirección ya está cargada en el canal <a href="{% url 'canales:canal_editar' ya_cargada.canal.pk %}">{{ ya_cargada.canal.nombre }}</a>.
+        </div>
+        {% endif %}
+    </section>
+
+    {% if canal_form and not ya_cargada %}
+    <section class="tarjeta probar-agregar" aria-labelledby="agregar-titulo">
+        <div class="herramienta-titulo mb-3">
+            <span class="herramienta-titulo-icono"><i class="bi bi-plus-lg" aria-hidden="true"></i></span>
+            <div>
+                <span class="seccion-sobrelinea">Paso 2</span>
+                <h2 class="tarjeta-titulo mb-0" id="agregar-titulo">Agregar como canal</h2>
+            </div>
+        </div>
+        <form method="post" class="row g-3" novalidate id="form-agregar-canal">
+            {% csrf_token %}
+            <input type="hidden" name="paso" value="agregar">
+            <input type="hidden" name="url" value="{{ prueba.url.value }}">
+            <input type="hidden" name="user_agent" value="{{ prueba.user_agent.value|default:'' }}">
+            <input type="hidden" name="referer" value="{{ prueba.referer.value|default:'' }}">
+            <input type="hidden" name="estado" value="{{ resultado.estado }}">
+            <input type="hidden" name="error" value="{{ resultado.error }}">
+            <input type="hidden" name="tipo" value="{{ resultado.tipo }}">
+            <input type="hidden" name="ua_que_anduvo" value="{{ resultado.user_agent }}">
+            {% if canal_form.non_field_errors %}<div class="col-12 alert alert-danger">{{ canal_form.non_field_errors }}</div>{% endif %}
+            {% include "parciales/_campo.html" with campo=canal_form.nombre ancho="col-md-8" %}
+            {% include "parciales/_campo.html" with campo=canal_form.numero ancho="col-md-4" %}
+            {% include "parciales/_campo.html" with campo=canal_form.logo ancho="col-12" %}
+            {% include "parciales/_campo.html" with campo=canal_form.categoria %}
+            {% include "parciales/_campo.html" with campo=canal_form.nueva_categoria %}
+            {% include "parciales/_campo.html" with campo=canal_form.contenido ancho="col-md-4" %}
+            {% include "parciales/_campo.html" with campo=canal_form.idioma ancho="col-md-4" %}
+            {% include "parciales/_campo.html" with campo=canal_form.pais ancho="col-md-4" %}
+            <div class="col-12 formulario-acciones probar-agregar-acciones">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> {% if resultado.estado == 'caida' %}Agregar igual{% else %}Agregar canal{% endif %}
+                </button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+</div>
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Probar puede tardar unos segundos (YouTube y páginas, más)
-    document.getElementById('form-probar').addEventListener('submit', function (evento) {
-        var boton = evento.target.querySelector('button[type=submit]');
-        boton.disabled = true;
-        boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Probando…';
-    });
+(function () {
+    var formulario = document.getElementById('form-probar');
+    if (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            var boton = evento.target.querySelector('button[type=submit]');
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Probando…';
+        });
+    }
+})();
 </script>
 {% endblock %}

@@ -38,6 +38,7 @@ from django.views.decorators.http import require_POST
 
 from actividad.models import Accion
 from actividad.registro import registrar
+from core import trabajos
 from herramientas.excel import TIPO_XLSX
 from usuarios.decoradores import requiere_permiso
 from usuarios.permisos import chequear_permiso
@@ -182,13 +183,36 @@ def importacion(request, pk):
     })
 
 
+def _esperar_turno(clave, titulo, request, url, avance):
+    """
+    Si hay OTRO trabajo pesado corriendo (core/trabajos.py), la respuesta
+    para que la pantalla espere: "ocupada" (vuelve a pedir en unos segundos)
+    y qué se está esperando. Si no, None (y queda anotado como en curso).
+    """
+    otro = trabajos.turno(clave, titulo, request.user, url)
+    if otro is None:
+        return None
+    return JsonResponse({**avance, 'ocupada': True, 'esperando': otro.titulo})
+
+
 @require_POST
 @requiere_permiso('importar_canales')
 def importacion_lote(request, pk):
     """Prueba la próxima tanda y responde el avance (JSON). La pantalla la llama en bucle."""
     importacion = get_object_or_404(Importacion, pk=pk)
+    clave = f'importacion:{importacion.pk}'
+    esperar = _esperar_turno(clave, f'Probando la lista «{importacion.archivo}»', request,
+                             importacion_url(importacion), servicios.progreso(importacion))
+    if esperar:
+        return esperar
     verificar = partial(verificar_varias, a_fondo=True) if importacion.a_fondo else verificar_varias
-    return JsonResponse(servicios.procesar_lote(importacion, verificar))
+    avance = servicios.procesar_lote(importacion, verificar)
+    if avance['terminada']:
+        trabajos.terminar(clave)
+    else:
+        trabajos.avance(clave, avance['porcentaje'],
+                        f'{avance["verificadas"]:,} de {avance["para_verificar"]:,} probados'.replace(',', '.'))
+    return JsonResponse(avance)
 
 
 @require_POST
@@ -196,7 +220,19 @@ def importacion_lote(request, pk):
 def importacion_cargar(request, pk):
     """Carga la próxima tanda de aptas y responde el avance (JSON). La pantalla la llama en bucle."""
     importacion = get_object_or_404(Importacion, pk=pk)
-    return JsonResponse(servicios.cargar_lote(importacion))
+    clave = f'importacion:{importacion.pk}'
+    esperar = _esperar_turno(clave, f'Cargando la lista «{importacion.archivo}»', request,
+                             importacion_url(importacion), {**servicios.progreso(importacion), 'canales_nuevos': 0})
+    if esperar:
+        return esperar
+    avance = servicios.cargar_lote(importacion)
+    if not avance['aptas'] or avance['pendientes'] > 0:
+        trabajos.terminar(clave)
+    else:
+        hechas = avance['agregadas']
+        trabajos.avance(clave, round(100 * hechas / max(1, hechas + avance['aptas'])),
+                        f'{hechas:,} cargados, faltan {avance["aptas"]:,}'.replace(',', '.'))
+    return JsonResponse(avance)
 
 
 @require_POST
@@ -256,7 +292,19 @@ def verificar_lote(request):
         desde = int(request.POST.get('desde', 0))
     except ValueError:
         desde = 0
-    return JsonResponse(servicios.verificar_lote_de_fuentes(verificar_varias, desde, usuario=request.user))
+    clave = 'verificacion'
+    otro = trabajos.turno(clave, 'Verificando todas las fuentes', request.user, reverse('canales:inicio'))
+    if otro:
+        # La pantalla espera y vuelve a pedir (la misma tanda: "siguiente" no avanza)
+        return JsonResponse({**servicios.avance_de_la_verificacion(desde), 'ocupada': True,
+                             'esperando': otro.titulo})
+    avance = servicios.verificar_lote_de_fuentes(verificar_varias, desde, usuario=request.user)
+    if avance['terminado']:
+        trabajos.terminar(clave)
+    else:
+        trabajos.avance(clave, avance['porcentaje'],
+                        f'{avance["verificadas"]:,} de {avance["total"]:,} fuentes'.replace(',', '.'))
+    return JsonResponse(avance)
 
 
 # ── Catálogo ─────────────────────────────────────────────────────────

@@ -1,0 +1,12 @@
+{% load static %}
+{% comment %}
+    Los trabajos pesados que están corriendo (probar o cargar una lista,
+    verificar todas las fuentes...), arriba de todas las pantallas del panel,
+    para cualquiera que entre, en cualquier navegador: qué es, quién lo
+    empezó, cuánto va. Se actualiza solo (static/js/trabajos.js). Mientras
+    hay uno, los demás trabajos pesados esperan su turno (core/trabajos.py).
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'css/trabajos.css' %}">
+<section class="trabajos-en-curso" data-trabajos="{% url 'core:trabajos' %}" aria-live="polite" aria-label="Trabajos en curso" hidden></section>
+{{ trabajos_en_curso|json_script:"trabajos-iniciales" }}
+<script src="{% static 'js/trabajos.js' %}" defer></script>

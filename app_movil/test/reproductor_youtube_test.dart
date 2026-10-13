@@ -41,9 +41,9 @@ void main() {
     expect(celular, contains('var LIMITE = 0;'));
   });
 
-  test('en la TV el video se pide como mucho en Full HD', () {
+  test('en la TV el video se pide como mucho en 720p (el WebView de muchas TVs no da abasto con más)', () {
     final tv = paginaDelReproductor('NvQqHzqClf0', controles: false, limite: ControlYoutube.limiteTv);
-    expect(tv, contains('var LIMITE = 1920;'));
+    expect(tv, contains('var LIMITE = 1280;'));
     // El reproductor se arma más chico y se agranda: YouTube elige la calidad por su tamaño
     expect(tv, contains("marco.style.transform = 'scale(' + escala + ')'"));
   });

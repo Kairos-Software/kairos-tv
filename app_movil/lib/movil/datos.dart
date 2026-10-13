@@ -343,6 +343,7 @@ class Catalogo extends ChangeNotifier {
         pedir('serie'),
         NoAnda.cargar(),
         pedirSeccionesNuevas(),
+        FuentePreferida.cargar(),
       ]);
       final vivo = resultados[0] as List<CategoriaCanales>;
       for (final categoria in vivo) {
@@ -479,6 +480,68 @@ class NoAnda {
   @visibleForTesting
   static void olvidarTodo() {
     _hasta.clear();
+    _cargado = true;
+  }
+}
+
+/// La fuente que mejor anduvo en ESTE aparato para cada canal (la que se vio
+/// un buen rato sin cortarse, o la que eligió la persona y anduvo bien). La
+/// próxima vez el canal arranca con esa, sin pasar por las que se trababan
+/// (ej: en HBO la 1 se trababa y la 3 andaba perfecta: arranca en la 3).
+/// Si la preferida empieza a cortarse, se olvida. Se guarda en el aparato.
+class FuentePreferida {
+  static const _clave = 'kairos.fuente_preferida';
+  static const _maximo = 500;
+
+  /// id del canal -> id de su fuente preferida.
+  static final Map<int, int> _de = {};
+  static bool _cargado = false;
+
+  static int? de(int canal) => _de[canal];
+
+  static Future<void> cargar() async {
+    if (_cargado) return;
+    _cargado = true;
+    try {
+      final preferencias = await SharedPreferences.getInstance();
+      final guardados = jsonDecode(preferencias.getString(_clave) ?? '{}') as Map<String, dynamic>;
+      for (final MapEntry(:key, :value) in guardados.entries) {
+        final id = int.tryParse(key);
+        if (id != null && value is int) _de[id] = value;
+      }
+    } catch (_) {
+      // Si no se puede leer, se arranca sin nada
+    }
+  }
+
+  static void anotar(int canal, int fuente) {
+    if (_de[canal] == fuente) return;
+    _de
+      ..remove(canal) // al final: la más reciente
+      ..[canal] = fuente;
+    while (_de.length > _maximo) {
+      _de.remove(_de.keys.first);
+    }
+    unawaited(_guardar());
+  }
+
+  static void olvidar(int canal, int fuente) {
+    if (_de[canal] != fuente) return;
+    _de.remove(canal);
+    unawaited(_guardar());
+  }
+
+  static Future<void> _guardar() async {
+    try {
+      final preferencias = await SharedPreferences.getInstance();
+      await preferencias.setString(_clave, jsonEncode({for (final e in _de.entries) '${e.key}': e.value}));
+    } catch (_) {}
+  }
+
+  /// Solo para las pruebas.
+  @visibleForTesting
+  static void olvidarTodo() {
+    _de.clear();
     _cargado = true;
   }
 }

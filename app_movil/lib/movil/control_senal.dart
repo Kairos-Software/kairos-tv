@@ -12,6 +12,18 @@
 ///     reconecta a la MISMA (suele ser un microcorte o un link con vencimiento
 ///     que se renueva al volver a pedirlo); una película sigue donde iba. En
 ///     vivo, si se caen todas, se vuelve a recorrerlas antes de rendirse.
+///   - Fuente que se corta seguido (en vivo): con [_cortesParaCambiar] cortes
+///     en [_ventanaDeCortes] (se frena a cargar, o se cae y se reconecta) pasa
+///     sola a otra fuente del canal. Si ninguna anda mejor, vuelve a la primera
+///     y se queda. Si la persona eligió la fuente a mano, se respeta.
+///   - La fuente que anduvo bien un rato queda como la preferida de este
+///     aparato para ese canal ([FuentePreferida]): la próxima vez arranca con esa.
+///   - Al dejar una fuente, le cuenta al servidor cuánto se vio y cuántas veces
+///     se cortó: el servidor pone primero, para todos, las que no se cortan.
+///   - Si la app se va al fondo (Inicio, se apaga la pantalla o la TV queda en
+///     espera), el video se cierra del todo y suelta el decodificador de video
+///     del aparato; al volver, se reconecta solo (una película, desde donde iba).
+///     Hay TVs cuyo decodificador se traba si queda tomado (pantalla verde).
 ///   - Lo más visto: cuenta el tiempo que el video se ve de verdad (no en
 ///     pausa ni cargando) y se lo pasa al [Medidor], que se lo manda al servidor.
 ///   - [enSuperficie]: el video se dibuja en una superficie de Android
@@ -29,6 +41,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:video_player/video_player.dart';
 
 import '../api/cliente.dart';
@@ -58,6 +71,17 @@ class ControlSenal extends ChangeNotifier {
   /// En vivo: cuántas veces se vuelve a recorrer todas las fuentes si se caen.
   static const _maximoVueltas = 2;
   static const _esperaEntreVueltas = Duration(seconds: 3);
+
+  /// En vivo: tantos cortes en tanto tiempo hacen pasar sola a otra fuente.
+  static const _cortesParaCambiar = 3;
+  static const _ventanaDeCortes = Duration(minutes: 3);
+
+  /// Lo que hay que ver de una fuente (con como mucho un corte cada 5
+  /// minutos) para que quede como la preferida del aparato.
+  static const _vistoParaPreferir = Duration(minutes: 2);
+
+  /// Menos que esto no se le cuenta al servidor: muy poco para juzgar.
+  static const _vistoParaAvisar = Duration(minutes: 1);
 
   /// Dibujar el video en una superficie de Android (ver arriba). Lo decide
   /// Biblioteca.videoEnSuperficie (Mi cuenta en la TV).
@@ -114,6 +138,46 @@ class ControlSenal extends ChangeNotifier {
   int _reconexiones = 0;
   int _vueltas = 0;
 
+  /// Por cuál fuente se empezó (la preferida del aparato, o la primera). Si
+  /// fallan, se prueban las que siguen y, dando la vuelta, las de antes.
+  int _inicio = 0;
+
+  /// La persona eligió la fuente: no se la cambia por cortes.
+  bool _elegidaAMano = false;
+
+  /// Las fuentes que se dejaron por cortarse seguido (esta vez).
+  final _descartadas = <int>{};
+
+  /// Ya se probaron todas por cortes: se queda con la que está.
+  bool _sinMasCambios = false;
+
+  /// La fuente que se está viendo (para contar sus cortes y lo visto).
+  FuenteCanal? _enUso;
+  int? _canalEnUso;
+  int _cortes = 0;
+  Duration _vistoEnFuente = Duration.zero;
+  final _cortesRecientes = <DateTime>[];
+  bool _seEstabaViendo = false;
+
+  /// La forma de la imagen de la fuente actual (ancho / alto: 1,78 = 16:9,
+  /// 1,33 = 4:3, "cuadrada", con franjas negras a los costados). Se le cuenta al
+  /// servidor, que pone primero las que llenan la pantalla.
+  double? _proporcion;
+
+  /// Después de adelantar o atrasar, el video carga: eso no es un corte.
+  DateTime? _ignorarCortesHasta;
+
+  /// La app en el fondo: el video se cerró y se reconecta al volver.
+  AppLifecycleListener? _ciclo;
+  ({int fuente, Duration? desde})? _suspendido;
+
+  /// Se llamó a [detener]: no hay nada que retomar al volver a la app.
+  bool _detenido = false;
+
+  /// Cuántas veces se cortó la fuente actual (para las pruebas).
+  @visibleForTesting
+  int get cortes => _cortes;
+
   /// Lo más visto: desde cuándo se está viendo (null = no se ve: pausa,
   /// cargando...), cuánto se vio desde que se abrió y si ya contó como vista.
   DateTime? _seVeDesde;
@@ -138,18 +202,23 @@ class ControlSenal extends ChangeNotifier {
   /// Empieza a reproducir [nuevo] (corta lo que estaba). [desde]: para seguir donde se dejó.
   Future<void> abrir(Canal nuevo, {Duration? desde}) {
     _medir(seVe: false);
+    _cerrarFuente();
     canal = nuevo;
     _vistoDeEstaVez = Duration.zero;
     _vistaContada = false;
     _desde = desde;
+    _suspendido = null;
     _empezarDeCero();
-    return _probar(0);
+    _elegidaAMano = false;
+    final preferida = FuentePreferida.de(nuevo.id);
+    _inicio = preferida == null ? 0 : fuentes.indexWhere((f) => f.id == preferida).clamp(0, fuentes.length);
+    return _probar(_inicio);
   }
 
-  /// Vuelve a intentar desde la primera fuente.
+  /// Vuelve a intentar desde la fuente con que se empezó.
   Future<void> reintentar() {
     _empezarDeCero();
-    return _probar(0);
+    return _probar(_inicio);
   }
 
   void _empezarDeCero() {
@@ -157,6 +226,19 @@ class ControlSenal extends ChangeNotifier {
     _seVio = false;
     _reconexiones = 0;
     _vueltas = 0;
+    _descartadas.clear();
+    _sinMasCambios = false;
+    _cortesRecientes.clear();
+  }
+
+  /// La fuente que se prueba después de [indice] si esa no anda: la que
+  /// sigue y, dando la vuelta, las anteriores a [_inicio]. `fuentes.length`
+  /// = ya se probaron todas.
+  int _siguiente(int indice) {
+    final cantidad = fuentes.length;
+    if (cantidad == 0) return 0;
+    final otra = (indice + 1) % cantidad;
+    return otra == _inicio % cantidad ? cantidad : otra;
   }
 
   void _cancelarVigias() {
@@ -166,14 +248,22 @@ class ControlSenal extends ChangeNotifier {
     _vigiaEstable?.cancel();
   }
 
-  /// Pasa a una fuente en particular (el usuario la eligió).
-  Future<void> usarFuente(int indice) => _probar(indice);
+  /// Pasa a una fuente en particular (el usuario la eligió): esa no se cambia sola por cortes.
+  Future<void> usarFuente(int indice) {
+    _elegidaAMano = true;
+    _inicio = indice;
+    return _probar(indice);
+  }
 
   Future<void> _probar(int indice) async {
     final intento = ++_intento;
+    _detenido = false;
     _cancelarVigias();
+    _medir(seVe: false);
+    _cerrarFuente();
     final anterior = video;
     video = null;
+    if (indice != fuente) _cortesRecientes.clear(); // reconectar a la misma no borra sus cortes
     fuente = indice;
     error = null;
     _andaba = false;
@@ -183,11 +273,21 @@ class ControlSenal extends ChangeNotifier {
     await anterior?.dispose();
     if (intento != _intento || _cerrado) return;
 
+    // Se dejó una fuente por cortarse seguido y las otras no anduvieron: se
+    // vuelve a esa (se cortaba, pero andaba) y ya no se cambia más
+    if (indice >= fuentes.length && _descartadas.isNotEmpty) {
+      final volver = _descartadas.first;
+      _descartadas.remove(volver);
+      _sinMasCambios = true;
+      _probar(volver);
+      return;
+    }
+
     // En vivo, si ya se había visto y se cayeron todas: otra vuelta en un ratito
     if (indice >= fuentes.length && _enVivo && _seVio && _vueltas < _maximoVueltas && fuentes.isNotEmpty) {
       _vueltas++;
       _vigiaEstable = Timer(_esperaEntreVueltas, () {
-        if (intento == _intento && !_cerrado) _probar(0);
+        if (intento == _intento && !_cerrado) _probar(_inicio);
       });
       return;
     }
@@ -213,7 +313,7 @@ class ControlSenal extends ChangeNotifier {
     } catch (e) {
       if (intento == _intento && !_cerrado) {
         _avisarFalla(elegida, Falla.de(e));
-        _probar(indice + 1);
+        _probar(_siguiente(indice));
       }
       return;
     }
@@ -231,7 +331,7 @@ class ControlSenal extends ChangeNotifier {
       await nuevo.dispose();
       if (intento == _intento && !_cerrado) {
         _avisarFalla(elegida, Falla.de(e));
-        _probar(indice + 1);
+        _probar(_siguiente(indice));
       }
       return;
     }
@@ -245,9 +345,15 @@ class ControlSenal extends ChangeNotifier {
     }
     _desde = null;
     await nuevo.setVolume(_volumen);
+    _seEstabaViendo = false;
     nuevo.addListener(_vigilar);
     await nuevo.play();
     video = nuevo;
+    _enUso = elegida;
+    _canalEnUso = canal!.id;
+    _vigilar(); // lo que avisó al arrancar llegó antes de ser el video actual
+    if (video != nuevo) return; // (ya se cortó y se pasó a otra)
+    _vigilarLaApp();
     if (_enVivo) alVerCanal?.call(canal!);
     _avisar();
 
@@ -288,7 +394,9 @@ class ControlSenal extends ChangeNotifier {
   void _vigilar() {
     final actual = video;
     if (actual == null || _cerrado) return;
-    _medir(seVe: actual.value.isPlaying && !actual.value.isBuffering && !actual.value.hasError);
+    final seVe = actual.value.isPlaying && !actual.value.isBuffering && !actual.value.hasError;
+    _medir(seVe: seVe);
+    if (!actual.value.size.isEmpty) _proporcion = actual.value.aspectRatio;
     if (actual.value.hasError) {
       _fallo(actual, Falla.de(actual.value.errorDescription ?? ''));
       return;
@@ -297,6 +405,13 @@ class ControlSenal extends ChangeNotifier {
     if (_enVivo && actual.value.isCompleted) {
       _fallo(actual, Falla.cortada);
       return;
+    }
+    // Se estaba viendo y se frenó a cargar: un corte
+    if (actual.value.isBuffering && _seEstabaViendo) {
+      _seEstabaViendo = false;
+      if (_anotarCorte(actual)) return; // se pasó a otra fuente
+    } else if (seVe) {
+      _seEstabaViendo = true;
     }
     if (actual.value.isBuffering) {
       _vigiaTrabado ??= Timer(_esperaTrabado, () {
@@ -321,6 +436,7 @@ class ControlSenal extends ChangeNotifier {
     if (desde == null || actual == null) return;
     final rato = ahora.difference(desde);
     if (rato > const Duration(seconds: 5)) return;
+    _vistoEnFuente += rato;
     Medidor.sumar(api, actual.id, rato);
     _vistoDeEstaVez += rato;
     if (!_vistaContada && _vistoDeEstaVez >= Medidor.paraUnaVista) {
@@ -335,13 +451,104 @@ class ControlSenal extends ChangeNotifier {
   void _fallo(VideoPlayerController actual, Falla falla, {bool reconectar = true}) {
     actual.removeListener(_vigilar);
     if (reconectar && _andaba && _reconexiones < _maximoReconexiones && falla.motivo != Falla.formato.motivo) {
+      // Se cortó estando bien: es un corte más. Si se corta seguido, mejor otra fuente
+      if (_anotarCorte(actual)) return;
       _reconexiones++;
       if (!_enVivo) _desde = actual.value.position;
       _probar(fuente);
       return;
     }
     _avisarFalla(fuentes[fuente], falla);
-    _probar(fuente + 1);
+    _probar(_siguiente(fuente));
+  }
+
+  /// Anota un corte de la fuente actual. En vivo, si ya van
+  /// [_cortesParaCambiar] en [_ventanaDeCortes] y hay otra fuente sin probar
+  /// por cortes, pasa a esa y devuelve true.
+  bool _anotarCorte(VideoPlayerController actual) {
+    final ahora = DateTime.now();
+    final ignorar = _ignorarCortesHasta;
+    if (ignorar != null && ahora.isBefore(ignorar)) return false;
+    _cortes++;
+    _cortesRecientes
+      ..add(ahora)
+      ..removeWhere((corte) => ahora.difference(corte) > _ventanaDeCortes);
+    if (!_enVivo || _elegidaAMano || _sinMasCambios || _cortesRecientes.length < _cortesParaCambiar) return false;
+    final otra = _otraFuente();
+    if (otra == null) {
+      _sinMasCambios = true;
+      return false;
+    }
+    actual.removeListener(_vigilar);
+    _descartadas.add(fuente);
+    _probar(otra);
+    return true;
+  }
+
+  /// La próxima fuente que no se dejó por cortes (dando la vuelta), o null.
+  int? _otraFuente() {
+    final cantidad = fuentes.length;
+    for (var paso = 1; paso < cantidad; paso++) {
+      final indice = (fuente + paso) % cantidad;
+      if (!_descartadas.contains(indice)) return indice;
+    }
+    return null;
+  }
+
+  /// Se deja de ver la fuente actual: se le cuenta al servidor cuánto se vio y
+  /// cuántas veces se cortó, y si anduvo bien queda como la preferida del
+  /// aparato para ese canal (si se cortaba mucho, deja de serlo).
+  void _cerrarFuente() {
+    final elegida = _enUso;
+    final canalId = _canalEnUso;
+    final visto = _vistoEnFuente;
+    final cortes = _cortes;
+    final proporcion = _proporcion;
+    _enUso = null;
+    _canalEnUso = null;
+    _vistoEnFuente = Duration.zero;
+    _cortes = 0;
+    _seEstabaViendo = false;
+    _proporcion = null;
+    if (elegida == null || canalId == null) return;
+    // La forma de la imagen se cuenta aunque se haya visto poco (con unos segundos alcanza)
+    if (visto >= _vistoParaAvisar || (proporcion != null && visto >= const Duration(seconds: 10))) {
+      api
+          .post('canales/fuentes/${elegida.id}/estabilidad/', {
+            'segundos': visto.inSeconds,
+            'cortes': cortes,
+            if (proporcion != null) 'proporcion': double.parse(proporcion.toStringAsFixed(2)),
+          })
+          .catchError((Object _) => null);
+    }
+    if (visto >= _vistoParaPreferir && cortes * 300 <= visto.inSeconds) {
+      FuentePreferida.anotar(canalId, elegida.id);
+    } else if (cortes >= _cortesParaCambiar) {
+      FuentePreferida.olvidar(canalId, elegida.id);
+    }
+  }
+
+  /// Desde que arranca el primer video, se fija si la app se va al fondo.
+  void _vigilarLaApp() {
+    _ciclo ??= AppLifecycleListener(onHide: _alIrseAlFondo, onShow: _alVolver);
+  }
+
+  /// La app dejó de verse (Inicio, pantalla apagada, TV en espera): se cierra
+  /// el video del todo, así suelta la conexión y el decodificador del aparato.
+  void _alIrseAlFondo() {
+    // Nada que retomar: se cerró, se detuvo a propósito o se ve el error
+    if (_cerrado || _suspendido != null || _detenido || canal == null || error != null) return;
+    _suspendido = (fuente: fuente, desde: _enVivo ? null : (video?.value.position ?? _desde));
+    unawaited(detener());
+  }
+
+  /// Volvió: se reconecta a lo que se estaba viendo (una película, desde donde iba).
+  void _alVolver() {
+    final volver = _suspendido;
+    _suspendido = null;
+    if (volver == null || _cerrado || canal == null) return;
+    _desde = volver.desde;
+    _probar(volver.fuente < fuentes.length ? volver.fuente : _inicio);
   }
 
   /// Le avisa al servidor que esta fuente no anduvo y por qué. El servidor la
@@ -423,13 +630,17 @@ class ControlSenal extends ChangeNotifier {
     final actual = video;
     if (actual == null) return;
     final destino = actual.value.position + cuanto;
+    _ignorarCortesHasta = DateTime.now().add(const Duration(seconds: 5)); // va a cargar: no es un corte
     await actual.seekTo(destino < Duration.zero ? Duration.zero : destino);
   }
 
   /// Corta la reproducción (libera la conexión: hay listas IPTV que permiten una sola).
   Future<void> detener() async {
     ++_intento;
+    _detenido = true;
     _cancelarVigias();
+    _medir(seVe: false);
+    _cerrarFuente();
     final actual = video;
     video = null;
     _avisar();
@@ -443,10 +654,12 @@ class ControlSenal extends ChangeNotifier {
   @override
   void dispose() {
     _medir(seVe: false);
+    _cerrarFuente();
     Medidor.enviar(api); // al salir del reproductor, se avisa lo que se miró
     _cerrado = true;
     ++_intento;
     _cancelarVigias();
+    _ciclo?.dispose();
     video?.dispose();
     super.dispose();
   }

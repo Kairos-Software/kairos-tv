@@ -2,6 +2,7 @@
 {% load humanize %}
 
 {% block titulo %}Revendedores{% endblock %}
+{% block clase_body %}pagina-listado{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -22,7 +23,7 @@
         <label for="q" class="visually-hidden">Buscar</label>
         <input type="search" id="q" name="q" value="{{ texto }}" class="form-control" placeholder="Buscar por nombre o usuario">
     </div>
-    <button type="submit" class="btn btn-primary">Buscar</button>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-search" aria-hidden="true"></i> Buscar</button>
     {% if texto %}<a href="{% url 'reventa:revendedores' %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 

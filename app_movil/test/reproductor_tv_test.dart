@@ -162,7 +162,7 @@ Future<void> _atras(WidgetTester tester) async {
 void main() {
   testWidgets('en vivo: el cartel solo informa y Atrás sale directo', (tester) async {
     await _abrir(tester, ReproductorVivoTv(canal: _canales[0], lista: _canales));
-    expect(find.textContaining('OK: guía'), findsOneWidget); // el cartel con la ayuda
+    expect(find.text('guía'), findsOneWidget); // el cartel con la ayuda ([OK] guía)
     expect(_enfocado(), 'reproductor'); // no le robó el foco a nadie
     await _atras(tester);
     expect(find.text('abrir'), findsOneWidget); // salió con un solo "Atrás"
@@ -193,8 +193,10 @@ void main() {
     await _pasar(tester);
     expect(_enfocado(), 'reproductor'); // se cerraron solas
 
-    await _tecla(tester, LogicalKeyboardKey.arrowUp); // zapping
+    await _tecla(tester, LogicalKeyboardKey.arrowDown); // zapping: Abajo, el de abajo en la guía
     expect(find.text('Telemax'), findsOneWidget);
+    await _tecla(tester, LogicalKeyboardKey.arrowUp); // Arriba, vuelve al de arriba
+    expect(find.text('Canal 26'), findsOneWidget);
   });
 
   testWidgets('en vivo: las opciones abren los ajustes (calidad, idioma, imagen) y cambian de canal', (tester) async {

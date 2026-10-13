@@ -36,6 +36,7 @@
             <a href="{% url 'core:mantenimiento' %}">Cambiar</a>
         </div>
         {% endif %}
+        {% include "parciales/_trabajos.html" %}
         <main class="pagina" id="contenido-principal">
             {% include "parciales/_mensajes.html" %}
             {% block encabezado %}{% endblock %}

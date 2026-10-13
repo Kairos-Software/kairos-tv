@@ -42,3 +42,30 @@ class EscalaTv extends StatelessWidget {
     );
   }
 }
+
+/// Para lo que dibuja ANDROID directamente (el video "en superficie", el
+/// navegador de YouTube): Android no se entera del achique de [EscalaTv] y
+/// lo armaba al doble. En un video 16:9 no se notaba (ocupa toda la
+/// pantalla), pero en uno "cuadrado" (4:3) el video quedaba corrido y más
+/// grande, y tapaba la parte derecha de la barra de controles. Esto lo arma
+/// del tamaño REAL de la pantalla y lo agranda después. Fuera de la TV (sin
+/// achique) no hace nada.
+class TamanioReal extends StatelessWidget {
+  const TamanioReal({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final vista = View.of(context);
+    final anchoReal = vista.physicalSize.width / vista.devicePixelRatio; // una TV Full HD dice 960
+    final escala = anchoReal <= 0 ? 1.0 : MediaQuery.sizeOf(context).width / anchoReal; // 1920 / 960 = 2
+    if (escala <= 1.01) return child;
+    return LayoutBuilder(
+      builder: (context, limites) => FittedBox(
+        fit: BoxFit.fill,
+        child: SizedBox(width: limites.maxWidth / escala, height: limites.maxHeight / escala, child: child),
+      ),
+    );
+  }
+}

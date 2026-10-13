@@ -1,68 +1,99 @@
 {% extends "base.html" %}
 {% comment %}
-    Traer de YouTube: se pega el link de un canal oficial (o se elige uno de
-    los sugeridos) y sus videos largos entran como películas (o capítulos, si
-    el título dice "T1 E2"). Con "Es una serie", TODOS son capítulos de una
-    serie (de la temporada elegida), en el orden de sus capítulos. Sin serie,
-    pueden ir a una sección nueva (Música...). Con mínimo y máximo de minutos
-    se elige qué largo de video entra. Después se prueban y se
-    cargan en la pantalla de la importación, igual que una lista. Ver
-    canales/youtube.py y servicios.crear_importacion_de_youtube.
+    Traer de YouTube arma una importación revisable con los videos largos de
+    un canal oficial. No descarga videos ni los publica sin revisión.
 {% endcomment %}
 
 {% block titulo %}Traer de YouTube · Contenido{% endblock %}
+{% block clase_body %}pagina-herramienta-contenido pagina-youtube{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
     <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
     <h1 class="pagina-titulo">Traer de YouTube</h1>
-    <p class="pagina-bajada">Películas, series y dibujos de canales <strong>oficiales</strong> que los suben gratis. En la app se ven con el reproductor de YouTube (con su publicidad), sin cuenta. Hace falta la app 1.2.8 o más nueva: las anteriores no los muestran.</p>
+    <p class="pagina-bajada">Elegí un canal oficial, decidí dónde guardar sus videos y revisalos antes de cargarlos.</p>
 </div>
 {% endblock %}
 
 {% block contenido %}
-<section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">Canales revisados</h2>
-    <p class="texto-suave small">Verificados por YouTube, dejan ver sus videos en otras apps y están en español. Tocá uno y se completa el formulario (los de dibujos, como serie).</p>
-    <div class="d-flex flex-wrap gap-2">
-        {% for nombre, url, categoria, minutos, serie in sugeridos %}
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-url="{{ url }}" data-categoria="{{ categoria }}" data-minutos="{{ minutos }}" data-serie="{{ serie }}">
-            {% if serie %}<i class="bi bi-collection-play" aria-hidden="true"></i>{% else %}<i class="bi bi-film" aria-hidden="true"></i>{% endif %}
-            {{ nombre }}
-        </button>
-        {% endfor %}
+<section class="tarjeta herramienta-contenido-principal">
+    <div class="herramienta-titulo">
+        <span class="herramienta-titulo-icono"><i class="bi bi-youtube" aria-hidden="true"></i></span>
+        <div>
+            <h2 class="tarjeta-titulo mb-1">Preparar la importación</h2>
+            <p class="texto-suave small mb-0">Solo lee el catálogo del canal. Los videos se reproducen desde YouTube y conservan su publicidad.</p>
+        </div>
+        <span class="chip"><i class="bi bi-shield-check me-1" aria-hidden="true"></i> Se revisa antes de cargar</span>
     </div>
-</section>
 
-<section class="tarjeta">
-    <h2 class="tarjeta-titulo">El canal</h2>
-    <form method="post" class="row g-3 align-items-start" novalidate id="form-youtube">
+    <form method="post" class="youtube-form" novalidate id="form-youtube">
         {% csrf_token %}
-        {% include "parciales/_campo.html" with campo=form.url ancho="col-12" %}
-        {% include "parciales/_campo.html" with campo=form.es_serie ancho="col-12" %}
-        <div class="col-12" data-solo-serie {% if not form.es_serie.value %}hidden{% endif %}>
-            <div class="row g-3">
-                {% include "parciales/_campo.html" with campo=form.nombre_serie ancho="col-md-6" %}
-                {% include "parciales/_campo.html" with campo=form.temporada ancho="col-md-6" %}
+        {% if form.non_field_errors %}<div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div>{% endif %}
+
+        <fieldset class="herramienta-paso">
+            <legend><span>1</span> Canal de YouTube</legend>
+            <div class="row g-3 align-items-start">
+                {% include "parciales/_campo.html" with campo=form.url ancho="col-12" %}
             </div>
-        </div>
-        <div class="col-12" data-sin-serie {% if form.es_serie.value %}hidden{% endif %}>
-            <div class="row g-3">
-                {% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-4" %}
+
+            <div class="youtube-sugerencias" aria-labelledby="youtube-sugerencias-titulo">
+                <div class="youtube-sugerencias-encabezado">
+                    <strong id="youtube-sugerencias-titulo">O elegí uno ya revisado</strong>
+                    <small>Deslizá para ver más</small>
+                </div>
+                <div class="youtube-sugerencias-lista">
+                    {% for nombre, url, categoria, minutos, serie in sugeridos %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-url="{{ url }}" data-categoria="{{ categoria }}" data-minutos="{{ minutos }}" data-serie="{{ serie }}">
+                        {% if serie %}<i class="bi bi-collection-play" aria-hidden="true"></i>{% else %}<i class="bi bi-film" aria-hidden="true"></i>{% endif %}
+                        {{ nombre }}
+                    </button>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
-        {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-4" %}
-        <div class="col-md-4"></div>
-        {% include "parciales/_campo.html" with campo=form.minimo_minutos ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=form.maximo_minutos ancho="col-md-4" %}
-        {% include "parciales/_campo.html" with campo=form.solo_espanol ancho="col-12" %}
-        <div class="col-12">
-            <p class="texto-suave small mb-2" data-resumen></p>
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-youtube" aria-hidden="true"></i> Traer los videos
-            </button>
-            <span class="texto-suave small ms-2">Lee la lista del canal (no baja ningún video). Con miles de videos tarda hasta un minuto. Después se prueba cada uno y elegís cargarlos.</span>
+        </fieldset>
+
+        <fieldset class="herramienta-paso">
+            <legend><span>2</span> Cómo va a quedar</legend>
+            <div class="row g-3 align-items-start">
+                {% include "parciales/_campo.html" with campo=form.es_serie ancho="col-12" %}
+                <div class="col-12" data-solo-serie {% if not form.es_serie.value %}hidden{% endif %}>
+                    <div class="row g-3">
+                        {% include "parciales/_campo.html" with campo=form.nombre_serie ancho="col-md-8" %}
+                        {% include "parciales/_campo.html" with campo=form.temporada ancho="col-md-4" %}
+                    </div>
+                </div>
+                <div class="col-12" data-sin-serie {% if form.es_serie.value %}hidden{% endif %}>
+                    <div class="row g-3">
+                        {% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-6" %}
+                    </div>
+                </div>
+                {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-6" %}
+                {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-6" %}
+            </div>
+        </fieldset>
+
+        <details class="importar-opciones youtube-filtros" {% if form.minimo_minutos.errors or form.maximo_minutos.errors or form.solo_espanol.errors %}open{% endif %}>
+            <summary>
+                <span><i class="bi bi-sliders" aria-hidden="true"></i> Qué videos incluir</span>
+                <small><span data-filtros-resumen></span> · tocá para cambiar</small>
+            </summary>
+            <div class="importar-opciones-cuerpo">
+                <div class="row g-3 align-items-start">
+                    {% include "parciales/_campo.html" with campo=form.minimo_minutos ancho="col-md-4" %}
+                    {% include "parciales/_campo.html" with campo=form.maximo_minutos ancho="col-md-4" %}
+                    {% include "parciales/_campo.html" with campo=form.solo_espanol ancho="col-md-4" %}
+                </div>
+            </div>
+        </details>
+
+        <div class="herramienta-acciones">
+            <p class="herramienta-resumen mb-0" data-resumen aria-live="polite"></p>
+            <div class="herramienta-acciones-boton">
+                <span class="texto-suave small">Puede tardar hasta un minuto en canales grandes.</span>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-youtube" aria-hidden="true"></i> Buscar videos
+                </button>
+            </div>
         </div>
     </form>
 </section>
@@ -78,17 +109,17 @@
     var seccion = form.querySelector('[name=seccion_destino]');
     var minimo = form.querySelector('[name=minimo_minutos]');
     var maximo = form.querySelector('[name=maximo_minutos]');
+    var soloEspanol = form.querySelector('[name=solo_espanol]');
     var lista = form.querySelector('[name=categoria_destino]');
     var nueva = form.querySelector('[name=categoria_nueva]');
     var resumen = form.querySelector('[data-resumen]');
+    var filtrosResumen = form.querySelector('[data-filtros-resumen]');
 
-    // La sección a la que va todo: Series (si es una serie), Películas o una nueva (Música...)
     function nombreDeLaSeccion() {
         if (esSerie.checked) return 'Series';
         return seccion.value ? seccion.selectedOptions[0].text : 'Películas';
     }
 
-    // Solo se pueden elegir categorías de esa sección
     function acomodar() {
         var serie = esSerie.checked;
         var destino = nombreDeLaSeccion();
@@ -106,50 +137,60 @@
         explicar();
     }
 
-    // Una línea que dice, con palabras, qué va a pasar
     function explicar() {
-        var categoria = nueva.value.trim() || (lista.value ? lista.value : '');
-        var largo = 'de ' + (minimo.value || '?') + ' min' + (maximo.value ? ' a ' + maximo.value + ' min' : ' o más');
+        var categoria = nueva.value.trim() || (lista.value ? lista.selectedOptions[0].text : '');
+        var desde = minimo.value || '?';
+        var largo = 'desde ' + desde + ' min' + (maximo.value ? ' hasta ' + maximo.value + ' min' : ', sin máximo');
+        filtrosResumen.textContent = largo + (soloEspanol.checked ? ' · solo en español' : '');
         if (esSerie.checked) {
-            var nombre = nombreSerie.value.trim() || '(escribí el nombre)';
-            resumen.textContent = 'Va a quedar: Series → ' + (categoria || '(elegí la categoría)') + ' → ' + nombre +
-                ' → temporada ' + (temporada.value || 1) + ', con un capítulo por video (' + largo + ').';
+            var nombre = nombreSerie.value.trim() || '(falta el nombre)';
+            resumen.textContent = 'Series → ' + (categoria || '(falta la categoría)') + ' → ' + nombre +
+                ' → temporada ' + (temporada.value || 1) + '.';
         } else if (seccion.value) {
-            resumen.textContent = 'Cada video (' + largo + ') va a quedar suelto en ' + nombreDeLaSeccion() + ' → ' +
+            resumen.textContent = nombreDeLaSeccion() + ' → ' +
                 (categoria || 'una categoría con el nombre del canal') + '.';
         } else {
-            resumen.textContent = 'Cada video (' + largo + ') va a quedar como una película en Películas → ' +
-                (categoria || 'la categoría según el género de su título') + '.';
+            resumen.textContent = 'Películas → ' +
+                (categoria || 'categoría automática según cada título') + '.';
         }
     }
 
     document.querySelectorAll('[data-url]').forEach(function (boton) {
         boton.addEventListener('click', function () {
             form.querySelector('[name=url]').value = boton.dataset.url;
+            document.querySelectorAll('[data-url]').forEach(function (otro) {
+                otro.classList.toggle('active', otro === boton);
+                otro.setAttribute('aria-pressed', otro === boton ? 'true' : 'false');
+            });
             esSerie.checked = !!boton.dataset.serie;
             nombreSerie.value = boton.dataset.serie;
             temporada.value = 1;
             seccion.value = '';
             maximo.value = '';
             acomodar();
-            // La categoría sugerida: si ya existe (en la sección que corresponde) se elige; si no, se escribe como nueva
-            var existe = Array.prototype.find.call(lista.options, function (o) {
-                return !o.parentNode.disabled && o.value &&
-                    o.text.toLowerCase() === boton.dataset.categoria.toLowerCase();
+            var existe = Array.prototype.find.call(lista.options, function (opcion) {
+                return !opcion.parentNode.disabled && opcion.value &&
+                    opcion.text.toLowerCase() === boton.dataset.categoria.toLowerCase();
             });
             lista.value = existe ? existe.value : '';
             nueva.value = boton.dataset.categoria && !existe ? boton.dataset.categoria : '';
-            form.querySelector('[name=minimo_minutos]').value = boton.dataset.minutos;
+            minimo.value = boton.dataset.minutos;
             explicar();
-            form.querySelector('[name=url]').focus();
+            form.querySelector('[name=url]').focus({preventScroll: true});
         });
     });
 
-    // Elegir de la lista borra lo escrito, y escribir una nueva borra lo elegido: vale una sola
+    form.querySelector('[name=url]').addEventListener('input', function () {
+        document.querySelectorAll('[data-url].active').forEach(function (boton) {
+            boton.classList.remove('active');
+            boton.setAttribute('aria-pressed', 'false');
+        });
+    });
     lista.addEventListener('change', function () { if (lista.value) nueva.value = ''; explicar(); });
     nueva.addEventListener('input', function () { if (nueva.value.trim()) lista.value = ''; explicar(); });
     nombreSerie.addEventListener('input', explicar);
     [temporada, minimo, maximo].forEach(function (campo) { campo.addEventListener('input', explicar); });
+    soloEspanol.addEventListener('change', explicar);
     esSerie.addEventListener('change', acomodar);
     seccion.addEventListener('change', acomodar);
     acomodar();

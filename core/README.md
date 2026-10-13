@@ -16,14 +16,15 @@ Páginas generales del sistema que no pertenecen a ningún módulo en particular
 
 | Archivo | Capa | Qué contiene |
 |---|---|---|
-| `models.py` | Base | `EstadoMantenimiento`: una sola fila con el estado del modo mantenimiento. |
+| `models.py` | Base | `EstadoMantenimiento`: una sola fila con el estado del modo mantenimiento. `Trabajo`: un trabajo pesado en curso (ver `trabajos.py`). |
+| `trabajos.py` | Base | Los **trabajos pesados en curso** (probar o cargar una lista, verificar todas las fuentes, la verificación automática). Cada tanda pide su turno: si hay OTRO corriendo, espera; todos los que entran al panel, en cualquier navegador, ven arriba qué corre, quién lo empezó y cuánto va (`templates/parciales/_trabajos.html` + `static/js/trabajos.js`, que pregunta a `/sistema/trabajos/` cada 10 s). Si un trabajo deja de avisar 3 minutos (cerraron la pestaña), se da por cortado. |
 | `mantenimiento.py` | Base | Lee el estado (con 5 segundos de caché) y lo guarda (registrándolo en la actividad). |
 | `middleware.py` | Presentación | `ModoMantenimientoMiddleware`: si está activo, muestra "Estamos actualizando" a todos menos a los superusuarios, y les cierra la sesión a los que la tenían abierta (así el login queda libre para un superusuario). No toca `/api/`: la API responde su propio error 503 en JSON. |
 | `herramientas_dev.py` | Base | Las herramientas de desarrollador: estado del sistema, mail de prueba, cerrar sesiones, limpiar caché, roles, datos de demostración, borrar actividad/notificaciones, reiniciar el sistema. |
 | `forms.py` | Presentación | Formulario del modo mantenimiento. |
 | `views.py` | Presentación | Inicio, mantenimiento (configuración y vista previa), herramientas, páginas de error. |
-| `urls.py` | Presentación | `/` (inicio), `/sistema/mantenimiento/` y `/sistema/herramientas/`. |
-| `context_processors.py` | Presentación | Deja `NOMBRE_SISTEMA` y `NOMBRE_EMPRESA` en todos los templates (se configuran en el `.env`) y, a los superusuarios, si el mantenimiento está activo. |
+| `urls.py` | Presentación | `/` (inicio), `/sistema/mantenimiento/`, `/sistema/herramientas/` y `/sistema/trabajos/` (los trabajos en curso, JSON). |
+| `context_processors.py` | Presentación | Deja `NOMBRE_SISTEMA` y `NOMBRE_EMPRESA` en todos los templates (se configuran en el `.env`), los trabajos en curso (con sesión iniciada) y, a los superusuarios, si el mantenimiento está activo. |
 | `management/commands/` | Técnica | `limpiar_registros` (borra actividad, notificaciones leídas viejas y sesiones de la app vencidas) y `mantenimiento` (activar/desactivar desde la terminal). |
 | `tests/` | Técnica | Pruebas automáticas. |
 | `templatetags/momento.py` | Presentación | `{% saludo %}` y `{% avance_dia %}`: saludo según la hora y avance del día, para el "momento" del login y del inicio. |

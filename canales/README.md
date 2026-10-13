@@ -43,7 +43,7 @@ siguiente. Si una fuente se cae, el canal sigue andando.
 | `templatetags/canales_extras.py` | Panel | Filtro `iniciales` (lo que muestra la app cuando un canal no tiene logo). |
 | `admin.py` | Técnica | Editar canales, fuentes y categorías puntuales desde `/admin/`. |
 | `management/commands/importar_m3u.py` | Técnica | `python manage.py importar_m3u <archivo> [--sin-verificar] [--a-fondo] [--solo-espanol] [--descartar-sin-logo] [--con-peliculas] [--con-adultos]` |
-| `management/commands/verificar_fuentes.py` | Técnica | `python manage.py verificar_fuentes` (para programarlo con cron en producción). |
+| `management/commands/verificar_fuentes.py` | Técnica | `python manage.py verificar_fuentes` (para programarlo con cron en producción). De madrugada además mide (calidad y velocidad) una tanda de fuentes de los canales que tienen más de una, para que la app arranque por la mejor; `--medir` lo fuerza. |
 | `datos/canales_prueba.m3u8` | Datos | 3 canales públicos para probar (Canal 26, Telemax, TV Universidad). |
 | `tests/` | Técnica | Pruebas de las herramientas (probar un link, limpiar nombres), del lector, el clasificador, la verificación, las tandas, las pantallas y la API. |
 
@@ -223,6 +223,41 @@ le ande (`Fuente.oculta_desde`, `falla_en_aparatos`; ver
 "Oculto porque no se reproduce en los aparatos (motivo)". Pasados los 7 días,
 la app lo vuelve a intentar sola. Si falla porque el aparato no tiene
 internet, la app no avisa.
+
+**La mejor fuente, primera:** la app arranca por la primera fuente de cada
+canal, así que el servidor las manda ordenadas (`consultas.ordenadas_por_estabilidad`):
+
+1. **Al final, las que se cortan** en los aparatos. Al dejar de ver una
+   fuente, la app cuenta cuánto la vio y cuántas veces se cortó (se frenó a
+   cargar, o se cayó y se reconectó): `POST /api/v1/canales/fuentes/<id>/estabilidad/`
+   (`{"segundos", "cortes", "proporcion"}`, desde la app 1.2.16). Se suma en
+   `Fuente.segundos_en_aparatos` / `cortes_en_aparatos`, sin saber quién;
+   pasadas las 10 h vistas lo viejo pesa la mitad (`servicios.registrar_estabilidad`).
+   Con 10 minutos vistos y 6 cortes por hora o más, "se corta".
+2. **Primero, las que llenan la pantalla:** las "cuadradas" (4:3, con franjas
+   negras a los costados) van después. Lo cuenta la app (`proporcion`, ancho
+   / alto de lo que dibuja: `Fuente.proporcion`).
+3. **Lo que midió la prueba a fondo** (`Fuente.alto` y `velocidad`): las que
+   andan antes que las sin verificar; las que llegan sobradas (x1,5 o más)
+   antes que las no medidas, y esas antes que las que llegan justas; a igual
+   fluidez, la de mejor imagen (1080p antes que 720p).
+4. Las que ya se vieron bien un rato antes que las que todavía no se vieron.
+5. La prioridad del panel (el orden en que se cargaron).
+
+"Se vio bien" no pasa por delante de la prueba a propósito: si no, la primera
+que anduvo quedaría siempre primera y las demás nunca se verían.
+
+**Se miden solas:** la verificación programada (`verificar_fuentes`, cada 6 h
+por cron), **de madrugada** (antes de las 7, cuando casi nadie mira y no se
+le ocupan conexiones a las listas), además mide a fondo una tanda de 300
+fuentes de los canales que tienen más de una (`servicios.medir_fuentes`):
+primero las nunca medidas y después las medidas hace más tiempo
+(`Fuente.medida`). En unos días quedan todas medidas y se renuevan solas. No
+hay que hacer nada a mano (`--medir` lo fuerza a cualquier hora).
+
+En la app, además, cada aparato recuerda la que mejor le anduvo
+(`FuentePreferida`) y, si la que está viendo se corta 3 veces en 3 minutos,
+pasa sola a otra.
 
 ## Formato M3U (resumen)
 

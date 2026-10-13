@@ -12,33 +12,37 @@
 {% endcomment %}
 
 {% block titulo %}{{ importacion.archivo }} · Contenido{% endblock %}
+{% block clase_body %}pagina-listado pagina-importacion{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
     <div>
         <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
         <h1 class="pagina-titulo">{{ importacion.archivo }}</h1>
-        <p class="pagina-bajada">
-            Subida el {{ importacion.creada|date:"j/m/Y H:i" }}{% if importacion.usuario %} por {{ importacion.usuario }}{% endif %} ·
-            {{ importacion.total }} canal{{ importacion.total|pluralize:"es" }} en la lista ·
-            {% if importacion.descartar_vod %}sin películas ni series{% else %}con películas y series{% endif %}
-            {% if importacion.solo_espanol %}· solo español{% endif %}
-            {% if importacion.descartar_adultos %}· sin contenido para adultos{% endif %}
-            {% if importacion.descartar_sin_logo %}· sin los que no tienen logo{% endif %}
-            {% if importacion.a_fondo %}· prueba a fondo{% endif %}
-        </p>
+        <p class="pagina-bajada">Subida el {{ importacion.creada|date:"j/m/Y H:i" }}{% if importacion.usuario %} por {{ importacion.usuario }}{% endif %} · {{ importacion.total }} elemento{{ importacion.total|pluralize }}.</p>
+        <div class="importacion-config" aria-label="Opciones usadas al importar">
+            <span class="chip">{% if importacion.descartar_vod %}Solo en vivo{% else %}En vivo, películas y series{% endif %}</span>
+            {% if importacion.solo_espanol %}<span class="chip">Solo español</span>{% endif %}
+            {% if importacion.descartar_adultos %}<span class="chip">Sin adultos</span>{% endif %}
+            {% if importacion.descartar_sin_logo %}<span class="chip">Solo con imagen</span>{% endif %}
+            {% if importacion.a_fondo %}<span class="chip chip-si">Prueba a fondo</span>{% endif %}
+        </div>
         {% if importacion.serie %}
         <p class="pagina-bajada"><i class="bi bi-collection-play" aria-hidden="true"></i> Como la serie <strong>{{ importacion.serie }}</strong>: cada video es un capítulo. Los números definitivos se ponen al terminar de probar, de corrido, para que no queden huecos por los que no pasan.</p>
         {% endif %}
     </div>
-    <a href="{% url 'canales:organizar' %}?contenido={{ importacion.contenido_principal }}&amp;origen={{ importacion.archivo|urlencode }}" class="btn btn-outline-secondary">
-        <i class="bi bi-diagram-3" aria-hidden="true"></i> Ver lo que trajo en Organizar contenido
-    </a>
+    <div class="acciones-pagina">
+        <a href="#entradas" class="btn btn-acento"><i class="bi bi-list-check" aria-hidden="true"></i> Revisar resultados</a>
+        <a href="{% url 'canales:organizar' %}?contenido={{ importacion.contenido_principal }}&amp;origen={{ importacion.archivo|urlencode }}" class="btn btn-outline-secondary">
+            <i class="bi bi-diagram-3" aria-hidden="true"></i> Ver en Organizar
+        </a>
+    </div>
 </div>
 {% endblock %}
 
 {% block contenido %}
-<section class="tarjeta mb-4" id="progreso">
+<div class="importacion-flujo mb-4">
+<section class="tarjeta importacion-paso" id="progreso">
     {% csrf_token %}
     <h2 class="tarjeta-titulo">1. La prueba</h2>
     <div class="avance mb-3">
@@ -100,7 +104,7 @@
 </section>
 
 {% if not avance.pendientes and avance.aptas or not avance.pendientes and importacion.cargada %}
-<section class="tarjeta mb-4" id="carga">
+<section class="tarjeta importacion-paso" id="carga">
     <h2 class="tarjeta-titulo">2. Cargar las aptas</h2>
     {% if avance.aptas %}
     <p class="texto-suave">Pasaron la prueba <strong data-texto="aptas">{{ avance.aptas }}</strong>. Revisalas abajo, en la pestaña «Pasaron», y si están bien, cargalas: recién ahí entran a la app. Si un canal ya existe, la dirección se suma como fuente alternativa.</p>
@@ -120,6 +124,7 @@
     {% endif %}
 </section>
 {% endif %}
+</div>
 
 <form method="get" class="filtros" role="search">
     <div class="filtros-buscar">
@@ -138,25 +143,33 @@
             {% endfor %}
         </select>
     </div>
-    <div>
-        <label for="idioma" class="visually-hidden">Idioma</label>
-        <select id="idioma" name="idioma" class="form-select">
-            <option value="">Todos los idiomas</option>
-            <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
-            <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
-            <option value="sin_dato" {% if filtros.idioma == 'sin_dato' %}selected{% endif %}>No se sabe</option>
-        </select>
-    </div>
-    <div>
-        <label for="contenido" class="visually-hidden">Contenido</label>
-        <select id="contenido" name="contenido" class="form-select">
-            <option value="">En vivo, películas y series</option>
-            {% for valor, texto in contenidos %}
-            <option value="{{ valor }}" {% if filtros.contenido == valor %}selected{% endif %}>{{ texto }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <button type="submit" class="btn btn-primary">Filtrar</button>
+    <details class="filtros-mas">
+        <summary class="btn btn-outline-secondary">
+            <i class="bi bi-sliders" aria-hidden="true"></i> Más filtros
+            {% if filtros.idioma or filtros.contenido %}<span class="filtro-activo" aria-label="Hay filtros adicionales activos"></span>{% endif %}
+        </summary>
+        <div class="filtros-mas-panel">
+            <div>
+                <label for="idioma" class="form-label">Idioma</label>
+                <select id="idioma" name="idioma" class="form-select">
+                    <option value="">Todos los idiomas</option>
+                    <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
+                    <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
+                    <option value="sin_dato" {% if filtros.idioma == 'sin_dato' %}selected{% endif %}>No se sabe</option>
+                </select>
+            </div>
+            <div>
+                <label for="contenido" class="form-label">Contenido</label>
+                <select id="contenido" name="contenido" class="form-select">
+                    <option value="">En vivo, películas y series</option>
+                    {% for valor, texto in contenidos %}
+                    <option value="{{ valor }}" {% if filtros.contenido == valor %}selected{% endif %}>{{ texto }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </details>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
     {% if hay_filtros %}<a href="{% url 'canales:importacion' importacion.pk %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 
@@ -181,13 +194,14 @@
         <input class="form-check-input" type="checkbox" id="elegir-todas">
         <label class="form-check-label" for="elegir-todas">Toda la página</label>
     </div>
-    <strong class="small" id="cuantas-elegidas">Ninguna elegida</strong>
+    <strong class="small" id="cuantas-elegidas" aria-live="polite">Ninguna elegida</strong>
     <button type="submit" class="btn btn-sm btn-outline-secondary" name="accion" value="descartar" data-elegir disabled>
         <i class="bi bi-x-circle" aria-hidden="true"></i> No cargar
     </button>
     <button type="submit" class="btn btn-sm btn-outline-secondary" name="accion" value="cargar" data-elegir disabled>
         <i class="bi bi-check-circle" aria-hidden="true"></i> Cargar igual
     </button>
+    <button type="button" class="btn btn-sm btn-link" data-limpiar-elegidas hidden><i class="bi bi-x-lg" aria-hidden="true"></i> Cancelar selección</button>
     <span class="espejo-ayuda">«No cargar» saca de «Pasaron» lo que no te interesa. «Cargar igual» pasa a «Pasaron» lo que no pasó (si no respondía, entra sin verificar y la app lo intenta). Recién entran a la app con «Cargar».</span>
 </div>
 {% endif %}
@@ -258,16 +272,22 @@
     var casillas = form.querySelectorAll('.entrada-elegir');
     var todas = document.getElementById('elegir-todas');
     var cuantas = document.getElementById('cuantas-elegidas');
+    var limpiar = form.querySelector('[data-limpiar-elegidas]');
     function actualizar() {
         var elegidas = Array.prototype.filter.call(casillas, function (c) { return c.checked; }).length;
         cuantas.textContent = elegidas ? elegidas + ' elegida' + (elegidas > 1 ? 's' : '') : 'Ninguna elegida';
         todas.checked = elegidas > 0 && elegidas === casillas.length;
         todas.indeterminate = elegidas > 0 && elegidas < casillas.length;
         form.querySelectorAll('[data-elegir]').forEach(function (b) { b.disabled = !elegidas; });
+        limpiar.hidden = !elegidas;
     }
     casillas.forEach(function (c) { c.addEventListener('change', actualizar); });
     todas.addEventListener('change', function () {
         casillas.forEach(function (c) { c.checked = todas.checked; });
+        actualizar();
+    });
+    limpiar.addEventListener('click', function () {
+        casillas.forEach(function (c) { c.checked = false; });
         actualizar();
     });
     // El botón de UNA entrada cambia solo esa, aunque haya otras tildadas

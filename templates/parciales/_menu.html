@@ -75,7 +75,7 @@
         </a>
         {% endif %}
         {% if permisos.ver_canales %}
-        <a href="{% url 'canales:inicio' %}"
+        <a href="{% url 'canales:organizar' %}"
            class="menu-link {% if request.path|slice:':9' == '/canales/' and url_actual != 'canales:lo_mas_visto' %}activo{% endif %}">
             <i class="bi bi-collection-play" aria-hidden="true"></i><span class="menu-link-texto">Contenido</span>
         </a>
