@@ -17,7 +17,7 @@ from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
 from . import consultas
-from .models import Cliente, Compra, Dispositivo, Movimiento, Renovacion, Revendedor
+from .models import Cliente, Compra, CreditoCliente, Dispositivo, Movimiento, Renovacion, Revendedor
 
 MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
          'noviembre', 'diciembre']
@@ -55,19 +55,20 @@ def por_mes(revendedor=None, meses=12):
     desde = _comienzo(_ultimos_meses(meses)[-1])
 
     renovaciones = Renovacion.objects.filter(fecha__gte=desde)
+    cargas = CreditoCliente.objects.filter(tipo=CreditoCliente.Tipo.CARGA, fecha__gte=desde)
     compras = Compra.objects.filter(estado=Compra.Estado.PAGADA, resuelta__gte=desde)
     regalos = Movimiento.objects.filter(tipo=Movimiento.Tipo.REGALO, fecha__gte=desde)
     clientes = Cliente.objects.filter(creado__gte=desde)
     if revendedor is not None:
         renovaciones = renovaciones.filter(cliente__revendedor=revendedor)
+        cargas = cargas.filter(revendedor=revendedor)
         compras = compras.filter(revendedor=revendedor)
         regalos = regalos.filter(revendedor=revendedor)
         clientes = clientes.filter(revendedor=revendedor)
 
-    datos_renov = _por_mes(renovaciones, 'fecha', renovaciones=Count('pk'), creditos=Sum('creditos'),
-                           cobrado=Sum('monto_cobrado'))
-    datos_directos = _por_mes(renovaciones.filter(cliente__revendedor__isnull=True), 'fecha',
-                              cobrado=Sum('monto_cobrado'))
+    datos_renov = _por_mes(renovaciones, 'fecha', renovaciones=Count('pk'), creditos=Sum('creditos'))
+    datos_cobrado = _por_mes(cargas, 'fecha', cobrado=Sum('monto_cobrado'))
+    datos_directos = _por_mes(cargas.filter(revendedor__isnull=True), 'fecha', cobrado=Sum('monto_cobrado'))
     datos_compras = _por_mes(compras, 'resuelta', compras=Count('pk'), creditos=Sum('creditos'), monto=Sum('precio'))
     datos_regalos = _por_mes(regalos, 'fecha', creditos=Sum('cantidad'))
     datos_clientes = _por_mes(clientes, 'creado', nuevos=Count('pk'))
@@ -81,7 +82,7 @@ def por_mes(revendedor=None, meses=12):
             'clientes_nuevos': datos_clientes.get(mes, {}).get('nuevos', 0),
             'renovaciones': r.get('renovaciones', 0),
             'creditos_usados': r.get('creditos') or 0,
-            'cobrado': r.get('cobrado') or 0,                     # lo cobrado a clientes (revendedores + directos)
+            'cobrado': datos_cobrado.get(mes, {}).get('cobrado') or 0,   # lo cobrado a clientes (revendedores + empresa)
             'creditos_comprados': c.get('creditos') or 0,
             'invertido': c.get('monto') or 0,                     # para el revendedor: lo que pagó; para el negocio: ingreso
             'creditos_regalados': datos_regalos.get(mes, {}).get('creditos') or 0,
@@ -129,10 +130,11 @@ def en_vivo(revendedor=None):
 
 def numeros_cliente(cliente):
     renovaciones = cliente.renovaciones.all()
-    agregados = renovaciones.aggregate(cobrado=Sum('monto_cobrado'), creditos=Sum('creditos'), cantidad=Count('pk'))
+    agregados = renovaciones.aggregate(creditos=Sum('creditos'), cantidad=Count('pk'))
+    cobrado = cliente.creditos.filter(tipo=CreditoCliente.Tipo.CARGA).aggregate(t=Sum('monto_cobrado'))['t']
     primera = renovaciones.order_by('desde').first()
     return {
-        'cobrado': agregados['cobrado'] or 0,
+        'cobrado': cobrado or 0,
         'creditos': agregados['creditos'] or 0,
         'renovaciones': agregados['cantidad'],
         'activo_desde': primera.desde if primera else None,

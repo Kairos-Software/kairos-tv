@@ -104,7 +104,8 @@ Verificar: abrir https://kairostv.grupokairosarg.com en el navegador → login d
   corrida de madrugada (la de las 0 y la de las 6) además mide una tanda de fuentes de los canales
   que tienen varias, para que la app arranque por la mejor (no hay que agregar nada). Mientras corre,
   el panel lo muestra arriba y las cargas de listas esperan a que termine (`core/trabajos.py`).
-- `limpiar_registros` (todos los días 3:30): borra actividad y avisos viejos.
+- `limpiar_registros` (todos los días 3:30): borra actividad y avisos viejos, y empieza el mes de
+  los clientes que tienen saldo (avisa al revendedor de los que no les alcanza).
 
 ## Actualizar (cada vez que hay cambios)
 ```

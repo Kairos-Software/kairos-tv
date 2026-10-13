@@ -14,6 +14,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Max, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -23,7 +24,8 @@ from notificaciones.models import Nivel
 from notificaciones.servicios import notificar, notificar_a_quienes_puedan
 from usuarios.models import Rol, Usuario
 
-from .models import DIAS_POR_CREDITO, Cliente, Compra, Movimiento, Renovacion, Revendedor, _codigo_nuevo
+from .models import (ANTICIPO_RENOVACION, DIAS_POR_CREDITO, Cliente, Compra, CreditoCliente, Dispositivo, Movimiento,
+                     Pantalla, Renovacion, Revendedor, _codigo_nuevo)
 
 
 NOMBRE_ROL = 'Revendedor'   # el mismo de usuarios/catalogo_permisos.py (ROLES_INICIALES)
@@ -147,10 +149,26 @@ def registrar_compra_pagada(revendedor, paquete, por=None):
 
 # ── Clientes ─────────────────────────────────────────────────────────
 
+MAXIMO_PANTALLAS = 20
+MAXIMO_MESES = 24
+
+
+def _usuario(por):
+    return por if getattr(por, 'is_authenticated', False) else None
+
+
+def _bloquear_cliente(cliente):
+    return Cliente.objects.select_for_update().get(pk=cliente.pk)
+
+
+def _local(momento):
+    return f'{timezone.localtime(momento):%d/%m/%Y}'
+
+
 def crear_cliente(revendedor, nombre, telefono='', notas='', por=None):
     """
-    Lo crea SIN activar: no gasta créditos. Cuántos dispositivos tiene se
-    elige al activarlo (renovar).
+    Lo crea SIN activar: no gasta créditos. Cuántas pantallas tiene y por
+    cuántos meses se elige al activarlo.
     revendedor=None -> cliente directo de la empresa (solo para el administrador).
     """
     cliente = Cliente(revendedor=revendedor, nombre=nombre, telefono=telefono, notas=notas)
@@ -161,9 +179,10 @@ def crear_cliente(revendedor, nombre, telefono='', notas='', por=None):
     return cliente
 
 
-def precio_sugerido(cliente, dispositivos=1):
+def precio_sugerido(cliente, creditos=1):
+    """Lo que se propone cobrar: el precio por pantalla por mes del revendedor × créditos."""
     precio = cliente.revendedor.precio_pantalla if cliente.revendedor_id else 0
-    return precio * dispositivos
+    return precio * creditos
 
 
 @transaction.atomic
@@ -186,55 +205,271 @@ def pantalla_propia(revendedor, por=None):
 
 
 @transaction.atomic
-def renovar(cliente, dispositivos=1, monto_cobrado=None, por=None):
+def cargar_creditos(cliente, creditos, monto_cobrado=None, cortesia=False, de_la_empresa=False, detalle='',
+                    por=None):
     """
-    Activa o renueva al cliente: `dispositivos` aparatos a la vez durante
-    30 días. Gasta 1 crédito por dispositivo (un cliente directo no gasta).
-
-    Si todavía está vigente, los 30 días nuevos empiezan cuando vence el
-    actual (no se pierden días). Si estaba vencido, empiezan ahora. No se
-    pagan meses por adelantado: si ya renovó el mes que viene, hay que
-    esperar a que empiece.
+    Le carga créditos al saldo del cliente (meses pagados por adelantado).
+    Salen de la libreta de su revendedor; si es un cliente directo, o el
+    administrador elige `de_la_empresa`, los pone la empresa (no los paga
+    ningún revendedor). `cortesia`: es un regalo, no se le cobró nada.
+    Lo cargado no vuelve al revendedor aunque el cliente no lo use.
     """
-    if dispositivos < 1:
-        raise ReventaError('Tiene que ser al menos 1 dispositivo.')
-    cliente = Cliente.objects.select_for_update().get(pk=cliente.pk)
-    if cliente.renovacion_adelantada():
-        raise ReventaError(f'{cliente} ya tiene pagado el próximo mes (hasta el {cliente.vence:%d/%m/%Y}). '
-                           'Se puede renovar de nuevo cuando empiece.')
-    revendedor = _bloquear(cliente.revendedor) if cliente.revendedor_id else None
-    creditos = dispositivos if revendedor else 0
+    if creditos < 1:
+        raise ReventaError('Tiene que ser al menos 1 crédito.')
+    cliente = _bloquear_cliente(cliente)
+    revendedor = None if de_la_empresa or not cliente.revendedor_id else _bloquear(cliente.revendedor)
     if revendedor and revendedor.saldo < creditos:
         raise ReventaError(f'No alcanzan los créditos: hacen falta {creditos} y quedan {revendedor.saldo}.')
-    if monto_cobrado is None:
-        monto_cobrado = precio_sugerido(cliente, dispositivos)
-    if Decimal(monto_cobrado) < 0:
+    if cortesia:
+        monto = Decimal(0)
+    else:
+        monto = Decimal(precio_sugerido(cliente, creditos) if monto_cobrado is None else monto_cobrado)
+    if monto < 0:
         raise ReventaError('El monto cobrado no puede ser negativo.')
-
-    ahora = timezone.now()
-    desde = cliente.vence if cliente.vence and cliente.vence > ahora else ahora
-    hasta = desde + timedelta(days=DIAS_POR_CREDITO)
-    renovacion = Renovacion.objects.create(cliente=cliente, pantallas=dispositivos, creditos=creditos,
-                                           monto_cobrado=monto_cobrado, desde=desde, hasta=hasta, hecha_por=por)
+    movimiento = None
     if revendedor:
-        Movimiento.objects.create(revendedor=revendedor, cantidad=-creditos, tipo=Movimiento.Tipo.RENOVACION,
-                                  detalle=f'{cliente.nombre}: {dispositivos} dispositivo(s)',
-                                  renovacion=renovacion, hecho_por=por)
+        movimiento = Movimiento.objects.create(
+            revendedor=revendedor, cantidad=-creditos, tipo=Movimiento.Tipo.RENOVACION,
+            detalle=f'{cliente.nombre}: {detalle or f"{creditos} crédito(s)"}'[:200], hecho_por=_usuario(por))
+    carga = CreditoCliente.objects.create(
+        cliente=cliente, cantidad=creditos, tipo=CreditoCliente.Tipo.CARGA, detalle=detalle[:200],
+        revendedor=revendedor, movimiento=movimiento, cortesia=cortesia, monto_cobrado=monto, hecho_por=_usuario(por))
+    origen = f'de {revendedor}' if revendedor else 'de la empresa'
+    registrar(por, Accion.EDITAR, f'Cargó {creditos} crédito(s) {origen} a {cliente}'
+                                  f'{" (cortesía)" if cortesia else ""}', objeto=cliente, modulo='reventa')
+    return carga
+
+
+def _numero_libre(cliente):
+    return (cliente.pantallas.aggregate(ultimo=Max('numero'))['ultimo'] or 0) + 1
+
+
+def _dejar_pantallas(cliente, cantidad):
+    """Deja al cliente con `cantidad` pantallas: agrega al final o quita las últimas (con sus aparatos)."""
+    actuales = list(cliente.pantallas.order_by('numero'))
+    for sobrante in actuales[cantidad:]:
+        sobrante.delete()
+    for _ in range(cantidad - len(actuales)):
+        Pantalla.objects.create(cliente=cliente, numero=_numero_libre(cliente))
+
+
+def _empezar_mes(cliente, desde, por=None):
+    """Un mes de servicio para todas sus pantallas: gasta 1 crédito de su saldo por cada una."""
+    cantidad = cliente.pantallas.count()
+    hasta = desde + timedelta(days=DIAS_POR_CREDITO)
+    renovacion = Renovacion.objects.create(cliente=cliente, pantallas=cantidad, creditos=cantidad, desde=desde,
+                                           hasta=hasta, hecha_por=_usuario(por))
+    CreditoCliente.objects.create(cliente=cliente, cantidad=-cantidad, tipo=CreditoCliente.Tipo.MES,
+                                  detalle=f'{cantidad} pantalla(s) hasta el {_local(hasta)}', renovacion=renovacion)
     cliente.vence = hasta
-    cliente.marcar_autor(por)
-    cliente.save(update_fields=['vence', 'modificado', 'modificado_por'])
-    registrar(por, Accion.EDITAR, f'Renovó a {cliente} hasta el {hasta:%d/%m/%Y} ({creditos} crédito(s))',
-              objeto=cliente, modulo='reventa')
+    cliente.save(update_fields=['vence'])
     return renovacion
 
 
 @transaction.atomic
+def activar(cliente, dispositivos=1, meses=1, monto_cobrado=None, cortesia=False, de_la_empresa=False, por=None):
+    """
+    Activa al cliente (nuevo, o vencido) con `dispositivos` pantallas,
+    pagando `meses` meses: le carga dispositivos × meses créditos y empieza
+    el primer mes ahora. Los demás se descuentan solos, uno por mes
+    (renovar_si_toca). Si ya está activo, se usa cargar_meses o agregar_pantalla.
+    """
+    if not 1 <= dispositivos <= MAXIMO_PANTALLAS:
+        raise ReventaError(f'Tienen que ser entre 1 y {MAXIMO_PANTALLAS} pantallas.')
+    if not 1 <= meses <= MAXIMO_MESES:
+        raise ReventaError(f'Tienen que ser entre 1 y {MAXIMO_MESES} meses.')
+    cliente = _bloquear_cliente(cliente)
+    if cliente.suspendido:
+        raise ReventaError(f'{cliente} está suspendido: primero sacale la suspensión (Editar).')
+    if cliente.vigente:
+        raise ReventaError(f'{cliente} ya está activo hasta el {_local(cliente.vence)}. Para pagar más meses usá '
+                           '"Cargar meses"; para otro aparato, "Agregar pantalla".')
+    cargar_creditos(cliente, dispositivos * meses, monto_cobrado, cortesia, de_la_empresa,
+                    detalle=f'{dispositivos} pantalla(s) × {meses} mes(es)', por=por)
+    _dejar_pantallas(cliente, dispositivos)
+    renovacion = _empezar_mes(cliente, timezone.now(), por)
+    registrar(por, Accion.EDITAR, f'Activó a {cliente} con {dispositivos} pantalla(s) hasta el '
+                                  f'{_local(renovacion.hasta)}', objeto=cliente, modulo='reventa')
+    return renovacion
+
+
+@transaction.atomic
+def cargar_meses(cliente, meses=1, monto_cobrado=None, cortesia=False, de_la_empresa=False, por=None):
+    """
+    Paga más meses de las pantallas que ya tiene: carga pantallas × meses
+    créditos a su saldo. Si ya se le había terminado el mes, empieza otro ahora.
+    """
+    if not 1 <= meses <= MAXIMO_MESES:
+        raise ReventaError(f'Tienen que ser entre 1 y {MAXIMO_MESES} meses.')
+    cantidad = cliente.pantallas.count()
+    if not cantidad:
+        raise ReventaError(f'{cliente} todavía no tiene pantallas: activalo primero.')
+    carga = cargar_creditos(cliente, cantidad * meses, monto_cobrado, cortesia, de_la_empresa,
+                            detalle=f'{cantidad} pantalla(s) × {meses} mes(es)', por=por)
+    renovar_si_toca(Cliente.objects.get(pk=cliente.pk))
+    return carga
+
+
+def renovar(cliente, dispositivos=1, monto_cobrado=None, por=None):
+    """Un mes más: activa con `dispositivos` pantallas si no está activo; si lo está, carga un mes de las que tiene."""
+    cliente = Cliente.objects.get(pk=cliente.pk)
+    if cliente.vigente:
+        return cargar_meses(cliente, 1, monto_cobrado, por=por)
+    return activar(cliente, dispositivos, 1, monto_cobrado, por=por)
+
+
+def renovar_si_toca(cliente, ahora=None):
+    """
+    Si al cliente le termina el mes (faltan menos de ANTICIPO_RENOVACION) o
+    ya le terminó, y su saldo alcanza para todas sus pantallas, empieza el
+    mes siguiente: pegado al anterior o, si ya había vencido, desde ahora.
+    Devuelve la Renovacion (None si no tocaba o no alcanzaba).
+    """
+    ahora = ahora or timezone.now()
+    if cliente.suspendido or cliente.vence is None or cliente.vence - ahora > ANTICIPO_RENOVACION:
+        return None
+    with transaction.atomic():
+        cliente = _bloquear_cliente(cliente)
+        if cliente.vence - ahora > ANTICIPO_RENOVACION:
+            return None   # otro pedido lo renovó recién
+        cantidad = cliente.pantallas.count()
+        if not cantidad or cliente.saldo < cantidad:
+            return None
+        return _empezar_mes(cliente, max(cliente.vence, ahora))
+
+
+def renovar_los_que_tocan():
+    """
+    La tarea diaria (limpiar_registros): empieza el mes de los clientes a
+    los que se les termina y les alcanza el saldo. A los que no les alcanza
+    y vencen dentro de un día, les avisa a su revendedor (o a quienes
+    administran la reventa, si es directo). Devuelve (renovados, sin_saldo).
+    """
+    ahora = timezone.now()
+    renovados, sin_saldo = 0, 0
+    for cliente in Cliente.objects.filter(suspendido=False, vence__isnull=False,
+                                          vence__lte=ahora + ANTICIPO_RENOVACION).select_related('revendedor__usuario'):
+        if renovar_si_toca(cliente, ahora):
+            renovados += 1
+        elif cliente.vence > ahora and cliente.vence - ahora <= timedelta(days=1) and cliente.pantallas.exists():
+            sin_saldo += 1
+            titulo = f'A {cliente} no le alcanza el saldo'
+            texto = f'Vence el {_local(cliente.vence)}: cargale meses para que siga viendo.'
+            url = reverse('reventa:cliente', args=[cliente.pk])
+            if cliente.revendedor_id:
+                notificar(cliente.revendedor.usuario, titulo, texto, url=url, nivel=Nivel.AVISO)
+            else:
+                notificar_a_quienes_puedan('administrar_reventa', titulo, texto, url=url, nivel=Nivel.AVISO)
+    return renovados, sin_saldo
+
+
+# ── Pantallas del cliente ────────────────────────────────────────────
+
+@transaction.atomic
+def agregar_pantalla(cliente, monto_cobrado=None, cortesia=False, de_la_empresa=False, por=None):
+    """
+    Un aparato más a mitad de mes: cuesta 1 crédito y dura hasta que vence
+    el resto; desde el mes siguiente se renueva con las demás.
+    """
+    cliente = _bloquear_cliente(cliente)
+    if not cliente.vigente:
+        raise ReventaError(f'{cliente} no está activo: activalo con las pantallas que quiera.')
+    if cliente.pantallas.count() >= MAXIMO_PANTALLAS:
+        raise ReventaError(f'Ya tiene {MAXIMO_PANTALLAS} pantallas, el máximo.')
+    cargar_creditos(cliente, 1, monto_cobrado, cortesia, de_la_empresa,
+                    detalle=f'Pantalla agregada hasta el {_local(cliente.vence)}', por=por)
+    pantalla = Pantalla.objects.create(cliente=cliente, numero=_numero_libre(cliente))
+    renovacion = Renovacion.objects.create(cliente=cliente, pantallas=1, creditos=1, desde=timezone.now(),
+                                           hasta=cliente.vence, hecha_por=_usuario(por))
+    CreditoCliente.objects.create(cliente=cliente, cantidad=-1, tipo=CreditoCliente.Tipo.MES,
+                                  detalle=f'Pantalla {pantalla.numero} hasta el {_local(cliente.vence)}',
+                                  renovacion=renovacion)
+    registrar(por, Accion.EDITAR, f'Agregó la pantalla {pantalla.numero} a {cliente}', objeto=cliente,
+              modulo='reventa')
+    return pantalla
+
+
+@transaction.atomic
+def quitar_pantalla(pantalla, por=None):
+    """
+    La saca (sin devolución): su aparato se desconecta y desde el mes
+    siguiente se paga una menos. Las demás se vuelven a numerar.
+    """
+    cliente = _bloquear_cliente(pantalla.cliente)
+    if cliente.pantallas.count() <= 1:
+        raise ReventaError('Tiene que quedar al menos una pantalla. Para cortarle todo, suspendé al cliente.')
+    numero = pantalla.numero
+    pantalla.delete()
+    for siguiente in cliente.pantallas.filter(numero__gt=numero).order_by('numero'):
+        siguiente.numero -= 1
+        siguiente.save(update_fields=['numero'])
+    registrar(por, Accion.EDITAR, f'Quitó la pantalla {numero} de {cliente}', objeto=cliente, modulo='reventa')
+
+
+@transaction.atomic
+def cortar_pantalla(pantalla, cortada=True, por=None):
+    """
+    Corta (o vuelve a habilitar) una sola pantalla: su aparato se desconecta
+    y su código deja de servir. Se sigue pagando (es un castigo, no una baja).
+    """
+    pantalla.cortada = cortada
+    pantalla.save(update_fields=['cortada'])
+    if cortada:
+        Dispositivo.objects.filter(pantalla=pantalla).delete()
+    registrar(por, Accion.SEGURIDAD, f'{"Cortó" if cortada else "Volvió a habilitar"} {pantalla}',
+              objeto=pantalla.cliente, modulo='reventa')
+    return pantalla
+
+
+def editar_pantalla(pantalla, nombre='', titular='', por=None):
+    pantalla.nombre, pantalla.titular = nombre.strip()[:60], titular.strip()[:100]
+    pantalla.save(update_fields=['nombre', 'titular'])
+    registrar(por, Accion.EDITAR, f'Editó {pantalla}', objeto=pantalla.cliente, modulo='reventa')
+    return pantalla
+
+
+@transaction.atomic
+def codigo_de_pantalla(pantalla, propio=True, por=None):
+    """
+    Le da a la pantalla su propio código (o uno nuevo, si ya tenía: el
+    aparato que la usa se desconecta), o se lo saca (`propio=False`: vuelve a
+    entrarse con el código del cliente).
+    """
+    if propio:
+        pantalla.codigo = _codigo_nuevo()
+        Dispositivo.objects.filter(pantalla=pantalla).delete()
+    else:
+        pantalla.codigo = None
+    pantalla.save(update_fields=['codigo'])
+    registrar(por, Accion.SEGURIDAD, f'{"Dio un código propio a" if propio else "Sacó el código propio de"} '
+                                     f'{pantalla}', objeto=pantalla.cliente, modulo='reventa')
+    return pantalla
+
+
+def pasar_a_revendedor(cliente, revendedor, por=None):
+    """
+    El cliente pasa a ser de `revendedor` (None = directo de la empresa). Su
+    saldo se queda con él (ya está pagado); desde ahí, sus cargas salen de ese revendedor.
+    """
+    anterior = cliente.revendedor
+    cliente.revendedor = revendedor
+    cliente.marcar_autor(por)
+    cliente.save(update_fields=['revendedor', 'modificado', 'modificado_por'])
+    registrar(por, Accion.EDITAR, f'Pasó a {cliente} de {anterior or "la empresa"} a {revendedor or "la empresa"}',
+              objeto=cliente, modulo='reventa')
+    return cliente
+
+
+@transaction.atomic
 def regenerar_codigo(cliente, por=None):
-    """Código de acceso nuevo (si el anterior se filtró). Desconecta todos sus dispositivos."""
+    """
+    Código de acceso nuevo (si el anterior se filtró). Desconecta los aparatos
+    que entraron con él (los de pantallas con código propio siguen).
+    """
     cliente.codigo = _codigo_nuevo()
     cliente.marcar_autor(por)
     cliente.save(update_fields=['codigo', 'modificado', 'modificado_por'])
-    cliente.dispositivos.all().delete()
+    cliente.dispositivos.filter(Q(pantalla__isnull=True) | Q(pantalla__codigo__isnull=True)).delete()
     registrar(por, Accion.SEGURIDAD, f'Generó un código de acceso nuevo para {cliente}', objeto=cliente,
               modulo='reventa')
     return cliente

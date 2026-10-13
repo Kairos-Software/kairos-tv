@@ -41,11 +41,15 @@ void main() {
     expect(celular, contains('var LIMITE = 0;'));
   });
 
-  test('en la TV el video se pide como mucho en 720p (el WebView de muchas TVs no da abasto con más)', () {
-    final tv = paginaDelReproductor('NvQqHzqClf0', controles: false, limite: ControlYoutube.limiteTv);
+  test('en la TV el video se pide con un tope que se puede cambiar sin recargar', () {
+    final tv = paginaDelReproductor('NvQqHzqClf0', controles: false, limite: 1280);
     expect(tv, contains('var LIMITE = 1280;'));
     // El reproductor se arma más chico y se agranda: YouTube elige la calidad por su tamaño
     expect(tv, contains("marco.style.transform = 'scale(' + escala + ')'"));
+    expect(tv, contains('function cambiarLimite(ancho)'));
+    // Y mide si el aparato da abasto
+    expect(tv, contains("avisar({e: 'fluidez', c: cuadros, l: lentos})"));
+    expect(tv, contains('ahora - anterior > 50'));
   });
 
   test('entiende lo que avisa el reproductor', () {
@@ -70,6 +74,22 @@ void main() {
     expect(estado.termino, isTrue);
     estado.recibir('{"e":"error","v":150}');
     expect(estado.error, 150);
+  });
+
+  test('pasa la fluidez sin redibujar la pantalla', () {
+    final estado = EstadoYoutube();
+    var avisos = 0;
+    (int, int)? medido;
+    estado
+      ..addListener(() => avisos++)
+      ..alMedirFluidez = ((cuadros, lentos) => medido = (cuadros, lentos));
+    estado.recibir('{"e":"fluidez","c":300,"l":12}');
+    expect(medido, (300, 12));
+    expect(avisos, 0);
+    estado
+      ..recibir('{"e":"listo"}')
+      ..recibir('{"e":"estado","v":3}');
+    expect(estado.frenado, isTrue);
   });
 
   test('los errores de YouTube, en castellano y con el motivo para el servidor', () {

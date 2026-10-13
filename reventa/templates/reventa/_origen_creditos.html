@@ -1,0 +1,2 @@
+{% comment %} De dónde salen los créditos que se le cargan a este cliente (lo usa cliente.html). {% endcomment %}
+{% if cliente.revendedor %}Salen de los créditos de {{ cliente.revendedor }}: le quedan <strong>{{ saldo_revendedor }}</strong>.{% else %}Es directo: los créditos los pone la empresa.{% endif %}

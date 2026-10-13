@@ -22,6 +22,7 @@ urlpatterns = [
     path('organizar/exportar/', views.organizar_exportar, name='organizar_exportar'),
     path('eliminados/', views.eliminados, name='eliminados'),
     path('series/detalle/', views.serie_detalle, name='serie_detalle'),
+    path('series/ordenar/', views.serie_ordenar, name='serie_ordenar'),
     path('canal/<int:pk>/editar/', views.canal_editar, name='canal_editar'),
     path('probar/', views.probar, name='probar'),
     path('youtube/', views.traer_de_youtube, name='youtube'),

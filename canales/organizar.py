@@ -20,6 +20,7 @@ numerada.
     organizar.juntar_categorias([kids, infantil], 'Infantil')      -> Categoria "Infantil"
     organizar.mover_a_categoria(canales, noticias)                 -> cuántos se movieron
     organizar.cambiar_contenido(canales, 'serie', nombre_serie='Pocoyó')
+    organizar.ordenar_capitulos('Pocoyó', 1, [pk, pk, ...])        -> los renumera 1, 2, 3... en ese orden
     organizar.categorias_parecidas(categorias)                     -> [[cat, cat], ...] posibles repetidas
     organizar.borrar_categoria(infantil, con_contenido=True)       -> la borra con todo lo de adentro
     organizar.eliminar_contenido(canales)                          -> los borra (si se vuelven a importar, vuelven)
@@ -568,6 +569,41 @@ def renombrar_serie(nombre, nuevo, usuario=None):
         registrar(usuario, Accion.EDITAR, f'Renombró la serie "{nombre}" a "{nuevo}" ({len(capitulos)} capítulos).',
                   modulo='canales')
     return len(capitulos)
+
+
+@transaction.atomic
+def ordenar_capitulos(nombre_serie, temporada, en_orden, usuario=None):
+    """
+    Ordena los capítulos de una temporada: `en_orden` son los pk de TODOS sus
+    capítulos, del que va primero al último. Quedan numerados 1, 2, 3... (el
+    número va en el nombre, "Serie S01 E05 Título", que es lo que lee la app);
+    cada uno conserva su título. Devuelve cuántos cambiaron de número.
+    """
+    temporada = int(temporada)
+    capitulos = {canal.pk: canal for canal in capitulos_de([nombre_serie])
+                 if clasificar.episodio(canal.nombre)[1] == temporada}
+    try:
+        en_orden = [int(pk) for pk in en_orden]
+    except (TypeError, ValueError):
+        raise NoSePuede('El orden que llegó no se entiende: volvé a cargar la página.') from None
+    if not capitulos or sorted(en_orden) != sorted(capitulos):
+        raise NoSePuede('La temporada cambió mientras la ordenabas (se agregó o se quitó un capítulo): volvé a '
+                        'cargar la página y ordenala de nuevo.')
+    ahora, cambiados = timezone.now(), []
+    for numero, pk in enumerate(en_orden, start=1):
+        canal = capitulos[pk]
+        serie, _, viejo, titulo = clasificar.episodio(canal.nombre)
+        if viejo == numero:
+            continue
+        canal.nombre = nombre_de_capitulo(serie, temporada, numero, titulo)
+        canal.modificado = ahora
+        canal.marcar_autor(usuario)
+        cambiados.append(canal)
+    Canal.objects.bulk_update(cambiados, ['nombre', 'modificado', 'modificado_por'])
+    if cambiados:
+        registrar(usuario, Accion.EDITAR, f'Ordenó los capítulos de "{nombre_serie}" (temporada {temporada}): '
+                                          f'{len(cambiados)} cambiaron de número.', modulo='canales')
+    return len(cambiados)
 
 
 # ── Editar desde "Organizar contenido" ───────────────────────────────

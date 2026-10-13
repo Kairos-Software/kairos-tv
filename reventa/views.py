@@ -21,14 +21,15 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.timezone import localtime
 from django.views.decorators.http import require_POST
 
 from usuarios.decoradores import requiere_permiso
 from usuarios.permisos import chequear_permiso
 
 from . import consultas, estadisticas, servicios
-from .forms import (ClienteForm, CreditosForm, ElegirPaqueteForm, PaqueteForm, PrecioForm, RenovarForm,
-                    RevendedorNuevoForm)
+from .forms import (ActivarForm, CargarMesesForm, ClienteForm, CobroForm, CreditosForm, ElegirPaqueteForm,
+                    PantallaForm, PaqueteForm, PasarClienteForm, PrecioForm, RevendedorNuevoForm)
 from .models import HORAS_SIN_SENAL, Compra, Paquete, Revendedor
 from .servicios import ReventaError
 
@@ -233,17 +234,29 @@ def cliente_nuevo(request):
 @requiere_reventa
 def cliente(request, pk):
     cliente = get_object_or_404(_clientes_visibles(request), pk=pk)
+    if servicios.renovar_si_toca(cliente):   # que la ficha muestre el mes que ya empezó
+        cliente.refresh_from_db()
+    con_empresa = _puede_poner_la_empresa(request, cliente)
     return render(request, 'reventa/cliente.html', {
         'cliente': cliente,
-        'renovaciones': cliente.renovaciones.select_related('hecha_por')[:30],
-        'form_renovar': RenovarForm(initial={'dispositivos': cliente.ultimos_dispositivos()}),
-        'precio_dispositivo': servicios.precio_sugerido(cliente),
-        'adelantada': cliente.renovacion_adelantada(),
-        'saldo': cliente.revendedor.saldo if cliente.revendedor_id else None,
-        'dispositivos': cliente.dispositivos.all(),
+        'pantallas': cliente.pantallas.select_related('dispositivo'),
+        'historial': cliente.creditos.select_related('revendedor__usuario', 'hecho_por')[:40],
+        'form_activar': ActivarForm(con_empresa=con_empresa, initial={'dispositivos': cliente.ultimos_dispositivos()}),
+        'form_cargar': CargarMesesForm(con_empresa=con_empresa, prefix='cargar'),
+        'form_agregar': CobroForm(con_empresa=con_empresa, prefix='agregar'),
+        'form_pasar': PasarClienteForm(initial={'revendedor': cliente.revendedor}) if request.es_admin else None,
+        'precio_pantalla': servicios.precio_sugerido(cliente),
+        'saldo_revendedor': cliente.revendedor.saldo if cliente.revendedor_id else None,
+        'meses_pagos': cliente.meses_pagos(),
+        'sin_conectar': cliente.dispositivos.filter(pantalla__isnull=True),
         'numeros': estadisticas.numeros_cliente(cliente),
         'horas_sin_senal': HORAS_SIN_SENAL,
     })
+
+
+def _puede_poner_la_empresa(request, cliente):
+    """Solo el administrador elige que los créditos los ponga la empresa (en un directo siempre los pone)."""
+    return request.es_admin and cliente.revendedor_id is not None
 
 
 @requiere_reventa
@@ -260,19 +273,104 @@ def cliente_editar(request, pk):
     })
 
 
+def _cobro(request, cliente, form):
+    """Los datos del cobro del formulario; un directo siempre los pone la empresa."""
+    datos = form.datos_del_cobro()
+    datos['de_la_empresa'] = datos['de_la_empresa'] or cliente.revendedor_id is None
+    return datos
+
+
 @require_POST
 @requiere_reventa
-def cliente_renovar(request, pk):
+def cliente_activar(request, pk):
     cliente = get_object_or_404(_clientes_visibles(request), pk=pk)
-    form = RenovarForm(request.POST)
+    form = ActivarForm(request.POST, con_empresa=_puede_poner_la_empresa(request, cliente))
+    if not form.is_valid():
+        messages.error(request, 'Revisá las pantallas, los meses y el monto.')
+        return redirect('reventa:cliente', pk=pk)
+    datos = form.cleaned_data
+    renovacion = _ejecutar(request, servicios.activar, cliente, datos['dispositivos'], datos['meses'],
+                           **_cobro(request, cliente, form))
+    if renovacion:
+        meses = datos['meses']
+        messages.success(request, f'Listo: {cliente} puede ver en {datos["dispositivos"]} pantalla(s). Este mes va '
+                                  f'hasta el {localtime(renovacion.hasta):%d/%m/%Y}'
+                                  + (f' y le quedan {meses - 1} mes(es) más pagos, que se descuentan solos.'
+                                     if meses > 1 else '.'))
+    return redirect('reventa:cliente', pk=pk)
+
+
+@require_POST
+@requiere_reventa
+def cliente_cargar(request, pk):
+    cliente = get_object_or_404(_clientes_visibles(request), pk=pk)
+    form = CargarMesesForm(request.POST, con_empresa=_puede_poner_la_empresa(request, cliente), prefix='cargar')
+    if not form.is_valid():
+        messages.error(request, 'Revisá los meses y el monto.')
+        return redirect('reventa:cliente', pk=pk)
+    carga = _ejecutar(request, servicios.cargar_meses, cliente, form.cleaned_data['meses'],
+                      **_cobro(request, cliente, form))
+    if carga:
+        messages.success(request, f'Se cargaron {carga.cantidad} crédito(s): ahora le alcanza para '
+                                  f'{cliente.meses_pagos()} mes(es) más.')
+    return redirect('reventa:cliente', pk=pk)
+
+
+@require_POST
+@requiere_reventa
+def cliente_agregar_pantalla(request, pk):
+    cliente = get_object_or_404(_clientes_visibles(request), pk=pk)
+    form = CobroForm(request.POST, con_empresa=_puede_poner_la_empresa(request, cliente), prefix='agregar')
     if form.is_valid():
-        renovacion = _ejecutar(request, servicios.renovar, cliente, form.cleaned_data['dispositivos'],
-                               monto_cobrado=form.cleaned_data['monto_cobrado'])
-        if renovacion:
-            messages.success(request, f'Listo: {cliente} puede ver hasta el {renovacion.hasta:%d/%m/%Y} '
-                                      f'con {renovacion.pantallas} dispositivo(s) ({renovacion.creditos} crédito(s) usados).')
+        pantalla = _ejecutar(request, servicios.agregar_pantalla, cliente, **_cobro(request, cliente, form))
+        if pantalla:
+            messages.success(request, f'Se agregó la pantalla {pantalla.numero}. Desde el mes que viene se paga '
+                                      'con las demás.')
     else:
-        messages.error(request, 'Revisá los dispositivos y el monto.')
+        messages.error(request, 'Revisá el monto.')
+    return redirect('reventa:cliente', pk=pk)
+
+
+@require_POST
+@requiere_reventa
+def cliente_pantalla(request, pk, pantalla):
+    """Lo que se hace con UNA pantalla: nombre y titular, cortarla, su código propio, quitarla o liberarla."""
+    cliente = get_object_or_404(_clientes_visibles(request), pk=pk)
+    pantalla = get_object_or_404(cliente.pantallas, pk=pantalla)
+    accion = request.POST.get('accion')
+    if accion == 'editar':
+        form = PantallaForm(request.POST, instance=pantalla)
+        if form.is_valid():
+            _ejecutar(request, servicios.editar_pantalla, pantalla, form.cleaned_data['nombre'],
+                      form.cleaned_data['titular'], exito='Pantalla guardada.')
+    elif accion in ('cortar', 'habilitar'):
+        _ejecutar(request, servicios.cortar_pantalla, pantalla, accion == 'cortar',
+                  exito='Pantalla cortada: su aparato se desconectó y no puede volver a entrar.'
+                  if accion == 'cortar' else 'La pantalla vuelve a funcionar.')
+    elif accion in ('dar_codigo', 'sacar_codigo'):
+        _ejecutar(request, servicios.codigo_de_pantalla, pantalla, accion == 'dar_codigo',
+                  exito='Listo: esa pantalla tiene su propio código.' if accion == 'dar_codigo'
+                  else 'Esa pantalla vuelve a usar el código del cliente.')
+    elif accion == 'quitar':
+        _ejecutar(request, servicios.quitar_pantalla, pantalla,
+                  exito='Pantalla quitada. Desde el mes que viene se paga una menos.')
+    elif accion == 'liberar' and hasattr(pantalla, 'dispositivo'):
+        servicios.liberar_dispositivos(cliente, pantalla.dispositivo.pk, por=request.user)
+        messages.success(request, 'Se liberó: esa pantalla queda libre para otro aparato.')
+    return redirect(f"{reverse('reventa:cliente', args=[pk])}#pantallas")
+
+
+@require_POST
+@requiere_permiso('administrar_reventa')
+def cliente_pasar(request, pk):
+    """El administrador pasa un cliente directo a un revendedor (o al revés)."""
+    cliente = get_object_or_404(consultas.clientes_de(), pk=pk)
+    form = PasarClienteForm(request.POST)
+    if form.is_valid():
+        revendedor = form.cleaned_data['revendedor']
+        servicios.pasar_a_revendedor(cliente, revendedor, por=request.user)
+        messages.success(request, f'{cliente} ahora es de {revendedor}.' if revendedor
+                         else f'{cliente} ahora es un cliente directo de la empresa.')
     return redirect('reventa:cliente', pk=pk)
 
 
@@ -309,7 +407,24 @@ def creditos(request):
         'movimientos': Paginator(revendedor.movimientos.all(), POR_PAGINA).get_page(request.GET.get('pagina')),
         'compras': revendedor.compras.select_related('paquete')[:20],
         'paquetes': Paquete.objects.filter(activo=True),
+        'form_precio': PrecioForm(instance=revendedor),
     })
+
+
+@require_POST
+@requiere_reventa
+def mi_precio(request):
+    """El revendedor pone su precio por pantalla por mes (el que se propone al cobrarle a un cliente)."""
+    if request.revendedor is None:
+        raise PermissionDenied
+    form = PrecioForm(request.POST, instance=request.revendedor)
+    if form.is_valid():
+        request.revendedor.marcar_autor(request.user)
+        form.save()
+        messages.success(request, 'Precio guardado.')
+    else:
+        messages.error(request, 'Revisá el precio.')
+    return redirect('reventa:creditos')
 
 
 @require_POST

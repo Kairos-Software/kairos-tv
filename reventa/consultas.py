@@ -9,7 +9,7 @@ from django.db.models import Count, OuterRef, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from .models import Cliente, Compra, Movimiento, Renovacion, Revendedor
+from .models import Cliente, Compra, CreditoCliente, Movimiento, Pantalla, Revendedor
 
 DIAS_POR_VENCER = 7
 
@@ -21,12 +21,11 @@ def _suma(queryset, campo):
 def clientes_de(revendedor=None):
     """
     Los clientes de un revendedor (o todos, para el administrador), con
-    `dispositivos_hoy`: los que pagó para el período en curso (None si no
-    tiene uno). Las tablas lo muestran solo si está vigente.
+    `dispositivos_hoy`: sus pantallas habilitadas (None si no tiene). Las
+    tablas lo muestran solo si está vigente.
     """
-    ahora = timezone.now()
-    hoy = (Renovacion.objects.filter(cliente=OuterRef('pk'), desde__lte=ahora, hasta__gt=ahora)
-           .order_by('-desde').values('pantallas')[:1])
+    hoy = (Pantalla.objects.filter(cliente=OuterRef('pk'), cortada=False).order_by()
+           .values('cliente').annotate(total=Count('pk')).values('total'))
     clientes = Cliente.objects.select_related('revendedor__usuario').annotate(dispositivos_hoy=Subquery(hoy))
     return clientes.filter(revendedor=revendedor) if revendedor else clientes
 
@@ -56,7 +55,7 @@ def _conteo_clientes(clientes):
 def resumen_revendedor(revendedor):
     """Créditos, clientes y plata de un revendedor."""
     movimientos = revendedor.movimientos.all()
-    cobrado = _suma(Renovacion.objects.filter(cliente__revendedor=revendedor), 'monto_cobrado')
+    cobrado = _suma(CreditoCliente.objects.filter(revendedor=revendedor), 'monto_cobrado')
     invertido = _suma(revendedor.compras.filter(estado=Compra.Estado.PAGADA), 'precio')
     return {
         'saldo': _suma(movimientos, 'cantidad'),
@@ -76,11 +75,14 @@ def resumen_general():
     """Los números del negocio entero (para el administrador)."""
     pagadas = Compra.objects.filter(estado=Compra.Estado.PAGADA)
     movimientos = Movimiento.objects.filter(revendedor__eliminado_en__isnull=True)
+    # Lo que cobró la empresa a clientes con créditos propios (directos, o cargas "de la empresa")
+    de_la_empresa = CreditoCliente.objects.filter(tipo=CreditoCliente.Tipo.CARGA, revendedor__isnull=True)
     return {
         'revendedores': Revendedor.objects.count(),
-        'ingresos': _suma(pagadas, 'precio') + _suma(Renovacion.objects.filter(cliente__revendedor__isnull=True), 'monto_cobrado'),
+        'ingresos': _suma(pagadas, 'precio') + _suma(de_la_empresa, 'monto_cobrado'),
         'ingresos_paquetes': _suma(pagadas, 'precio'),
-        'ingresos_directos': _suma(Renovacion.objects.filter(cliente__revendedor__isnull=True), 'monto_cobrado'),
+        'ingresos_directos': _suma(de_la_empresa, 'monto_cobrado'),
+        'creditos_de_la_empresa': _suma(de_la_empresa, 'cantidad'),
         'creditos_vendidos': _suma(pagadas, 'creditos'),
         'creditos_regalados': _suma(movimientos.filter(tipo=Movimiento.Tipo.REGALO), 'cantidad'),
         'creditos_usados': -_suma(movimientos.filter(tipo=Movimiento.Tipo.RENOVACION), 'cantidad'),

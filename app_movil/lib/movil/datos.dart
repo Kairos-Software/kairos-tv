@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/cliente.dart';
 import '../api/modelos.dart';
 import '../aparato.dart';
+import 'calidad_youtube.dart';
 import 'control_senal.dart';
 import 'medidor.dart';
 
@@ -344,6 +345,7 @@ class Catalogo extends ChangeNotifier {
         NoAnda.cargar(),
         pedirSeccionesNuevas(),
         FuentePreferida.cargar(),
+        CalidadYoutube.cargar(),
       ]);
       final vivo = resultados[0] as List<CategoriaCanales>;
       for (final categoria in vivo) {

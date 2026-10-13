@@ -29,6 +29,8 @@ se genera sola y no va al repo.
 | `css/kairos.css` | **El único CSS del panel.** El mismo sistema de diseño que la app (`diseno_kairos_tv/DESIGN.md`): colores, letras, radios y todas las piezas de las pantallas. |
 | `js/sistema.js` | Comportamiento general: menú en celulares, mostrar/ocultar contraseña, el "momento" (hora en vivo, saludo y línea del día) y las iniciales cuando el logo de un canal no carga. |
 | `js/tandas.js` | Corre una tarea larga de a tandas (llama al servidor una y otra vez y pinta el avance). Lo usan las pantallas de canales para verificar listas grandes sin saturar el servidor. |
+| `js/trabajos.js` + `css/trabajos.css` | El aviso de trabajos pesados en curso, arriba de todas las pantallas (`templates/parciales/_trabajos.html`, `core/trabajos.py`). Aparte de `kairos.css` para no pisar su diseño. |
+| `js/ordenar_capitulos.js` + `css/ordenar_capitulos.css` | La lista de capítulos de la página de una serie y cómo se ordena: arrastrar (mouse o dedo) o flechas, barra "Guardar orden / Deshacer", y el aviso de desordenados con su botón. Solo los carga `canales/serie_detalle.html`. |
 
 Librerías externas (se cargan desde CDN en `templates/base_html.html`):
 Bootstrap 5.3 (en modo oscuro: `data-bs-theme="dark"`), Bootstrap Icons y las

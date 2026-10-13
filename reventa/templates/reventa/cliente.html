@@ -1,5 +1,9 @@
 {% extends "base.html" %}
-{% comment %} Ficha de un cliente: código de acceso, estado, renovar e historial. {% endcomment %}
+{% comment %}
+    Ficha de un cliente: su código, su servicio (activar, cargar meses, agregar
+    una pantalla), sus pantallas (nombre, titular, código propio, cortar) y el
+    historial de su saldo. Las reglas están en reventa/servicios.py.
+{% endcomment %}
 {% load humanize %}
 
 {% block titulo %}{{ cliente }}{% endblock %}
@@ -9,7 +13,7 @@
     <div>
         <a href="{% url 'reventa:clientes' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Clientes</a>
         <h1 class="pagina-titulo">{{ cliente }} {% include "reventa/_estado_cliente.html" with c=cliente %}</h1>
-        <p class="pagina-bajada">{% if cliente.revendedor %}De {{ cliente.revendedor }}{% else %}Cliente directo (no gasta créditos){% endif %}{% if cliente.telefono %} · {{ cliente.telefono }}{% endif %}</p>
+        <p class="pagina-bajada">{% if cliente.revendedor %}De {{ cliente.revendedor }}{% else %}Cliente directo de la empresa{% endif %}{% if cliente.telefono %} · {{ cliente.telefono }}{% endif %}</p>
     </div>
     <a href="{% url 'reventa:cliente_editar' cliente.pk %}" class="btn btn-outline-secondary">
         <i class="bi bi-pencil" aria-hidden="true"></i> Editar
@@ -23,17 +27,18 @@
         <section class="tarjeta h-100">
             <h2 class="tarjeta-titulo">Acceso a la app</h2>
             <dl class="ficha-datos">
-                <div><dt>Código de acceso</dt><dd class="dato fs-3">{{ cliente.codigo_legible }}</dd></div>
-                <div><dt>Dispositivos pagos</dt><dd class="dato">{% if cliente.vigente %}{{ cliente.pantallas_vigentes }}{% else %}—{% endif %}</dd></div>
-                <div><dt>Vence</dt><dd>{{ cliente.vence|date:"j/m/Y H:i"|default:"Nunca se activó" }}</dd></div>
+                <div><dt>Código del cliente</dt><dd class="dato fs-3">{{ cliente.codigo_legible }}</dd></div>
+                <div><dt>Pantallas</dt><dd class="dato">{% if cliente.vigente %}{{ cliente.pantallas_vigentes }}{% else %}—{% endif %}</dd></div>
+                <div><dt>Este mes vence</dt><dd>{{ cliente.vence|date:"j/m/Y H:i"|default:"Nunca se activó" }}</dd></div>
+                <div><dt>Meses pagos después</dt><dd class="dato">{{ meses_pagos }} <span class="texto-suave small">({{ cliente.saldo }} crédito{{ cliente.saldo|pluralize }})</span></dd></div>
             </dl>
             <dl class="ficha-datos">
                 <div><dt>Cliente desde</dt><dd>{{ numeros.activo_desde|date:"j/m/Y"|default:"—" }}</dd></div>
-                <div><dt>Renovaciones</dt><dd class="dato">{{ numeros.renovaciones }}</dd></div>
+                <div><dt>Meses de servicio</dt><dd class="dato">{{ numeros.renovaciones }}</dd></div>
                 <div><dt>Créditos usados</dt><dd class="dato">{{ numeros.creditos }}</dd></div>
                 <div><dt>Pagó en total</dt><dd class="dato">$ {{ numeros.cobrado|floatformat:2|intcomma }}</dd></div>
             </dl>
-            <p class="form-text">El cliente pone este código en la app (TV o celular). Si cierra sesión o reinstala, usa el mismo. Generar uno nuevo desconecta todos sus dispositivos.</p>
+            <p class="form-text">Con este código se entra en cualquier pantalla libre (TV o celular). Si cierra sesión o reinstala, usa el mismo. Generar uno nuevo desconecta los aparatos que entraron con él. Una pantalla también puede tener su propio código (abajo, en Pantallas).</p>
             <p class="form-text">Para instalar la app: <a href="{% url 'descargas:pagina' %}">App Android</a> (link directo <span class="dato">{{ request.scheme }}://{{ request.get_host }}/descargar/</span>).</p>
             <form method="post" action="{% url 'reventa:cliente_codigo' cliente.pk %}"
                   onsubmit="return confirm('¿Generar un código nuevo? El actual deja de servir.');">
@@ -45,58 +50,126 @@
     </div>
     <div class="col-lg-6">
         <section class="tarjeta h-100">
-            <h2 class="tarjeta-titulo">{% if cliente.vence %}Renovar{% else %}Activar{% endif %}</h2>
-            {% if adelantada %}
-            <p class="mb-0">Ya tiene pagados los próximos 30 días ({{ adelantada.pantallas }} dispositivo{{ adelantada.pantallas|pluralize }}, desde el {{ adelantada.desde|date:"j/m/Y" }} hasta el {{ adelantada.hasta|date:"j/m/Y" }}). Se puede volver a renovar cuando empiecen.</p>
-            {% else %}
+            {% if cliente.vigente %}
+            <h2 class="tarjeta-titulo">Cargar meses</h2>
             <p class="texto-suave small">
-                {% if cliente.revendedor %}
-                1 crédito = 1 dispositivo durante 30 días. Disponibles: <strong>{{ saldo }}</strong>.
-                {% else %}
-                Cliente directo: no gasta créditos.
-                {% endif %}
-                {% if cliente.vigente %}Como está vigente, los 30 días se suman desde que vence ({{ cliente.vence|date:"j/m/Y" }}).{% endif %}
+                Tiene {{ cliente.pantallas.count }} pantalla{{ cliente.pantallas.count|pluralize }}: cada mes se descuentan solos {{ cliente.pantallas.count }} crédito{{ cliente.pantallas.count|pluralize }} de su saldo.
+                {% if meses_pagos %}Le alcanza para {{ meses_pagos }} mes{{ meses_pagos|pluralize:"es" }} más después del {{ cliente.vence|date:"j/m/Y" }}.{% else %}<strong>No tiene meses pagos después del {{ cliente.vence|date:"j/m/Y" }}.</strong>{% endif %}
+                {% include "reventa/_origen_creditos.html" %}
             </p>
-            <form method="post" action="{% url 'reventa:cliente_renovar' cliente.pk %}" class="row g-2 align-items-end" novalidate
-                  {% if cliente.revendedor %}onsubmit="var n = this.dispositivos.value; return confirm('¿Usar ' + n + ' crédito(s) para ' + n + ' dispositivo(s) por 30 días?');"{% endif %}>
+            <form method="post" action="{% url 'reventa:cliente_cargar' cliente.pk %}" class="row g-2 align-items-end" novalidate>
                 {% csrf_token %}
-                {% include "parciales/_campo.html" with campo=form_renovar.dispositivos ancho="col-sm-5" %}
-                {% include "parciales/_campo.html" with campo=form_renovar.monto_cobrado ancho="col-sm-7" %}
-                <p class="col-12 form-text mb-0">Precio sugerido por dispositivo: $ {{ precio_dispositivo|floatformat:2|intcomma }}</p>
-                <div class="col-12"><button type="submit" class="btn btn-primary">{% if cliente.vence %}Renovar{% else %}Activar{% endif %}</button></div>
+                {% include "parciales/_campo.html" with campo=form_cargar.meses ancho="col-sm-4" %}
+                {% include "parciales/_campo.html" with campo=form_cargar.monto_cobrado ancho="col-sm-8" %}
+                {% include "parciales/_campo.html" with campo=form_cargar.cortesia ancho="col-12" %}
+                {% if form_cargar.de_la_empresa %}{% include "parciales/_campo.html" with campo=form_cargar.de_la_empresa ancho="col-12" %}{% endif %}
+                <p class="col-12 form-text mb-0">Precio sugerido: $ {{ precio_pantalla|floatformat:2|intcomma }} por pantalla por mes.</p>
+                <div class="col-12"><button type="submit" class="btn btn-primary">Cargar</button></div>
             </form>
+            <details class="mt-4">
+                <summary class="fw-semibold">Agregar una pantalla ahora</summary>
+                <p class="texto-suave small mt-2">Cuesta 1 crédito y dura hasta el {{ cliente.vence|date:"j/m/Y" }}; desde ahí se paga con las demás.</p>
+                <form method="post" action="{% url 'reventa:cliente_agregar_pantalla' cliente.pk %}" class="row g-2 align-items-end" novalidate>
+                    {% csrf_token %}
+                    {% include "parciales/_campo.html" with campo=form_agregar.monto_cobrado ancho="col-sm-8" %}
+                    {% include "parciales/_campo.html" with campo=form_agregar.cortesia ancho="col-12" %}
+                    {% if form_agregar.de_la_empresa %}{% include "parciales/_campo.html" with campo=form_agregar.de_la_empresa ancho="col-12" %}{% endif %}
+                    <div class="col-12"><button type="submit" class="btn btn-outline-secondary">Agregar pantalla</button></div>
+                </form>
+            </details>
+            {% else %}
+            <h2 class="tarjeta-titulo">Activar</h2>
+            <p class="texto-suave small">
+                Cada pantalla es un aparato a la vez y usa 1 crédito por mes. Se cargan pantallas × meses créditos y se descuentan solos, uno por mes.
+                {% include "reventa/_origen_creditos.html" %}
+            </p>
+            <form method="post" action="{% url 'reventa:cliente_activar' cliente.pk %}" class="row g-2 align-items-end" novalidate>
+                {% csrf_token %}
+                {% include "parciales/_campo.html" with campo=form_activar.dispositivos ancho="col-sm-6" %}
+                {% include "parciales/_campo.html" with campo=form_activar.meses ancho="col-sm-6" %}
+                {% include "parciales/_campo.html" with campo=form_activar.monto_cobrado ancho="col-12" %}
+                {% include "parciales/_campo.html" with campo=form_activar.cortesia ancho="col-12" %}
+                {% if form_activar.de_la_empresa %}{% include "parciales/_campo.html" with campo=form_activar.de_la_empresa ancho="col-12" %}{% endif %}
+                <p class="col-12 form-text mb-0">Precio sugerido: $ {{ precio_pantalla|floatformat:2|intcomma }} por pantalla por mes.</p>
+                <div class="col-12"><button type="submit" class="btn btn-primary">Activar</button></div>
+            </form>
+            {% endif %}
+            {% if form_pasar %}
+            <details class="mt-4">
+                <summary class="fw-semibold">{% if cliente.revendedor %}Cambiar de revendedor{% else %}Pasarlo a un revendedor{% endif %}</summary>
+                <p class="texto-suave small mt-2">Su saldo se queda con él (ya está pagado). Desde ahí, lo que se le cargue sale de los créditos de ese revendedor.</p>
+                <form method="post" action="{% url 'reventa:cliente_pasar' cliente.pk %}" class="row g-2 align-items-end">
+                    {% csrf_token %}
+                    {% include "parciales/_campo.html" with campo=form_pasar.revendedor ancho="col-sm-8" %}
+                    <div class="col-sm-4"><button type="submit" class="btn btn-outline-secondary w-100">Pasar</button></div>
+                </form>
+            </details>
             {% endif %}
         </section>
     </div>
 </div>
 
-<section class="tarjeta mb-4 p-0">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 px-4 pt-4">
-        <h2 class="tarjeta-titulo">Dispositivos conectados ({{ dispositivos|length }} de {{ cliente.pantallas_vigentes }})</h2>
-        {% if dispositivos %}
-        <form method="post" action="{% url 'reventa:cliente_liberar' cliente.pk %}"
-              onsubmit="return confirm('¿Desconectar todos los dispositivos? Van a tener que volver a poner el código.');">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-secondary btn-sm">Liberar todos</button>
-        </form>
-        {% endif %}
+<section class="tarjeta mb-4 p-0" id="pantallas">
+    <div class="px-4 pt-4">
+        <h2 class="tarjeta-titulo">Pantallas ({{ pantallas|length }})</h2>
+        <p class="form-text">Cada pantalla es un aparato a la vez. Nombre y titular son opcionales (para saber cuál es cuál). Con <strong>código propio</strong>, esa pantalla se usa solo con su código; sin él, con el del cliente. <strong>Cortar</strong> desconecta su aparato y no lo deja volver a entrar (se sigue pagando: es un castigo, no una baja). Un aparato sin señales durante {{ horas_sin_senal }} horas se libera solo.</p>
     </div>
-    <p class="form-text px-4">Un dispositivo sin señales durante {{ horas_sin_senal }} horas se libera solo (ej: desinstalaron la app sin cerrar sesión).</p>
-    {% if dispositivos %}
+    {% if pantallas %}
     <div class="table-responsive">
         <table class="table tabla mb-0">
-            <thead><tr><th scope="col">Dispositivo</th><th scope="col">Conectado desde</th><th scope="col">Última señal</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+            <thead><tr><th scope="col">#</th><th scope="col">Nombre y titular</th><th scope="col">Código</th><th scope="col">Aparato conectado</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
             <tbody>
-            {% for d in dispositivos %}
+            {% for p in pantallas %}
                 <tr>
-                    <td>{{ d.nombre|default:"Sin nombre" }}</td>
-                    <td class="small">{{ d.conectado|date:"j/m/Y H:i" }}</td>
-                    <td class="small">hace {{ d.ultima_senal|timesince }}</td>
-                    <td class="text-end">
-                        <form method="post" action="{% url 'reventa:cliente_liberar' cliente.pk %}">
-                            {% csrf_token %}<input type="hidden" name="dispositivo" value="{{ d.pk }}">
-                            <button type="submit" class="btn btn-outline-secondary btn-sm">Liberar</button>
+                    <td class="dato">{{ p.numero }}{% if p.cortada %}<br><span class="chip chip-caida">Cortada</span>{% endif %}</td>
+                    <td>
+                        <form method="post" action="{% url 'reventa:cliente_pantalla' cliente.pk p.pk %}" class="d-flex flex-wrap gap-2 align-items-center">
+                            {% csrf_token %}<input type="hidden" name="accion" value="editar">
+                            <input type="text" name="nombre" value="{{ p.nombre }}" maxlength="60" class="form-control form-control-sm" style="max-width:11rem" placeholder="Ej: TV habitación" aria-label="Nombre de la pantalla {{ p.numero }}">
+                            <input type="text" name="titular" value="{{ p.titular }}" maxlength="100" class="form-control form-control-sm" style="max-width:11rem" placeholder="Titular (opcional)" aria-label="Titular de la pantalla {{ p.numero }}">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">Guardar</button>
                         </form>
+                    </td>
+                    <td>
+                        {% if p.codigo %}<span class="dato">{{ p.codigo_legible }}</span>{% else %}<span class="texto-suave small">El del cliente</span>{% endif %}
+                    </td>
+                    <td class="small">
+                        {% if p.dispositivo %}
+                        {{ p.dispositivo.nombre|default:"Sin nombre" }}<br><span class="texto-suave">señal hace {{ p.dispositivo.ultima_senal|timesince }}</span>
+                        {% else %}<span class="texto-suave">Libre</span>{% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="d-flex flex-wrap gap-1 justify-content-end">
+                            {% if p.dispositivo %}
+                            <form method="post" action="{% url 'reventa:cliente_pantalla' cliente.pk p.pk %}">
+                                {% csrf_token %}<input type="hidden" name="accion" value="liberar">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">Liberar</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'reventa:cliente_pantalla' cliente.pk p.pk %}"
+                                  {% if not p.cortada %}onsubmit="return confirm('¿Cortar esta pantalla? Su aparato se desconecta y no puede volver a entrar hasta que la habilites. No se devuelve nada.');"{% endif %}>
+                                {% csrf_token %}<input type="hidden" name="accion" value="{% if p.cortada %}habilitar{% else %}cortar{% endif %}">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">{% if p.cortada %}Habilitar{% else %}Cortar{% endif %}</button>
+                            </form>
+                            <form method="post" action="{% url 'reventa:cliente_pantalla' cliente.pk p.pk %}"
+                                  {% if p.codigo %}onsubmit="return confirm('¿Darle un código nuevo? El actual deja de servir y su aparato se desconecta.');"{% endif %}>
+                                {% csrf_token %}<input type="hidden" name="accion" value="dar_codigo">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">{% if p.codigo %}Código nuevo{% else %}Darle código propio{% endif %}</button>
+                            </form>
+                            {% if p.codigo %}
+                            <form method="post" action="{% url 'reventa:cliente_pantalla' cliente.pk p.pk %}">
+                                {% csrf_token %}<input type="hidden" name="accion" value="sacar_codigo">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">Usar el del cliente</button>
+                            </form>
+                            {% endif %}
+                            {% if pantallas|length > 1 %}
+                            <form method="post" action="{% url 'reventa:cliente_pantalla' cliente.pk p.pk %}"
+                                  onsubmit="return confirm('¿Quitar esta pantalla? Su aparato se desconecta y no se devuelve nada. Desde el mes que viene se paga una menos.');">
+                                {% csrf_token %}<input type="hidden" name="accion" value="quitar">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Quitar</button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
             {% endfor %}
@@ -104,25 +177,36 @@
         </table>
     </div>
     {% else %}
-    <p class="texto-suave px-4 pb-4 mb-0">Ningún dispositivo conectado ahora.</p>
+    <p class="texto-suave px-4 pb-4 mb-0">Todavía no tiene pantallas: se crean al activarlo.</p>
+    {% endif %}
+    {% if sin_conectar %}
+    <div class="px-4 pb-4">
+        <p class="small mb-2">Aparatos conectados de antes, sin pantalla asignada:</p>
+        {% for d in sin_conectar %}
+        <form method="post" action="{% url 'reventa:cliente_liberar' cliente.pk %}" class="d-inline">
+            {% csrf_token %}<input type="hidden" name="dispositivo" value="{{ d.pk }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">Liberar {{ d.nombre|default:"sin nombre" }}</button>
+        </form>
+        {% endfor %}
+    </div>
     {% endif %}
 </section>
 
 <section class="tarjeta p-0">
-    <h2 class="tarjeta-titulo px-4 pt-4">Historial</h2>
-    {% if renovaciones %}
+    <h2 class="tarjeta-titulo px-4 pt-4">Historial de su saldo</h2>
+    {% if historial %}
     <div class="table-responsive">
         <table class="table tabla mb-0">
-            <thead><tr><th scope="col">Fecha</th><th scope="col">Período</th><th scope="col">Dispositivos</th><th scope="col">Créditos</th><th scope="col">Cobrado</th><th scope="col">Por</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Qué</th><th scope="col">Créditos</th><th scope="col">De dónde</th><th scope="col">Cobrado</th><th scope="col">Por</th></tr></thead>
             <tbody>
-            {% for r in renovaciones %}
+            {% for c in historial %}
                 <tr>
-                    <td class="small">{{ r.fecha|date:"j/m/Y H:i" }}</td>
-                    <td class="small">{{ r.desde|date:"j/m/Y" }} → {{ r.hasta|date:"j/m/Y" }}</td>
-                    <td class="dato">{{ r.pantallas }}</td>
-                    <td class="dato">{{ r.creditos }}</td>
-                    <td class="dato">$ {{ r.monto_cobrado|floatformat:2|intcomma }}</td>
-                    <td class="texto-suave small">{{ r.hecha_por.username|default:"—" }}</td>
+                    <td class="small">{{ c.fecha|date:"j/m/Y H:i" }}</td>
+                    <td>{{ c.get_tipo_display }}{% if c.detalle %}<br><span class="texto-suave small">{{ c.detalle }}</span>{% endif %}</td>
+                    <td class="dato">{{ c.cantidad|stringformat:"+d" }}</td>
+                    <td class="small">{% if c.tipo == 'carga' %}{% if c.revendedor %}{{ c.revendedor }}{% else %}La empresa{% endif %}{% else %}—{% endif %}</td>
+                    <td class="dato">{% if c.tipo == 'carga' %}{% if c.cortesia %}<span class="chip">Cortesía</span>{% else %}$ {{ c.monto_cobrado|floatformat:2|intcomma }}{% endif %}{% else %}—{% endif %}</td>
+                    <td class="texto-suave small">{{ c.hecho_por.username|default:"automático" }}</td>
                 </tr>
             {% endfor %}
             </tbody>

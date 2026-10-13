@@ -176,11 +176,12 @@ class SeguridadTests(Base):
 
 class ClientesDirectosTests(Base):
 
-    def test_directo_no_gasta_creditos_y_entra(self):
+    def test_directo_no_gasta_creditos_de_ningun_revendedor_y_entra(self):
         directo = servicios.crear_cliente(None, 'Prueba del dueño')
         saldo = self.juan.saldo
         renovacion = servicios.renovar(directo, monto_cobrado=Decimal('0'))
-        self.assertEqual(renovacion.creditos, 0)
+        self.assertEqual(renovacion.creditos, 1)   # su mes usa 1 crédito, que pone la empresa
+        self.assertIsNone(directo.creditos.get(tipo='carga').revendedor)
         self.assertEqual(self.juan.saldo, saldo)
         self.assertEqual(self.entrar(directo.codigo).status_code, 200)
 
@@ -189,7 +190,7 @@ class ClientesDirectosTests(Base):
         self.client.post(reverse('reventa:cliente_nuevo'), {'revendedor': '', 'nombre': 'Directo'})
         directo = Cliente.objects.get(nombre='Directo')
         self.assertIsNone(directo.revendedor)
-        self.client.post(reverse('reventa:cliente_renovar', args=[directo.pk]), {'dispositivos': 1})
+        self.client.post(reverse('reventa:cliente_activar', args=[directo.pk]), {'dispositivos': 1, 'meses': 1})
         directo.refresh_from_db()
         self.assertTrue(directo.vigente)
         self.assertEqual(self.client.get(reverse('reventa:cliente', args=[directo.pk])).status_code, 200)

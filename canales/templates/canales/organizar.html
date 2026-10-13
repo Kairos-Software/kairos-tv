@@ -374,7 +374,7 @@
                     <span class="espejo-nombre" title="{{ item.nombre }}">{{ item.nombre }}</span>
                     <span class="espejo-detalle">
                         {% if contenido == 'serie' %}
-                        {{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% endif %}
+                        <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% endif %}
                         {% else %}
                         {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<span class="estado-mal" title="{{ item.no_se_ve }}">No se ve</span>{% else %}Se ve en la app{% endif %}
                         {% endif %}
@@ -837,6 +837,7 @@
         dialogo.querySelectorAll('[data-solo-canal]').forEach(function (el) { el.style.display = esSerie ? 'none' : ''; });
         vista.classList.toggle('poster', esSerie || '{{ forma }}' !== 'vivo');
         document.getElementById('editar-mas').href = datos.mas;
+        document.getElementById('editar-mas').textContent = esSerie ? 'Ver y ordenar capítulos' : 'Más opciones (señales, idioma…)';
         var lista = document.getElementById('editar-origenes');
         lista.textContent = '';
         (datos.fuentes.length ? datos.fuentes : [{origen: 'No tiene señales cargadas', url: '', tipo: '', estado: ''}]).forEach(function (f) {

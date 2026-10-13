@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load canales_extras %}
+{% load static canales_extras %}
 
 {% block titulo %}{{ serie.nombre }}{% endblock %}
 
@@ -26,59 +26,100 @@
 {% endblock %}
 
 {% block contenido %}
+{% comment %}
+    Los capítulos de cada temporada, en el orden en que los muestra la app. Quien puede editar los ordena ahí
+    mismo: arrastrando (de los puntitos) o con las flechas, y "Guardar orden" (static/js/ordenar_capitulos.js ->
+    organizar.ordenar_capitulos, que los numera 1, 2, 3... en ese orden).
+{% endcomment %}
 <div class="temporadas-lista">
-    {% for numero, capitulos in serie.temporadas_ordenadas %}
-    <details class="temporada" {% if forloop.first %}open{% endif %}>
+    {% for numero, capitulos, orden in serie.temporadas_ordenadas %}
+    <details class="temporada" id="temporada-{{ numero }}" {% if forloop.first or orden.desordenada %}open{% endif %}>
         <summary>
             <span><i class="bi bi-chevron-right" aria-hidden="true"></i> Temporada {{ numero }}</span>
             <span class="texto-suave">{{ capitulos|length }} capítulo{{ capitulos|length|pluralize }}</span>
         </summary>
-        <div class="temporada-capitulos">
+        {% if puede_editar %}
+        <form method="post" action="{% url 'canales:serie_ordenar' %}" class="orden" data-orden>
+            {% csrf_token %}
+            <input type="hidden" name="nombre" value="{{ serie.nombre }}">
+            <input type="hidden" name="temporada" value="{{ numero }}">
+            {% if orden.desordenada %}
+            <div class="orden-aviso" role="status">
+                <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                <span>Parece que están <strong>desordenados</strong>: el número que dice cada título no va en orden.</span>
+                <button type="button" class="btn btn-primary btn-sm" data-orden-por-titulo>Ordenarlos por el número del título</button>
+            </div>
+            {% endif %}
+            {% if capitulos|length > 1 %}
+            <p class="orden-ayuda"><i class="bi bi-grip-vertical" aria-hidden="true"></i> Para cambiar el orden, <strong>arrastrá</strong> un capítulo de los puntitos o usá las <strong>flechas</strong>. Después tocá <strong>Guardar orden</strong>.</p>
+            {% endif %}
+        {% endif %}
+        <ol class="cap-lista">
             {% for capitulo in capitulos %}
-            <article class="capitulo" id="capitulo-{{ capitulo.canal.pk }}">
-                <div class="capitulo-encabezado">
-                    <span class="capitulo-numero dato">E{% if capitulo.numero != None %}{{ capitulo.numero|stringformat:"02d" }}{% else %}—{% endif %}</span>
-                    <div class="capitulo-titulo">
-                        <h2>{{ capitulo.titulo|default:capitulo.canal.nombre }}</h2>
-                        <p class="texto-suave mb-0">{{ capitulo.canal.nombre }}</p>
-                    </div>
-                    <div class="capitulo-estado">
-                        {% if capitulo.no_se_ve %}<span class="chip chip-caida">No se ve</span>
-                        <span class="capitulo-motivo">{{ capitulo.no_se_ve }}</span>
-                        {% else %}<span class="chip chip-agregada">Se ve en la app</span>{% endif %}
-                    </div>
-                    {% if puede_editar %}
+            <li class="cap{% if capitulo.no_se_ve %} cap-fuera{% endif %}" id="capitulo-{{ capitulo.canal.pk }}" data-numero-en-el-titulo="{{ capitulo.numero_en_el_titulo|default_if_none:'' }}">
+                {% if puede_editar %}
+                <input type="hidden" name="capitulo" value="{{ capitulo.canal.pk }}">
+                {% if capitulos|length > 1 %}<span class="cap-agarre" title="Arrastrar para cambiarlo de lugar" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>{% endif %}
+                {% endif %}
+                <span class="cap-numero">{{ forloop.counter }}</span>
+                <span class="cap-imagen">{% if capitulo.canal.logo %}<img src="{{ capitulo.canal.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<i class="bi bi-film" aria-hidden="true"></i>{% endif %}</span>
+                <span class="cap-texto">
+                    <strong>{{ capitulo.titulo|default:capitulo.canal.nombre }}</strong>
+                    {% if capitulo.no_se_ve %}<span class="estado-mal">No se ve: {{ capitulo.no_se_ve }}</span>{% else %}<span class="texto-suave">Se ve en la app</span>{% endif %}
+                </span>
+                {% if puede_editar %}
+                <span class="cap-acciones">
+                    {% if capitulos|length > 1 %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-mover="-1" aria-label="Subir «{{ capitulo.titulo|default:capitulo.canal.nombre }}»" title="Subir"><i class="bi bi-arrow-up" aria-hidden="true"></i></button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-mover="1" aria-label="Bajar «{{ capitulo.titulo|default:capitulo.canal.nombre }}»" title="Bajar"><i class="bi bi-arrow-down" aria-hidden="true"></i></button>
+                    {% endif %}
                     <a class="btn btn-outline-secondary btn-sm" href="{% url 'canales:canal_editar' capitulo.canal.pk %}?volver={{ request.get_full_path|urlencode }}">
                         <i class="bi bi-pencil" aria-hidden="true"></i> Editar
                     </a>
-                    {% endif %}
-                </div>
-
-                <div class="table-responsive capitulo-fuentes">
-                    <table class="table tabla mb-0">
-                        <thead><tr><th scope="col">Fuente</th><th scope="col">Formato</th><th scope="col">Códec</th><th scope="col">Estado</th><th scope="col">Error</th></tr></thead>
-                        <tbody>
-                        {% for fuente in capitulo.canal.fuentes.all %}
-                            <tr>
-                                <td><span class="dato">{{ forloop.counter }}</span><div class="direccion">{{ fuente.url }}</div></td>
-                                <td>{{ fuente.get_tipo_display }}</td>
-                                <td class="dato">{{ fuente.codec|default:"No se sabe" }}</td>
-                                <td>
-                                    <span class="chip {% if fuente.estado == 'funciona' %}chip-agregada{% elif fuente.estado == 'caida' %}chip-caida{% else %}chip-pendiente{% endif %}">{{ fuente.get_estado_display }}</span>
-                                    {% if not fuente.activa %}<span class="chip">Apagada</span>{% endif %}
-                                </td>
-                                <td class="small">{{ fuente.error|default:"Sin errores registrados." }}</td>
-                            </tr>
-                        {% empty %}
-                            <tr><td colspan="5" class="texto-suave">Este capítulo no tiene fuentes.</td></tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </article>
+                </span>
+                {% endif %}
+                <details class="cap-fuentes">
+                    <summary>Fuentes ({{ capitulo.canal.fuentes.all|length }})</summary>
+                    <div class="table-responsive">
+                        <table class="table tabla mb-0">
+                            <thead><tr><th scope="col">Fuente</th><th scope="col">Formato</th><th scope="col">Códec</th><th scope="col">Estado</th><th scope="col">Error</th></tr></thead>
+                            <tbody>
+                            {% for fuente in capitulo.canal.fuentes.all %}
+                                <tr>
+                                    <td><span class="dato">{{ forloop.counter }}</span><div class="direccion">{{ fuente.url }}</div></td>
+                                    <td>{{ fuente.get_tipo_display }}</td>
+                                    <td class="dato">{{ fuente.codec|default:"No se sabe" }}</td>
+                                    <td>
+                                        <span class="chip {% if fuente.estado == 'funciona' %}chip-agregada{% elif fuente.estado == 'caida' %}chip-caida{% else %}chip-pendiente{% endif %}">{{ fuente.get_estado_display }}</span>
+                                        {% if not fuente.activa %}<span class="chip">Apagada</span>{% endif %}
+                                    </td>
+                                    <td class="small">{{ fuente.error|default:"Sin errores registrados." }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="texto-suave">Este capítulo no tiene fuentes.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            </li>
             {% endfor %}
-        </div>
+        </ol>
+        {% if puede_editar %}
+            <div class="orden-barra" hidden data-orden-barra>
+                <span data-orden-cuenta aria-live="polite"></span>
+                <span class="orden-barra-botones">
+                    <button type="button" class="btn btn-outline-secondary" data-orden-deshacer>Deshacer</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check2" aria-hidden="true"></i> Guardar orden</button>
+                </span>
+            </div>
+        </form>
+        {% endif %}
     </details>
     {% endfor %}
 </div>
+{% if puede_editar %}
+<script src="{% static 'js/ordenar_capitulos.js' %}"></script>
+{% endif %}
+<link rel="stylesheet" href="{% static 'css/ordenar_capitulos.css' %}">
 {% endblock %}

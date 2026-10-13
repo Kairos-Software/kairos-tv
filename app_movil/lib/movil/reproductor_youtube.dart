@@ -32,6 +32,7 @@ import '../api/cliente.dart';
 import '../api/modelos.dart';
 import '../sesion.dart';
 import '../tv/escala.dart' show TamanioReal;
+import 'calidad_youtube.dart';
 import 'datos.dart';
 import 'estilo.dart';
 import 'medidor.dart';
@@ -58,7 +59,11 @@ String? idDeVideo(String direccion) {
 ///   [limite]: el ancho máximo, en píxeles de la pantalla, con que se pide el
 ///     video (0 = sin límite). YouTube elige la calidad según el tamaño del
 ///     reproductor: con el límite, el reproductor se arma más chico y se
-///     agranda, y YouTube no manda más calidad que esa.
+///     agranda, y YouTube no manda más calidad que esa. Se cambia sin
+///     recargar con `cambiarLimite(ancho)` (ver [CalidadYoutube]).
+///
+/// Cada 5 s avisa cuántos cuadros dibujó y cuántos tarde ("fluidez"): si el
+/// aparato no da abasto, la app baja la calidad.
 @visibleForTesting
 String paginaDelReproductor(String id, {required bool controles, Duration desde = Duration.zero, int limite = 0}) {
   final opciones = jsonEncode({
@@ -92,7 +97,19 @@ function acomodar() {
 }
 acomodar();
 addEventListener('resize', acomodar);
+function cambiarLimite(ancho) { LIMITE = ancho; acomodar(); }
 function avisar(datos) { Kairos.postMessage(JSON.stringify(datos)); }
+var cuadros = 0, lentos = 0, anterior = 0;
+function contarCuadro(ahora) {
+  if (anterior) { cuadros++; if (ahora - anterior > ${CalidadYoutube.cuadroLentoMs}) lentos++; }
+  anterior = ahora;
+  requestAnimationFrame(contarCuadro);
+}
+requestAnimationFrame(contarCuadro);
+setInterval(function () {
+  avisar({e: 'fluidez', c: cuadros, l: lentos});
+  cuadros = 0; lentos = 0;
+}, ${CalidadYoutube.tanda.inMilliseconds});
 var reproductor;
 function onYouTubeIframeAPIReady() {
   reproductor = new YT.Player('video', {
@@ -140,6 +157,12 @@ class EstadoYoutube extends ChangeNotifier {
 
   bool get reproduciendo => estado == _reproduciendo;
   bool get cargando => !listo || estado == _cargando || estado == -1;
+
+  /// Se frenó a cargar (ya había arrancado).
+  bool get frenado => listo && estado == _cargando;
+
+  /// Lo que midió la página cada 5 s: cuántos cuadros dibujó y cuántos tarde.
+  void Function(int cuadros, int lentos)? alMedirFluidez;
   bool get termino => estado == _termino;
 
   void recibir(String mensaje) {
@@ -156,6 +179,9 @@ class EstadoYoutube extends ChangeNotifier {
         estado = (datos['v'] as num?)?.toInt() ?? estado;
       case 'error':
         error = (datos['v'] as num?)?.toInt() ?? 5;
+      case 'fluidez':
+        alMedirFluidez?.call((datos['c'] as num?)?.toInt() ?? 0, (datos['l'] as num?)?.toInt() ?? 0);
+        return;
       case 'tiempo':
         duracion = Duration(milliseconds: (((datos['d'] as num?) ?? 0) * 1000).round());
         posicion = Duration(milliseconds: (((datos['t'] as num?) ?? 0) * 1000).round());
@@ -213,17 +239,18 @@ class ControlYoutube extends ChangeNotifier {
   }) {
     estado.addListener(_alCambiarEstado);
     estado.avance.addListener(_medir);
+    if (tv) {
+      final pantalla = WidgetsBinding.instance.platformDispatcher.views.first.physicalSize;
+      calidad = CalidadYoutube(anchoDePantalla: pantalla.width, alCambiar: _cambiarLimite);
+      estado.alMedirFluidez = (cuadros, lentos) {
+        if (estado.reproduciendo) calidad?.medir(cuadros: cuadros, lentos: lentos);
+      };
+    }
     _guardar = Timer.periodic(const Duration(seconds: 5), (_) => guardarProgreso());
   }
 
   /// Si en este tiempo no cargó, casi siempre es la conexión.
   static const _sinRespuesta = Duration(seconds: 25);
-
-  /// En la TV el video se pide como mucho en 720p (1280 de ancho). El
-  /// navegador interno de muchas TVs (el WebView, con el que se ve YouTube
-  /// dentro de la app) no da abasto con Full HD y el video se traba; desde el
-  /// sillón 720p casi no se distingue.
-  static const limiteTv = 1280;
 
   final ApiCliente api;
   final Biblioteca biblioteca;
@@ -235,6 +262,10 @@ class ControlYoutube extends ChangeNotifier {
   final estado = EstadoYoutube();
   WebViewController? web;
 
+  /// En la TV, la calidad que aguanta este aparato (se aprende sola). En el
+  /// celular no hace falta: YouTube elige por el tamaño de la pantalla.
+  CalidadYoutube? calidad;
+
   Timer? _guardar;
   Timer? _vigia;
   AppLifecycleListener? _ciclo;
@@ -245,6 +276,7 @@ class ControlYoutube extends ChangeNotifier {
   Duration _vistoDeEstaVez = Duration.zero;
   bool _vistaContada = false;
   Duration? _ultimaPosicion;
+  bool _seEstabaViendo = false;
 
   /// Carga el video de [canal] (desde [desde], si se dice).
   void abrir({Duration? desde}) {
@@ -279,7 +311,7 @@ class ControlYoutube extends ChangeNotifier {
     }
     unawaited(
       nuevo.loadHtmlString(
-        paginaDelReproductor(id, controles: !tv, desde: desde ?? Duration.zero, limite: tv ? limiteTv : 0),
+        paginaDelReproductor(id, controles: !tv, desde: desde ?? Duration.zero, limite: calidad?.ancho ?? 0),
         baseUrl: '$sitioDeKairos/',
       ),
     );
@@ -287,6 +319,8 @@ class ControlYoutube extends ChangeNotifier {
       if (!_cerrado && !estado.listo && estado.error == null) estado.reiniciar(error: -1);
     });
     web = nuevo;
+    _seEstabaViendo = false;
+    calidad?.calmar();
     estado.reiniciar();
     // Si la app se va al fondo, el video se pausa (el WebView seguiría sonando)
     _ciclo ??= AppLifecycleListener(
@@ -332,6 +366,11 @@ class ControlYoutube extends ChangeNotifier {
     final segundo = (destino < Duration.zero ? Duration.zero : (destino > limite ? limite : destino)).inSeconds;
     _js('reproductor.seekTo($segundo, true);');
     estado.posicion = Duration(seconds: segundo);
+    calidad?.calmar(); // al adelantar se frena a cargar: no es que no dé abasto
+  }
+
+  void _cambiarLimite(int ancho) {
+    unawaited(web?.runJavaScript('cambiarLimite($ancho);').catchError((Object _) {}));
   }
 
   void _js(String codigo) {
@@ -342,6 +381,8 @@ class ControlYoutube extends ChangeNotifier {
 
   void _alCambiarEstado() {
     if (_cerrado) return;
+    if (estado.frenado && _seEstabaViendo) calidad?.anotarFrenada();
+    _seEstabaViendo = estado.reproduciendo;
     final error = estado.error;
     if (error != null && !_avisado && error > 0) {
       _avisado = true;

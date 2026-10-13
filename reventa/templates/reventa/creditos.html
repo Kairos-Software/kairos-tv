@@ -7,7 +7,7 @@
 {% block encabezado %}
 <div class="pagina-encabezado">
     <h1 class="pagina-titulo">Mis créditos</h1>
-    <p class="pagina-bajada">Tenés <strong>{{ numeros.saldo }}</strong> crédito{{ numeros.saldo|pluralize }} disponible{{ numeros.saldo|pluralize }}. No vencen: se gastan recién al activar o renovar un cliente.</p>
+    <p class="pagina-bajada">Tenés <strong>{{ numeros.saldo }}</strong> crédito{{ numeros.saldo|pluralize }} disponible{{ numeros.saldo|pluralize }}. No vencen: se gastan al cargárselos a un cliente (al activarlo, cargarle meses o agregarle una pantalla).</p>
 </div>
 {% endblock %}
 
@@ -32,6 +32,16 @@
     {% else %}
     <p class="texto-suave mb-0">Todavía no hay paquetes a la venta.</p>
     {% endif %}
+</section>
+
+<section class="tarjeta mb-4">
+    <h2 class="tarjeta-titulo">Mi precio</h2>
+    <p class="texto-suave small">Lo que les cobrás a tus clientes por cada pantalla, por mes. Se propone solo al activarlos o cargarles meses (siempre se puede cambiar el monto).</p>
+    <form method="post" action="{% url 'reventa:mi_precio' %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        {% include "parciales/_campo.html" with campo=form_precio.precio_pantalla ancho="col-sm-6" %}
+        <div class="col-sm-3"><button type="submit" class="btn btn-outline-secondary w-100">Guardar</button></div>
+    </form>
 </section>
 
 <section class="tarjeta mb-4 p-0">

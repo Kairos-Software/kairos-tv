@@ -23,8 +23,8 @@ class ActivarComoEnProduccionTests(TransactionTestCase):
         self.client.raise_request_exception = True
 
     def activar(self, cliente, monto='0'):
-        respuesta = self.client.post(reverse('reventa:cliente_renovar', args=[cliente.pk]),
-                                     {'dispositivos': '1', 'monto_cobrado': monto})
+        respuesta = self.client.post(reverse('reventa:cliente_activar', args=[cliente.pk]),
+                                     {'dispositivos': '1', 'meses': '1', 'monto_cobrado': monto})
         self.assertEqual(respuesta.status_code, 302)
         return Cliente.objects.get(pk=cliente.pk)
 

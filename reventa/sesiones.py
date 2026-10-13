@@ -1,12 +1,14 @@
 """
 Sesiones de la app de los CLIENTES (capa Base): entrar con el código y
-controlar que no haya más dispositivos conectados que pantallas pagadas.
+controlar que no haya más aparatos conectados que pantallas pagadas.
 
 Cómo funciona:
-  1. El cliente pone su código de 8 números en la app.
-  2. Si está vigente y le queda una pantalla libre, se crea un Dispositivo
-     y se le entrega un token (empieza con "c_" para distinguirlo de los
-     tokens de los usuarios del panel).
+  1. El cliente pone un código de 8 números en la app: el SUYO (entra a
+     cualquier pantalla libre que no tenga código propio) o el PROPIO de una
+     pantalla (entra solo a esa).
+  2. Si está vigente y hay pantalla libre (y no cortada), se crea un
+     Dispositivo en ella y se le entrega un token (empieza con "c_" para
+     distinguirlo de los tokens de los usuarios del panel).
   3. La app manda el token en cada pedido y, mientras está abierta, da una
      "señal" cada pocos minutos (GET /api/v1/cliente/).
   4. Si un dispositivo no da señales en HORAS_SIN_SENAL, su pantalla se
@@ -26,7 +28,8 @@ from django.utils import timezone
 from actividad.models import Accion
 from actividad.registro import registrar
 
-from .models import HORAS_SIN_SENAL, Cliente, Dispositivo
+from . import servicios
+from .models import HORAS_SIN_SENAL, Cliente, Dispositivo, Pantalla
 
 PREFIJO = 'c_'
 # Cada cuánto se guarda la señal (no en cada pedido: ahorra escrituras).
@@ -91,6 +94,9 @@ def contacto_del_vendedor(cliente):
 
 
 def chequear_vigente(cliente):
+    # Si le terminó el mes y tiene saldo, empieza el siguiente (por si la tarea diaria no llegó)
+    if servicios.renovar_si_toca(cliente):
+        cliente.refresh_from_db(fields=['vence'])
     if cliente.suspendido:
         raise AccesoDenegado('Tu servicio está suspendido. Comunicate con quien te lo vendió.', 'suspendido',
                              {'vendedor': contacto_del_vendedor(cliente)})
@@ -99,26 +105,58 @@ def chequear_vigente(cliente):
                              'servicio_vencido', {'vence': cliente.vence, 'vendedor': contacto_del_vendedor(cliente)})
 
 
+def _del_codigo(codigo):
+    """(cliente, pantalla) de un código: el del cliente (pantalla None) o el propio de una pantalla."""
+    # select_for_update: dos aparatos entrando a la vez no pueden ocupar la misma pantalla
+    cliente = Cliente.objects.select_for_update().filter(codigo=codigo).first()
+    if cliente is not None:
+        return cliente, None
+    pantalla = Pantalla.objects.filter(codigo=codigo).first()
+    if pantalla is None:
+        return None, None
+    cliente = Cliente.objects.select_for_update().filter(pk=pantalla.cliente_id).first()
+    return (cliente, pantalla) if cliente else (None, None)
+
+
+def _pantalla_para_entrar(cliente, pantalla=None):
+    """La pantalla que ocupa el aparato que entra, o AccesoDenegado si no hay lugar."""
+    if pantalla is not None:   # entró con el código propio de esa pantalla
+        if pantalla.cortada:
+            raise AccesoDenegado('Esta pantalla está desactivada. Hablá con el titular de la cuenta.',
+                                 'pantalla_cortada')
+        if Dispositivo.objects.filter(pantalla=pantalla).exists():
+            raise AccesoDenegado(
+                f'«{pantalla.nombre_visible}» ya se está usando en otro aparato. Cerrá la sesión ahí o pedile '
+                'a quien te vendió el servicio que la libere.', 'cuenta_en_uso', {'pantallas': 1})
+        return pantalla
+    habilitadas = cliente.pantallas.filter(cortada=False, codigo__isnull=True)
+    libre = habilitadas.filter(dispositivo__isnull=True).first()
+    if libre is not None:
+        return libre
+    if not habilitadas.exists():
+        raise AccesoDenegado('Cada pantalla de esta cuenta tiene su propio código (o está desactivada): '
+                             'usá el código de este aparato.', 'cuenta_en_uso', {'pantallas': 0})
+    cantidad = habilitadas.count()
+    raise AccesoDenegado(
+        f'Tu cuenta ya se está usando en {cantidad} dispositivo(s), que es lo que tenés contratado. '
+        'Cerrá la sesión en otro aparato o pedile a quien te vendió el servicio que lo libere.',
+        'cuenta_en_uso', {'pantallas': cantidad})
+
+
 @transaction.atomic
 def entrar(codigo, nombre_dispositivo=''):
     """Devuelve (clave, dispositivo) o lanza AccesoDenegado. La clave solo existe en este momento."""
     codigo = normalizar_codigo(codigo)
-    # select_for_update: dos aparatos entrando a la vez no pueden ocupar la misma pantalla
-    cliente = Cliente.objects.select_for_update().filter(codigo=codigo).first() if len(codigo) == 8 else None
+    cliente, pantalla = _del_codigo(codigo) if len(codigo) == 8 else (None, None)
     if cliente is None:
         raise AccesoDenegado('El código no es correcto.', 'codigo_invalido')
     chequear_vigente(cliente)
 
     liberar_inactivos(cliente)
-    pantallas = cliente.pantallas_vigentes()
-    if cliente.dispositivos.count() >= pantallas:
-        raise AccesoDenegado(
-            f'Tu cuenta ya se está usando en {pantallas} dispositivo(s), que es lo que tenés contratado. '
-            'Cerrá la sesión en otro aparato o pedile a quien te vendió el servicio que lo libere.',
-            'cuenta_en_uso', {'pantallas': pantallas})
+    pantalla = _pantalla_para_entrar(cliente, pantalla)
 
     clave = PREFIJO + secrets.token_urlsafe(32)
-    dispositivo = Dispositivo.objects.create(cliente=cliente, clave_hash=_huella(clave),
+    dispositivo = Dispositivo.objects.create(cliente=cliente, pantalla=pantalla, clave_hash=_huella(clave),
                                              nombre=(nombre_dispositivo or '')[:100], ultima_senal=timezone.now())
     registrar(None, Accion.INGRESO, f'El cliente {cliente} entró a la app desde {dispositivo.nombre or "un dispositivo"}',
               objeto=cliente, modulo='reventa')

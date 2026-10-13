@@ -1,0 +1,76 @@
+/* Los capítulos de una serie y cómo se ordenan (canales/serie_detalle.html + js/ordenar_capitulos.js) */
+
+.orden-aviso {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem;
+    margin: 1rem 1.25rem 0; padding: .85rem 1rem;
+    background: var(--celeste-fondo); border: 1px solid var(--celeste-borde); border-radius: 14px;
+}
+.orden-aviso[hidden] { display: none; }
+.orden-aviso > i { color: var(--celeste); font-size: 1.2rem; }
+.orden-aviso > span { flex: 1; min-width: 14rem; }
+.orden-ayuda { margin: .9rem 1.25rem 0; font-size: .85rem; color: var(--texto-suave); }
+
+.cap-lista { list-style: none; margin: 0; padding: .75rem 1.25rem 1.25rem; display: grid; gap: .5rem; }
+.cap {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .75rem;
+    padding: .6rem .75rem;
+    background: var(--capa-baja); border: 1px solid var(--borde); border-radius: 14px;
+    transition: background .15s, border-color .15s;
+}
+.cap-movido { border-color: var(--celeste-borde); }
+.cap-arrastrando {
+    background: var(--celeste-fondo); border-color: var(--celeste);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45); position: relative; z-index: 2;
+}
+
+.cap-agarre {
+    display: flex; align-items: center; justify-content: center;
+    width: 2rem; height: 2.6rem; flex: none;
+    color: var(--texto-suave); font-size: 1.35rem;
+    cursor: grab; touch-action: none; user-select: none; border-radius: 8px;
+}
+.cap-agarre:hover { color: var(--celeste); background: var(--capa-alta); }
+.cap-arrastrando .cap-agarre { cursor: grabbing; color: var(--celeste); }
+
+.cap-numero {
+    min-width: 2.4rem; flex: none; text-align: center;
+    font-size: 1.35rem; font-weight: 800; color: var(--celeste); font-variant-numeric: tabular-nums;
+}
+.cap-imagen {
+    width: 88px; height: 50px; flex: none; overflow: hidden; border-radius: 8px;
+    background: var(--capa-alta); display: flex; align-items: center; justify-content: center;
+    color: var(--texto-suave);
+}
+.cap-imagen img { width: 100%; height: 100%; object-fit: cover; }
+.cap-texto { flex: 1; min-width: 12rem; display: flex; flex-direction: column; gap: .1rem; }
+.cap-texto strong { font-size: .95rem; }
+.cap-texto span { font-size: .78rem; }
+.cap-fuera .cap-imagen { opacity: .5; }
+.cap-acciones { display: flex; gap: .35rem; flex: none; }
+
+.cap-fuentes { flex-basis: 100%; }
+.cap-fuentes > summary { font-size: .78rem; color: var(--texto-suave); cursor: pointer; width: max-content; }
+.cap-fuentes[open] > summary { margin-bottom: .5rem; }
+.cap-fuentes .table-responsive { border: 1px solid var(--borde); border-radius: 12px; }
+
+.orden-barra {
+    position: sticky; bottom: 1rem; z-index: 5;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem;
+    margin: 0 1.25rem 1.25rem; padding: .85rem 1rem;
+    background: var(--capa-maxima); border: 1px solid var(--celeste-borde); border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .55);
+}
+.orden-barra[hidden] { display: none; }
+.orden-barra-botones { display: flex; gap: .5rem; }
+
+@media (max-width: 575.98px) {
+    .cap-lista { padding: .6rem .6rem 1rem; }
+    .cap { gap: .5rem; }
+    .cap-imagen { width: 64px; height: 36px; }
+    .cap-texto { min-width: 9rem; }
+    .cap-acciones { margin-left: auto; }
+    .orden-aviso, .orden-ayuda { margin-left: .6rem; margin-right: .6rem; }
+    .orden-barra { margin: 0 .6rem 1rem; }
+    .orden-barra-botones { width: 100%; }
+    .orden-barra-botones .btn { flex: 1; }
+}

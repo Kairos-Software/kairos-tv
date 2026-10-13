@@ -42,7 +42,8 @@ class AccesoTests(Base):
         # Ni cambiando el número en la URL
         pk = self.cliente_de_pepe.pk
         self.assertEqual(self.client.get(reverse('reventa:cliente', args=[pk])).status_code, 404)
-        self.assertEqual(self.client.post(reverse('reventa:cliente_renovar', args=[pk])).status_code, 404)
+        self.assertEqual(self.client.post(reverse('reventa:cliente_activar', args=[pk])).status_code, 404)
+        self.assertEqual(self.client.post(reverse('reventa:cliente_cargar', args=[pk])).status_code, 404)
         self.assertEqual(self.client.post(reverse('reventa:cliente_codigo', args=[pk])).status_code, 404)
 
     def test_el_revendedor_no_entra_a_lo_del_administrador(self):
@@ -84,7 +85,7 @@ class FlujoCompletoTests(Base):
     def test_administrador_crea_revendedor(self):
         self.entrar(self.admin)
         respuesta = self.client.post(reverse('reventa:revendedor_nuevo'), {
-            'username': 'ana', 'first_name': 'Ana', 'password': 'Clave-segura-2026', 'precio_pantalla': '4500'})
+            'username': 'ana', 'first_name': 'Ana', 'password': 'Clave-segura-2026'})
         ana = Revendedor.objects.get(usuario__username='ana')
         self.assertRedirects(respuesta, reverse('reventa:revendedor', args=[ana.pk]))
         self.assertTrue(ana.usuario.debe_cambiar_password)
@@ -108,15 +109,15 @@ class FlujoCompletoTests(Base):
         self.client.post(reverse('reventa:compra_resolver', args=[compra.pk]), {'accion': 'confirmar'})
         self.assertEqual(self.juan.saldo, 12)
 
-        # 4. Juan crea un cliente y lo activa con 2 dispositivos cobrando 9000
+        # 4. Juan crea un cliente y lo activa con 2 pantallas por 1 mes cobrando 9000
         self.entrar(self.juan.usuario)
         self.client.post(reverse('reventa:cliente_nuevo'), {'nombre': 'Ana'})
         ana = Cliente.objects.get(nombre='Ana')
         self.assertEqual(ana.revendedor, self.juan)
-        respuesta = self.client.post(reverse('reventa:cliente_renovar', args=[ana.pk]),
-                                     {'dispositivos': 2, 'monto_cobrado': '9000'}, follow=True)
-        self.assertContains(respuesta, 'puede ver hasta el')
-        self.assertContains(respuesta, 'con 2 dispositivo(s) (2 crédito(s) usados)')
+        respuesta = self.client.post(reverse('reventa:cliente_activar', args=[ana.pk]),
+                                     {'dispositivos': 2, 'meses': 1, 'monto_cobrado': '9000'}, follow=True)
+        self.assertContains(respuesta, 'puede ver en 2 pantalla(s)')
+        self.assertContains(respuesta, 'Este mes va hasta el')
         self.assertEqual(self.juan.saldo, 10)
 
         # 5. Los números
@@ -127,8 +128,8 @@ class FlujoCompletoTests(Base):
     def test_renovar_sin_saldo_muestra_el_error(self):
         cliente = servicios.crear_cliente(self.juan, 'Ana')
         self.entrar(self.juan.usuario)
-        respuesta = self.client.post(reverse('reventa:cliente_renovar', args=[cliente.pk]), {'dispositivos': 1},
-                                     follow=True)
+        respuesta = self.client.post(reverse('reventa:cliente_activar', args=[cliente.pk]),
+                                     {'dispositivos': 1, 'meses': 1}, follow=True)
         self.assertContains(respuesta, 'No alcanzan los créditos')
 
     def test_administrador_crea_cliente_eligiendo_revendedor(self):

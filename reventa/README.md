@@ -4,31 +4,44 @@ El **negocio de reventa** de Kairos TV: revendedores, sus clientes, los
 créditos, los paquetes que se venden y las compras.
 
 ```
-Revendedor 1 ──< Cliente 1 ──< Renovacion
-     │              └──< Dispositivo   (cada pantalla conectada a la app)
-     │
-     ├──< Movimiento      (la libreta de créditos: + y −)
+Revendedor 1 ──< Cliente 1 ──< Pantalla 1 ──< Dispositivo  (el aparato conectado)
+     │              ├──< CreditoCliente   (su saldo: cargas + y meses −)
+     │              └──< Renovacion       (cada mes de servicio)
+     ├──< Movimiento      (la libreta de créditos del revendedor: + y −)
      └──< Compra >── Paquete
 ```
 
 ## Reglas del negocio
 
-- **1 crédito = 1 dispositivo durante 30 días.**
+- **1 crédito = 1 pantalla durante 30 días.** Una pantalla es un lugar para
+  UN aparato a la vez (TV, celular...).
 - Un crédito comprado o regalado **no vence**: queda en el saldo hasta que
-  se usa. Recién al usarse (activar o renovar a un cliente) dura 30 días.
-- Al **activar o renovar** se elige cuántos dispositivos: N dispositivos =
-  **N créditos**, siempre por 30 días. El cliente NO tiene un número fijo de
-  dispositivos: es lo que pagó en el período en curso (se propone lo de la
-  última vez).
-- Renovar a un cliente vigente suma desde su vencimiento (no se pierden días).
-- **No se pagan meses por adelantado:** si ya renovó el mes que viene, no se
-  puede renovar otra vez hasta que ese mes empiece.
+  se usa.
+- **El cliente tiene su propio saldo.** Al activarlo se eligen pantallas y
+  meses: se le cargan pantallas × meses créditos (3 pantallas × 10 meses =
+  30) y **cada mes se descuentan solos** los de sus pantallas, hasta que no
+  alcancen. Lo cargado ya está pagado: **no vuelve al revendedor** aunque el
+  cliente no lo use. Con el cliente activo, "Cargar meses" suma más.
+- El mes siguiente empieza pegado al anterior (o desde ahora, si ya había
+  vencido). Lo hace la tarea diaria (`limpiar_registros` →
+  `servicios.renovar_los_que_tocan`, que además avisa en la campanita al
+  revendedor del cliente al que no le alcanza) y, por las dudas, la app y la
+  ficha del cliente al usarse (`renovar_si_toca`).
+- **Pantallas** (`Pantalla`): nombre ("TV habitación") y titular ("Mica
+  Giménez") opcionales, para saber cuál es cuál. Con el código del cliente
+  se entra a cualquier pantalla libre; una pantalla puede tener **su propio
+  código** y entonces se entra a ella solo con ese. Se puede **cortar** una
+  sola (su aparato se desconecta y no puede volver; se sigue pagando: es un
+  castigo, no una baja), **agregar** una a mitad de mes (1 crédito, hasta
+  que vence el resto; desde el mes siguiente se paga con las demás) o
+  **quitarla** (sin devolución).
+- **Cobrado o cortesía:** cada carga anota lo que se le cobró al cliente o
+  que fue una cortesía (regalo). Sin monto, se propone el precio del
+  revendedor (`precio_pantalla`, que pone él en "Mis créditos") × créditos.
 - **Créditos gratis:** el administrador se los regala a un revendedor.
 - **Créditos pagos:** el administrador arma paquetes (créditos + precio). El
   revendedor pide uno y queda *pendiente*. Cuando el administrador confirma
   el pago, se suman los créditos. También puede cargar una compra ya pagada.
-- El revendedor fija su **precio por dispositivo**. Al renovar se propone
-  `precio × dispositivos`, pero se puede cambiar el monto realmente cobrado.
 - **Ganancia del revendedor** = lo cobrado a sus clientes − lo pagado por sus créditos.
 - **El revendedor también paga lo que mira:** con su usuario del panel NO ve
   los canales en la app (la API responde `revendedor_sin_pantalla`). En el
@@ -36,13 +49,16 @@ Revendedor 1 ──< Cliente 1 ──< Renovacion
   (`Cliente.propio`, `servicios.pantalla_propia`) que activa con sus créditos
   como a cualquier otro, y entra a la app con ese código. El administrador
   (`administrar_reventa`) sí ve gratis con su usuario, para probar.
-- **Clientes directos:** un cliente sin revendedor es de la empresa. Solo lo
-  maneja el administrador y **no gasta créditos** (sirve también para probar).
-  Lo que se le cobra cuenta como ingreso de la empresa.
-- **Sesión única:** cada dispositivo pagado admite 1 aparato conectado. Si
-  están todas ocupadas, el aparato nuevo se **bloquea** ("cuenta en uso").
-  Un dispositivo sin señales durante 2 horas (`HORAS_SIN_SENAL`) se libera
-  solo; el revendedor también puede liberarlo a mano desde la ficha del cliente.
+- **Clientes directos:** un cliente sin revendedor es de la empresa (familia,
+  pruebas). Solo lo maneja el administrador y sus créditos los pone la
+  empresa. Si un día paga a través de un revendedor, se le pasa desde su
+  ficha ("Pasarlo a un revendedor"; su saldo se queda con él). Con un
+  cliente de revendedor, el administrador también puede elegir que los
+  créditos los ponga la empresa ("Los pone la empresa").
+- **Sesión única:** cada pantalla admite 1 aparato conectado. Si están todas
+  ocupadas, el aparato nuevo se **bloquea** ("cuenta en uso"). Un aparato
+  sin señales durante 2 horas (`HORAS_SIN_SENAL`) se libera solo; también se
+  puede liberar a mano desde la ficha del cliente.
 
 ## El saldo es una libreta
 
@@ -57,10 +73,10 @@ pueden gastar el mismo crédito.
 
 | Archivo | Capa | Para qué |
 |---|---|---|
-| `models.py` | Base | `Revendedor`, `Cliente` (con su código de acceso de 8 números), `Dispositivo`, `Renovacion`, `Paquete`, `Compra`, `Movimiento`. |
-| `servicios.py` | Base | Crear revendedores y clientes, regalar / ajustar créditos, pedir / confirmar / cancelar compras, renovar, regenerar el código. |
+| `models.py` | Base | `Revendedor`, `Cliente` (con su código de acceso de 8 números y su saldo), `Pantalla`, `Dispositivo`, `CreditoCliente`, `Renovacion`, `Paquete`, `Compra`, `Movimiento`. |
+| `servicios.py` | Base | Crear revendedores y clientes, regalar / ajustar créditos, pedir / confirmar / cancelar compras, `activar` (pantallas × meses), `cargar_meses`, el mes que empieza solo (`renovar_si_toca`, `renovar_los_que_tocan`), pantallas (`agregar_pantalla`, `quitar_pantalla`, `cortar_pantalla`, `editar_pantalla`, `codigo_de_pantalla`), `pasar_a_revendedor`, regenerar el código. |
 | `consultas.py` | Base | Clientes visibles, filtros por estado, números de cada revendedor y del negocio. |
-| `sesiones.py` | Base | La app de los clientes: entrar con el código, validar su token, la "señal", liberar inactivos. |
+| `sesiones.py` | Base | La app de los clientes: entrar con el código (el del cliente o el propio de una pantalla), validar su token, la "señal", liberar inactivos. |
 | `estadisticas.py` | Base | Mes a mes, ranking de revendedores, "ahora mismo" y los números de cada cliente. |
 | `views.py`, `urls.py`, `forms.py`, `templates/` | Panel | Pantallas en `/reventa/`. |
 | `admin.py` | Técnica | Vista técnica en `/admin/` (la libreta, compras y renovaciones son de solo lectura). |
@@ -88,7 +104,9 @@ da 404.
 Cada cliente tiene un código fijo de 8 números (ej: `4821 9037`) para entrar
 a la app. Es cómodo con el control remoto, y si cierra sesión o reinstala
 vuelve a poner el mismo. Si se filtra, se genera otro desde su ficha (eso
-desconecta todos sus dispositivos). Los códigos equivocados se cuentan por
+desconecta los aparatos que entraron con él). Una pantalla puede tener su
+propio código (también de 8 números, nunca repetido con otro cliente o
+pantalla): sirve solo para ella. Los códigos equivocados se cuentan por
 conexión: tras varios intentos, se bloquea unos minutos (igual que el login
 del panel). La API está en `api/v1/cliente.py`.
 

@@ -6,7 +6,7 @@ eso la libreta y las renovaciones acá son de solo lectura.
 
 from django.contrib import admin
 
-from .models import Cliente, Compra, Movimiento, Paquete, Renovacion, Revendedor
+from .models import Cliente, Compra, CreditoCliente, Movimiento, Paquete, Pantalla, Renovacion, Revendedor
 
 
 class SoloLectura(admin.ModelAdmin):
@@ -48,10 +48,24 @@ class CompraAdmin(SoloLectura):
 
 @admin.register(Renovacion)
 class RenovacionAdmin(SoloLectura):
-    list_display = ['cliente', 'pantallas', 'creditos', 'monto_cobrado', 'desde', 'hasta']
+    list_display = ['cliente', 'pantallas', 'creditos', 'desde', 'hasta']
 
 
 @admin.register(Movimiento)
 class MovimientoAdmin(SoloLectura):
     list_display = ['fecha', 'revendedor', 'cantidad', 'tipo', 'detalle', 'hecho_por']
     list_filter = ['tipo', 'revendedor']
+
+
+@admin.register(Pantalla)
+class PantallaAdmin(admin.ModelAdmin):
+    list_display = ['cliente', 'numero', 'nombre', 'titular', 'codigo', 'cortada']
+    list_filter = ['cortada']
+    search_fields = ['cliente__nombre', 'nombre', 'titular', 'codigo']
+    readonly_fields = ['codigo']
+
+
+@admin.register(CreditoCliente)
+class CreditoClienteAdmin(SoloLectura):
+    list_display = ['fecha', 'cliente', 'cantidad', 'tipo', 'revendedor', 'cortesia', 'monto_cobrado', 'hecho_por']
+    list_filter = ['tipo', 'cortesia']

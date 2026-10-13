@@ -33,7 +33,8 @@ class EstadisticasTests(TestCase):
         self.assertEqual(len(filas), 12)
         actual = filas[0]
         self.assertEqual(actual['mes'], timezone.localdate().replace(day=1))
-        self.assertEqual((actual['clientes_nuevos'], actual['renovaciones'], actual['creditos_usados']), (3, 3, 3))
+        # El directo también usa 1 crédito por mes: lo pone la empresa
+        self.assertEqual((actual['clientes_nuevos'], actual['renovaciones'], actual['creditos_usados']), (3, 3, 4))
         self.assertEqual((actual['creditos_comprados'], actual['creditos_regalados']), (10, 3))
         self.assertEqual((actual['invertido'], actual['cobrado_directos'], actual['ingresos']),
                          (Decimal('20000'), Decimal('7000'), Decimal('27000')))

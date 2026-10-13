@@ -20,6 +20,7 @@ vez a las direcciones ".../lote/" (responden JSON) y va mostrando el avance.
 """
 
 import json
+import re
 from functools import partial
 from urllib.parse import quote, urlencode
 
@@ -656,12 +657,54 @@ def serie_detalle(request):
         capitulos = serie.temporadas[numero]
         for capitulo in capitulos:
             capitulo.no_se_ve = consultas.por_que_no_se_ve(capitulo.canal)
-        serie.temporadas_ordenadas.append((numero, capitulos))
+            capitulo.numero_en_el_titulo = _numero_en_el_titulo(capitulo.titulo)
+        serie.temporadas_ordenadas.append((numero, capitulos, _como_esta_el_orden(capitulos)))
 
     return render(request, 'canales/serie_detalle.html', {
         'serie': serie,
         'puede_editar': chequear_permiso(request.user, 'importar_canales'),
     })
+
+
+def _como_esta_el_orden(capitulos):
+    """
+    {'desordenada': True} si la mayoría de los títulos dicen su número
+    ("Capítulo 12") y no van en orden: la página lo avisa y ofrece ordenarlos.
+    """
+    numeros = [c.numero_en_el_titulo for c in capitulos if c.numero_en_el_titulo is not None]
+    alcanza = len(capitulos) > 1 and len(numeros) >= len(capitulos) / 2
+    return {'desordenada': alcanza and numeros != sorted(numeros)}
+
+
+_NUMERO_AL_PRINCIPIO = re.compile(r'^\s*#?(\d{1,4})\b')
+
+
+def _numero_en_el_titulo(titulo):
+    """
+    El número de capítulo que dice el título ("Capítulo 12", "EP 12", "12 - El
+    regreso"), para el botón "Por el número del título" (None si no dice).
+    """
+    numero = youtube.numero_de_capitulo(titulo)
+    if numero:
+        return numero[1]
+    al_principio = _NUMERO_AL_PRINCIPIO.match(titulo or '')
+    return int(al_principio.group(1)) if al_principio else None
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def serie_ordenar(request):
+    """Guarda el orden de los capítulos de una temporada (los renumera 1, 2, 3...)."""
+    nombre = request.POST.get('nombre', '').strip()
+    temporada = request.POST.get('temporada', '')
+    temporada = int(temporada) if temporada.isdigit() else 1
+    try:
+        cambiados = organizar.ordenar_capitulos(nombre, temporada, request.POST.getlist('capitulo'), request.user)
+        messages.success(request, f'Listo: {cambiados} capítulo(s) cambiaron de número. La app los muestra en este '
+                                  f'orden.' if cambiados else 'Ya estaban en ese orden: no cambió nada.')
+    except organizar.NoSePuede as error:
+        messages.error(request, str(error))
+    return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}#temporada-{temporada}")
 
 
 def _canales_elegidos(request):

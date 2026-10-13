@@ -107,23 +107,26 @@ class RenovarTests(Base):
         self.assertTrue(self.cliente.vigente)
         self.assertAlmostEqual(self.cliente.vence, timezone.now() + timedelta(days=30), delta=timedelta(minutes=1))
         self.assertEqual(self.cliente.pantallas_vigentes(), 2)
-        # Sin monto: se propone precio por dispositivo × dispositivos
-        self.assertEqual(renovacion.monto_cobrado, Decimal('10000'))
+        # Sin monto: se propone precio por pantalla × pantallas
+        self.assertEqual(self.cliente.creditos.get(tipo='carga').monto_cobrado, Decimal('10000'))
 
-    def test_renovar_vigente_suma_desde_el_vencimiento(self):
+    def test_renovar_vigente_carga_un_mes_que_sigue_pegado_al_actual(self):
         servicios.renovar(self.cliente)
         self.cliente.refresh_from_db()
         vence = self.cliente.vence
         servicios.renovar(self.cliente, monto_cobrado=Decimal('8000'))
         self.cliente.refresh_from_db()
-        self.assertEqual(self.cliente.vence, vence + timedelta(days=30))
+        self.assertEqual((self.cliente.vence, self.cliente.saldo), (vence, 1))   # queda en su saldo
+        # Cuando termina el mes, el siguiente empieza pegado
+        servicios.renovar_si_toca(self.cliente, ahora=vence - timedelta(hours=1))
+        self.cliente.refresh_from_db()
+        self.assertEqual((self.cliente.vence, self.cliente.saldo), (vence + timedelta(days=30), 0))
 
-    def test_no_se_pagan_meses_por_adelantado(self):
+    def test_se_pueden_pagar_varios_meses_por_adelantado(self):
         servicios.renovar(self.cliente)
-        servicios.renovar(self.cliente)   # el mes que viene: se puede
-        with self.assertRaisesMessage(ReventaError, 'ya tiene pagado el próximo mes'):
-            servicios.renovar(self.cliente)   # un tercero, no
-        self.assertEqual(self.revendedor.saldo, 8)
+        servicios.renovar(self.cliente)
+        servicios.renovar(self.cliente)
+        self.assertEqual((self.revendedor.saldo, self.cliente.meses_pagos()), (7, 2))
 
     def test_renovar_vencido_arranca_hoy(self):
         servicios.renovar(self.cliente)
@@ -140,9 +143,9 @@ class RenovarTests(Base):
     def test_al_renovar_se_eligen_otros_dispositivos(self):
         servicios.renovar(self.cliente, dispositivos=2)
         self.assertEqual(self.cliente.ultimos_dispositivos(), 2)   # se propone lo mismo
-        servicios.renovar(self.cliente, dispositivos=3)            # el mes que viene, 3
+        servicios.renovar(self.cliente, dispositivos=3)            # activo: carga un mes de las que tiene
         self.cliente.refresh_from_db()
-        self.assertEqual(self.cliente.pantallas_vigentes(), 2)     # este mes siguen siendo 2
+        self.assertEqual(self.cliente.pantallas_vigentes(), 2)     # para más, "Agregar pantalla"
 
     def test_suspendido_no_esta_vigente(self):
         servicios.renovar(self.cliente, dispositivos=2)
