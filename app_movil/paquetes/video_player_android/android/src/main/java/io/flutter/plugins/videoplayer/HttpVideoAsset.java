@@ -20,6 +20,9 @@ import androidx.media3.exoplayer.source.MediaSource;
 import java.util.Map;
 
 final class HttpVideoAsset extends VideoAsset {
+  /** Kairos TV: cuánto detrás del vivo se mira un canal (ver getMediaItem). */
+  static final long KAIROS_ATRAS_DEL_VIVO_MS = 30_000;
+
   @NonNull private final StreamingFormat streamingFormat;
   @NonNull private final Map<String, String> httpHeaders;
   @Nullable private final String userAgent;
@@ -54,6 +57,13 @@ final class HttpVideoAsset extends VideoAsset {
     if (mimeType != null) {
       builder.setMimeType(mimeType);
     }
+    // Kairos TV: en vivo (HLS) se mira unos 30 segundos detrás del vivo, en vez
+    // de los ~3 pedacitos de fábrica. Esos 30 s ya están en el servidor, así que
+    // se bajan enseguida y quedan guardados: un corte de la señal de hasta ese
+    // tiempo no se nota. Si la lista del canal guarda menos, ExoPlayer usa lo
+    // que haya. No cambia nada en películas ni en videos directos. Ver paquetes/README.md.
+    builder.setLiveConfiguration(
+        new MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(KAIROS_ATRAS_DEL_VIVO_MS).build());
     return builder.build();
   }
 

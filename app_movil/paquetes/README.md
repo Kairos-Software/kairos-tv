@@ -6,7 +6,8 @@ en lugar de las originales (sección `dependency_overrides`).
 ## video_player_android/ (2.12.2)
 
 El reproductor de video de Android (ExoPlayer) que usa `video_player`. Es el
-paquete oficial **con dos cambios**: el buffer y el idioma del audio.
+paquete oficial **con tres cambios**: el buffer, el margen en vivo y el idioma
+del audio.
 
 ### 1. El buffer
 
@@ -23,7 +24,24 @@ y en `.../platformview/PlatformViewVideoPlayer.java` (buscar "Kairos TV").
 Para cambiar los segundos, tocar `bufferForPlaybackMs` y
 `bufferForPlaybackAfterRebufferMs` en los dos archivos.
 
-### 2. El audio en español
+### 2. El margen en vivo (30 segundos)
+
+- Un canal en vivo HLS (`.m3u8`) es una lista de pedacitos de video que el
+  servidor va publicando. De fábrica ExoPlayer mira ~3 pedacitos detrás del
+  último, así que tiene guardados muy pocos segundos: si internet o el
+  servidor se frenan un rato más que eso, el video se corta.
+- Acá se mira **30 segundos detrás del vivo**. Esos 30 s ya están publicados,
+  se bajan enseguida y quedan guardados: un frenazo de hasta ese tiempo no se
+  nota. Arrancar no tarda más (arranca igual con 5 s cargados).
+- El costo: el canal va unos 30 s atrasado respecto de la transmisión real
+  (en un partido, el vecino grita el gol antes).
+- Si la lista del canal guarda menos de 30 s, ExoPlayer usa lo que haya. No
+  cambia nada en películas, series ni en videos directos (`.ts`, `.mp4`).
+
+Está en `.../videoplayer/HttpVideoAsset.java`, `KAIROS_ATRAS_DEL_VIVO_MS`
+(buscar "Kairos TV").
+
+### 3. El audio en español
 
 - Muchas películas traen dos audios (por ejemplo inglés y latino). De fábrica
   ExoPlayer arranca con el que el archivo marca como "principal", que suele
@@ -40,4 +58,4 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
 **Si algún día se actualiza `video_player`** y pide una versión más nueva de
 este paquete: copiar la nueva de `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\video_player_android-X.Y.Z`
 (carpetas `lib/` y `android/`, `pubspec.yaml`, `LICENSE`), volver a aplicar los
-dos cambios y sacar `dev_dependencies` de su `pubspec.yaml`.
+tres cambios y sacar `dev_dependencies` de su `pubspec.yaml`.
