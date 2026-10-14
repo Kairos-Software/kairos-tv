@@ -28,6 +28,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import '../aparato.dart';
 import '../api/cliente.dart';
 import '../api/modelos.dart';
 import '../sesion.dart';
@@ -69,9 +70,10 @@ String? idDeVideo(String direccion) {
 /// pasa al siguiente (primero los en castellano, después los demás, al final
 /// ninguno) y avisa cuál quedó ("subtitulos").
 ///
-/// El idioma del audio no se puede elegir desde afuera de YouTube: en los
-/// videos con varios audios, YouTube usa el del idioma del aparato, que la
-/// app pone en castellano (MainActivity.preferirEspanol).
+/// El idioma del audio no se puede elegir con la API oficial de YouTube. Lo
+/// hace [scriptDentroDeYoutube], que Android mete en el reproductor (ver
+/// MainActivity.kt, "dentroDeYoutube"): avisa qué audios hay ("audios") y
+/// `cambiarAudio(id)` le pide otro.
 @visibleForTesting
 String paginaDelReproductor(String id, {required bool controles, Duration desde = Duration.zero, int limite = 0}) {
   final opciones = jsonEncode({
@@ -135,6 +137,15 @@ function siguienteSubtitulo() {
   setTimeout(elegir, 900);   // la lista llega cuando YouTube cargó los subtítulos
 }
 function avisar(datos) { Kairos.postMessage(JSON.stringify(datos)); }
+addEventListener('message', function (evento) {
+  if (evento.origin !== 'https://www.youtube.com') return;
+  var d;
+  try { d = JSON.parse(evento.data); } catch (e) { return; }
+  if (d && d.kairos === 'audios') avisar({e: 'audios', l: d.lista, a: d.actual});
+});
+function cambiarAudio(id) {
+  reproductor.getIframe().contentWindow.postMessage(JSON.stringify({kairos: 'audio', id: id}), 'https://www.youtube.com');
+}
 var cuadros = 0, lentos = 0, anterior = 0;
 function contarCuadro(ahora) {
   if (anterior) { cuadros++; if (ahora - anterior > ${CalidadYoutube.cuadroLentoMs}) lentos++; }
@@ -167,6 +178,62 @@ function onYouTubeIframeAPIReady() {
 <script src="https://www.youtube.com/iframe_api"></script>
 </body></html>''';
 }
+
+/// Lo que Android mete en el reproductor de YouTube (el marco de youtube.com):
+/// usa sus funciones de audio, las mismas de su menú "Pista de audio". Cuando
+/// el video ya se está viendo, si tiene audio en castellano y no está puesto,
+/// lo pone (muchos videos argentinos traen el inglés como "original"); avisa
+/// qué audios hay y cambia al que le pida la app.
+@visibleForTesting
+const scriptDentroDeYoutube = r'''
+(function () {
+  if (location.hostname !== 'www.youtube.com' || location.pathname.indexOf('/embed/') !== 0) return;
+  function reproductor() { return document.getElementById('movie_player'); }
+  // Los datos de una pista ({id: 'es.3', name: 'Español'}) están en una propiedad de nombre cambiante
+  function datos(pista) {
+    for (var clave in pista) {
+      var valor = pista[clave];
+      if (valor && typeof valor === 'object' && typeof valor.id === 'string' && typeof valor.name === 'string') return valor;
+    }
+    return null;
+  }
+  function pistas() {
+    var p = reproductor();
+    try { return (p && p.getAvailableAudioTracks && p.getAvailableAudioTracks()) || []; } catch (e) { return []; }
+  }
+  function actual() {
+    try { var d = datos(reproductor().getAudioTrack()); return d ? d.id : ''; } catch (e) { return ''; }
+  }
+  function avisar() {
+    var lista = pistas().map(function (t) { var d = datos(t) || {}; return {id: d.id || '', n: d.name || ''}; });
+    parent.postMessage(JSON.stringify({kairos: 'audios', lista: lista, actual: actual()}), '*');
+  }
+  function poner(id) {
+    var pista = pistas().filter(function (t) { var d = datos(t); return d && d.id === id; })[0];
+    if (pista) { try { reproductor().setAudioTrack(pista); } catch (e) {} }
+    setTimeout(avisar, 800);
+  }
+  function reproduciendo() {
+    try { return reproductor().getPlayerState() === 1; } catch (e) { return false; }
+  }
+  // Cuando ya se está viendo (antes, YouTube vuelve a poner la pista predeterminada):
+  // si hay castellano y no está puesto, se pone, y se confirma que haya quedado.
+  var intentos = 0, puestos = 0;
+  var vigia = setInterval(function () {
+    if (++intentos > 120) { clearInterval(vigia); return; }
+    if (!reproduciendo() || !pistas().length) return;
+    var espanol = pistas().map(datos).filter(function (d) { return d && d.id.indexOf('es') === 0; })[0];
+    if (!espanol || actual().indexOf('es') === 0 || puestos >= 3) { clearInterval(vigia); avisar(); return; }
+    puestos++;
+    poner(espanol.id);
+  }, 1000);
+  addEventListener('message', function (evento) {
+    var d;
+    try { d = typeof evento.data === 'string' ? JSON.parse(evento.data) : evento.data; } catch (e) { return; }
+    if (d && d.kairos === 'audio') { clearInterval(vigia); poner(d.id); }
+  });
+})();
+''';
 
 /// Lo que dice el reproductor de YouTube, en limpio (separado del WebView para poder probarlo).
 ///
@@ -205,6 +272,13 @@ class EstadoYoutube extends ChangeNotifier {
 
   /// Si el video tiene subtítulos (null = todavía no se preguntó).
   bool? haySubtitulos;
+
+  /// Los audios del video (id y nombre: "es.3", "Español"), y el que suena.
+  List<(String, String)> audios = [];
+  String audio = '';
+
+  /// El nombre del audio que suena ('' = no se sabe).
+  String get nombreDelAudio => audios.where((a) => a.$1 == audio).map((a) => a.$2).firstOrNull ?? '';
   bool get termino => estado == _termino;
 
   void recibir(String mensaje) {
@@ -221,6 +295,13 @@ class EstadoYoutube extends ChangeNotifier {
         estado = (datos['v'] as num?)?.toInt() ?? estado;
       case 'error':
         error = (datos['v'] as num?)?.toInt() ?? 5;
+      case 'audios':
+        audios = [
+          for (final pista in (datos['l'] as List?) ?? const [])
+            if (pista is Map && pista['id'] is String && (pista['id'] as String).isNotEmpty)
+              (pista['id'] as String, (pista['n'] as String?) ?? pista['id'] as String),
+        ];
+        audio = (datos['a'] as String?) ?? '';
       case 'subtitulos':
         subtitulos = (datos['n'] as String?) ?? '';
         haySubtitulos = datos['hay'] as bool?;
@@ -243,6 +324,8 @@ class EstadoYoutube extends ChangeNotifier {
     estado = -1;
     subtitulos = '';
     haySubtitulos = null;
+    audios = [];
+    audio = '';
     this.error = error;
     duracion = Duration.zero;
     posicion = Duration.zero;
@@ -357,9 +440,9 @@ class ControlYoutube extends ChangeNotifier {
       unawaited(android.setMediaPlaybackRequiresUserGesture(false)); // que arranque solo, con sonido
     }
     unawaited(
-      nuevo.loadHtmlString(
+      _cargar(
+        nuevo,
         paginaDelReproductor(id, controles: !tv, desde: desde ?? Duration.zero, limite: calidad?.ancho ?? 0),
-        baseUrl: '$sitioDeKairos/',
       ),
     );
     _vigia = Timer(_sinRespuesta, () {
@@ -381,6 +464,17 @@ class ControlYoutube extends ChangeNotifier {
         _seguirAlVolver = false;
       },
     );
+  }
+
+  /// Primero le pide a Android que meta [scriptDentroDeYoutube] en el
+  /// reproductor (tiene que estar antes de que cargue) y después carga la página.
+  Future<void> _cargar(WebViewController controlador, String pagina) async {
+    final android = controlador.platform;
+    if (android is AndroidWebViewController) {
+      await Aparato.dentroDeYoutube(android.webViewIdentifier, scriptDentroDeYoutube);
+    }
+    if (_cerrado || web != controlador) return;
+    await controlador.loadHtmlString(pagina, baseUrl: '$sitioDeKairos/');
   }
 
   /// Después de un error: lo vuelve a cargar desde donde iba.
@@ -406,6 +500,14 @@ class ControlYoutube extends ChangeNotifier {
 
   /// Pasa a los subtítulos siguientes: en castellano, los demás idiomas, ninguno.
   void cambiarSubtitulos() => _js('siguienteSubtitulo();');
+
+  /// Pasa al audio siguiente (si el video tiene más de uno).
+  void cambiarAudio() {
+    final audios = estado.audios;
+    if (audios.length < 2) return;
+    final actual = audios.indexWhere((a) => a.$1 == estado.audio);
+    _js("cambiarAudio('${audios[(actual + 1) % audios.length].$1}');");
+  }
 
   void alternarPausa() => _js(estado.reproduciendo ? 'reproductor.pauseVideo();' : 'reproductor.playVideo();');
 

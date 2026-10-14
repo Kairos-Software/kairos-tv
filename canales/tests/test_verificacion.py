@@ -593,8 +593,8 @@ class AvisoDeFallaTests(TestCase):
         self.fuente.refresh_from_db()
         self.assertIn('no puede leer el formato', self.fuente.falla_en_aparatos)
         self.assertEqual(self.fuente.estado, FUNCIONA)   # para el servidor sigue andando
-        # Pasados los días de castigo, la app la vuelve a recibir
-        Fuente.objects.filter(pk=self.fuente.pk).update(oculta_desde=timezone.now() - timedelta(days=8))
+        # Pasado el tiempo de castigo, la app la vuelve a recibir
+        Fuente.objects.filter(pk=self.fuente.pk).update(oculta_hasta=timezone.now() - timedelta(minutes=1))
         self.assertEqual(self.app.get(reverse('api_v1:canales')).json()['cantidad'], 1)
 
     def test_el_mismo_aparato_reintentando_no_la_oculta(self, verificar_url):

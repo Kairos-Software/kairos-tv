@@ -66,6 +66,9 @@ class Serie {
 
   List<Episodio> get episodios => [for (final t in numerosDeTemporada) ...temporadas[t]!];
 
+  /// Destacada en el panel (se marcan sus capítulos): el modo reposo la muestra más seguido.
+  bool get destacada => episodios.any((e) => e.canal.destacado);
+
   /// Para "Mi lista": las series se guardan por nombre (sus capítulos tienen cada uno su id).
   String get clave => 's:$nombre';
 }
@@ -413,13 +416,14 @@ class Catalogo extends ChangeNotifier {
 
 // ── Lo que no anda en este aparato ─────────────────────────────────
 
-/// Lo que se probó en ESTE aparato y no se pudo ver con ninguna de sus
-/// fuentes (canal caído, bloqueado en la zona, formato que no muestra...).
-/// Se deja de mostrar un tiempo, según el motivo, sin esperar a que el
-/// servidor lo saque (eso pasa recién cuando falla en varios aparatos):
-///   - formato (el aparato no lo sabe mostrar): 30 días; no va a cambiar.
-///   - en vivo: 1 hora (los canales vuelven).
-///   - películas y capítulos: 3 días.
+/// Lo que en ESTE aparato no se puede ver nunca, y se deja de mostrar un
+/// tiempo sin esperar al servidor:
+///   - formato (el aparato no sabe mostrar ese video, con ninguna de sus
+///     fuentes): 30 días; no va a cambiar. Ver ControlSenal.esconderDespuesDe.
+///   - un video de YouTube que ya no existe o que su dueño no deja ver fuera
+///     de YouTube: 3 días.
+/// Lo que no conecta o tarda NO se anota: suele ser pasajero (el canal sigue
+/// en la lista); si de verdad está caído, lo saca el servidor.
 /// Se guarda en el aparato.
 class NoAnda {
   static const _clave = 'kairos.no_anda';

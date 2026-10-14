@@ -38,6 +38,18 @@ class Aparato {
     }
   }
 
+  /// Mete [script] en los marcos de youtube.com del WebView [webview] (se
+  /// llama antes de cargar la página). false = este aparato no lo permite.
+  static Future<bool> dentroDeYoutube(int webview, String script) async {
+    try {
+      return await _canal.invokeMethod<bool>('dentroDeYoutube', {'webview': webview, 'script': script}) ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   static Future<void> cargar() async {
     try {
       final datos = await _canal.invokeMapMethod<String, Object?>('datos');

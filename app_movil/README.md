@@ -47,8 +47,9 @@ La misma APK se instala en celulares y en televisores Android / Google TV:
 - `MainActivity.kt` le pasa a Flutter el **nombre del aparato** (ej:
   "Philips 55PUD7406") y si es una TV (`lib/aparato.dart`). El nombre se ve
   en el panel, en "Dispositivos conectados" del cliente. Además pone el
-  castellano como idioma preferido (así YouTube elige el audio en español
-  si el video lo tiene) y, en la TV, no deja que el reproductor de YouTube
+  castellano como idioma preferido, mete en el reproductor de YouTube el
+  script que elige el audio en castellano ("dentroDeYoutube": la API
+  oficial de YouTube no deja cambiar el audio) y, en la TV, no deja que el reproductor de YouTube
   se quede con el foco del control remoto.
 
 Instalar en una TV: copiar la APK con un pendrive, o con la app *Downloader*

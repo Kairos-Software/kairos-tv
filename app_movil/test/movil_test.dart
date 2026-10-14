@@ -141,12 +141,16 @@ void main() {
     expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: true), const Duration(days: 30));
   });
 
-  test('un canal que se vio bien y después se cortó no se esconde', () {
-    // Nunca arrancó en este aparato: se esconde un rato
-    expect(ControlSenal.esconderDespuesDe(Falla.conexion, hayFuentes: true, seVio: false), isTrue);
-    // Anduvo un rato y se cortó: en este aparato anda, fue un corte de la señal
-    expect(ControlSenal.esconderDespuesDe(Falla.cortada, hayFuentes: true, seVio: true), isFalse);
-    expect(ControlSenal.esconderDespuesDe(Falla.trabada, hayFuentes: true, seVio: true), isFalse);
+  test('un canal que no conecta NO se esconde (suele volver): solo lo que el aparato no sabe mostrar', () {
+    // No se pudo conectar, tardó o la rechazaron: pasajero (pasó con Disney). Sigue en la lista
+    for (final falla in [Falla.conexion, Falla.tiempo, Falla.trabada, Falla.de('Response code: 403')]) {
+      expect(ControlSenal.esconderDespuesDe(falla, hayFuentes: true, seVio: false), isFalse, reason: falla.motivo);
+    }
+    // El aparato no puede mostrar ese video: no va a cambiar, se esconde acá
+    expect(ControlSenal.esconderDespuesDe(Falla.formato, hayFuentes: true, seVio: false), isTrue);
+    expect(ControlSenal.esconderDespuesDe(Falla.sinImagen, hayFuentes: true, seVio: false), isTrue);
+    // ...salvo que se haya llegado a ver bien
+    expect(ControlSenal.esconderDespuesDe(Falla.formato, hayFuentes: true, seVio: true), isFalse);
     // Sin internet en el aparato: la señal no tiene la culpa
     expect(ControlSenal.esconderDespuesDe(Falla.sinInternet, hayFuentes: true, seVio: false), isFalse);
   });

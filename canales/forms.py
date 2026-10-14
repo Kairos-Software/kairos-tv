@@ -117,6 +117,7 @@ class EditarDesdeOrganizarForm(forms.Form):
     numero = forms.CharField(max_length=10, required=False)
     contenido = forms.ChoiceField(choices=Contenido.choices, required=False)
     activo = forms.BooleanField(required=False)
+    destacado = forms.BooleanField(required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -309,8 +310,9 @@ class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
     class Meta:
         model = Canal
         fields = ['nombre', 'logo', 'numero', 'categoria', 'contenido', 'idioma', 'pais', 'orden',
-                  'activo', 'motivo_quitado']
-        labels = {'activo': 'Se muestra en la app', 'motivo_quitado': 'Si no se muestra, por qué'}
+                  'activo', 'motivo_quitado', 'destacado']
+        labels = {'activo': 'Se muestra en la app', 'motivo_quitado': 'Si no se muestra, por qué',
+                  'destacado': '★ Destacado en la TV'}
         widgets = {'logo': forms.URLInput(attrs={'placeholder': 'https://.../logo.png'})}
 
     def __init__(self, *args, **kwargs):

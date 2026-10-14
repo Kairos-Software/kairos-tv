@@ -175,6 +175,7 @@ class Canal {
       nombre = '${json['nombre'] ?? ''}',
       numero = '${json['numero'] ?? ''}',
       logo = '${json['logo'] ?? ''}',
+      destacado = json['destacado'] == true,
       fuentes = [for (final f in json['fuentes'] as List? ?? []) FuenteCanal(f as Map<String, dynamic>)];
 
   final int id;
@@ -182,6 +183,10 @@ class Canal {
   final String numero;
   final String logo;
   final List<FuenteCanal> fuentes;
+
+  /// Elegido en el panel ("Destacado en la TV"): el modo reposo lo muestra
+  /// más seguido (tv/reposo.dart). Un servidor viejo no lo manda: false.
+  final bool destacado;
 
   /// El nombre de su categoría (la API los manda agrupados por categoría).
   final String categoria;

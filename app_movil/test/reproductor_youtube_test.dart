@@ -105,6 +105,23 @@ void main() {
     expect(estado.haySubtitulos, isNull);
   });
 
+  test('el audio: el script dentro de YouTube pone el castellano y la app sabe qué audios hay', () {
+    // Lo que Android mete en el marco de youtube.com (solo ahí) usa las funciones de audio del reproductor
+    expect(scriptDentroDeYoutube, contains("location.hostname !== 'www.youtube.com'"));
+    expect(scriptDentroDeYoutube, contains('setAudioTrack'));
+    expect(scriptDentroDeYoutube, contains("indexOf('es') === 0"));
+    // La página pasa lo que avisa el script, y sabe pedir otro audio
+    final pagina = paginaDelReproductor('KNNUhFe1i-0', controles: false);
+    expect(pagina, contains("if (d && d.kairos === 'audios') avisar({e: 'audios', l: d.lista, a: d.actual});"));
+    expect(pagina, contains('function cambiarAudio(id)'));
+    final estado = EstadoYoutube()
+      ..recibir('{"e":"audios","l":[{"id":"es.3","n":"Español"},{"id":"en.4","n":"Inglés original"}],"a":"es.3"}');
+    expect(estado.audios, [('es.3', 'Español'), ('en.4', 'Inglés original')]);
+    expect(estado.nombreDelAudio, 'Español');
+    estado.reiniciar();
+    expect(estado.audios, isEmpty);
+  });
+
   test('los errores de YouTube, en castellano y con el motivo para el servidor', () {
     expect(EstadoYoutube.mensajeDe(150), contains('no deja verlo fuera de YouTube'));
     expect(EstadoYoutube.mensajeDe(100), contains('ya no está'));

@@ -4,8 +4,10 @@ Los canales de TV para la app.
     GET /api/v1/canales/?formatos=hls,dash,directo,rtsp
       -> {"cantidad": 3,
           "categorias": [{"id": 1, "nombre": "Noticias",
-                          "canales": [{"id", "nombre", "numero", "logo",
+                          "canales": [{"id", "nombre", "numero", "logo", "destacado",
                                        "fuentes": [{"id", "url", "tipo", "user_agent", "referer"}, ...]}]}]}
+      "destacado": marcado en el panel; el modo reposo de la TV lo muestra más
+      seguido (las apps anteriores a la 1.2.19 no lo leen).
 
 Los ven los usuarios del panel y los clientes con el servicio vigente. Solo
 van los canales que la app puede reproducir: `formatos` dice cuáles sabe
@@ -37,7 +39,8 @@ reproducir esa versión de la app (sin `formatos` = solo HLS, como la 1.0.0).
       La app avisa que no pudo reproducir esa fuente. El servidor la vuelve a
       probar por su cuenta y, si también le falla, deja de mandarla. Si al
       servidor le anda pero varios aparatos avisan que no se reproduce, se
-      oculta unos días igual ("caida"). motivo: formato | rechazo | tiempo |
+      oculta un rato igual ("caida"): 3 horas la primera vez, más si sigue
+      fallando, y vuelve sola. motivo: formato | rechazo | tiempo |
       conexion | error (ver servicios.MOTIVOS_DE_LOS_APARATOS).
 
     POST /api/v1/canales/fuentes/<id>/estabilidad/   {"segundos": 900, "cortes": 2, "proporcion": 1.78}
@@ -46,8 +49,9 @@ reproducir esa versión de la app (sin `formatos` = solo HLS, como la 1.0.0).
       (se frenó a cargar, o se cayó y se reconectó) y la forma de la imagen
       (ancho / alto, opcional: 1.33 = 4:3, "cuadrada"). Con lo de todos los
       aparatos, la lista de canales manda primero las fuentes que no se
-      cortan y llenan la pantalla (consultas.ordenadas_por_estabilidad). Las
-      apps anteriores a la 1.2.16 no lo mandan.
+      cortan y llenan la pantalla (consultas.ordenadas_por_estabilidad). Si
+      se vio un minuto o más, anda: se olvida que había fallado y, si estaba
+      oculta, vuelve ya. Las apps anteriores a la 1.2.16 no lo mandan.
 
     POST /api/v1/canales/visto/
       {"vistos": [{"id": 12, "segundos": 300, "vista": true}], "favoritos": ["c:12", "s:Flash Gordon"]}

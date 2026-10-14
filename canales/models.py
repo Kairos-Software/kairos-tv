@@ -141,6 +141,11 @@ class Canal(ModeloBase):
     activo = models.BooleanField(default=True, help_text='Un canal inactivo ("quitado") no aparece en la app.')
     motivo_quitado = models.CharField('por qué se quitó', max_length=200, blank=True)
     orden = models.PositiveIntegerField(default=0, help_text='Menor = aparece primero dentro de su categoría.')
+    # Lo que se elige en el panel para que el modo reposo de la TV lo muestre
+    # MÁS SEGUIDO (no siempre: se mezcla con lo que sale al azar). En una
+    # serie se marcan todos sus capítulos (ver organizar.editar_serie).
+    destacado = models.BooleanField('destacado en la TV', default=False,
+                                    help_text='Sale más seguido en el modo reposo de la TV.')
 
     class Meta:
         verbose_name = 'canal'
@@ -175,13 +180,12 @@ class PortadaDeSerie(models.Model):
         return self.nombre
 
 
-# Cuántos días queda oculta una fuente que falla en los aparatos. Después la
-# app la vuelve a intentar (por si el problema era pasajero).
-DIAS_OCULTA = 7
-
-
-def hace_dias_oculta():
-    return timezone.now() - timedelta(days=DIAS_OCULTA)
+# Cuánto queda oculta una fuente que falla en los aparatos (ver
+# servicios.registrar_falla_en_aparato): la primera vez poco, porque suele ser
+# un corte pasajero del canal; si al volver sigue fallando, más; desde la
+# tercera, una semana. Cuando un aparato la ve bien, se olvida todo y vuelve a
+# empezar por la primera (servicios.registrar_estabilidad).
+OCULTA_POR = [timedelta(hours=3), timedelta(days=1), timedelta(days=7)]
 
 
 # Estabilidad en los aparatos (Fuente.cortes_por_hora). Con menos de
@@ -266,11 +270,14 @@ class Fuente(models.Model):
     # servidor: hay señales que al servidor le responden pero en los aparatos
     # no se reproducen (formato de video que no leen, servidores que aceptan
     # una sola conexión...). Si varios aparatos avisan que falla, se oculta
-    # unos días aunque el servidor la vea bien (ver servicios.registrar_falla_en_aparato).
+    # un rato aunque el servidor la vea bien (ver servicios.registrar_falla_en_aparato).
     avisos_de_aparatos = models.PositiveSmallIntegerField(default=0)
     primer_aviso = models.DateTimeField(null=True, blank=True)
     falla_en_aparatos = models.CharField('motivo según los aparatos', max_length=200, blank=True)
     oculta_desde = models.DateTimeField('oculta por fallar en los aparatos desde', null=True, blank=True)
+    # Hasta cuándo, y cuántas veces seguidas se ocultó (cada vez, más tiempo: OCULTA_POR)
+    oculta_hasta = models.DateTimeField('oculta hasta', null=True, blank=True)
+    veces_oculta = models.PositiveSmallIntegerField(default=0)
 
     # Qué tan estable es en los aparatos: cuánto se vio y cuántas veces se
     # cortó mientras se veía (se frenó a cargar o se cayó y se reconectó). Con
@@ -299,12 +306,12 @@ class Fuente(models.Model):
 
     @property
     def oculta_por_aparatos(self):
-        return self.oculta_desde is not None and self.oculta_desde > hace_dias_oculta()
+        return self.oculta_hasta is not None and self.oculta_hasta > timezone.now()
 
     @property
     def vuelve_a_probarse(self):
         """Cuándo deja de estar oculta (y la app la vuelve a intentar)."""
-        return self.oculta_desde + timedelta(days=DIAS_OCULTA) if self.oculta_desde else None
+        return self.oculta_hasta
 
     @property
     def cortes_por_hora(self):

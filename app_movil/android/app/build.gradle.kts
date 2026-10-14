@@ -115,6 +115,8 @@ flutter {
 dependencies {
     // FileProvider: para pasarle al instalador la APK nueva (MainActivity.kt)
     implementation("androidx.core:core-ktx:1.13.1")
+    // Meter un script en el reproductor de YouTube (elegir el audio en castellano, MainActivity.kt)
+    implementation("androidx.webkit:webkit:1.15.0")
 }
 
 // cronet_http (la app le habla a YouTube con Cronet, ver lib/senales.dart)

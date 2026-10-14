@@ -226,12 +226,33 @@ de video que el aparato no lee, servidores que aceptan una sola conexión,
 otros que rechazan a los reproductores). Por eso la app manda también el
 motivo (`{"motivo": "formato" | "rechazo" | "tiempo" | "conexion" | "error",
 "detalle"}`). Si en un día avisan **2 aparatos distintos** (o el mismo, con
-media hora de diferencia), la fuente se **oculta 7 días** aunque al servidor
-le ande (`Fuente.oculta_desde`, `falla_en_aparatos`; ver
-`servicios.registrar_falla_en_aparato`). En Organizar contenido el canal aparece como
-"Oculto porque no se reproduce en los aparatos (motivo)". Pasados los 7 días,
-la app lo vuelve a intentar sola. Si falla porque el aparato no tiene
-internet, la app no avisa.
+media hora de diferencia), la fuente se **oculta un rato** aunque al servidor
+le ande, y **vuelve sola** (`Fuente.oculta_hasta`, `veces_oculta`,
+`falla_en_aparatos`; ver `servicios.registrar_falla_en_aparato`):
+
+- la primera vez, **3 horas** (casi siempre es un corte pasajero del canal: pasó con Disney);
+- si al volver sigue fallando, **1 día**; desde la tercera, **una semana** (`models.OCULTA_POR`);
+- si los aparatos no pueden leer el formato, directo una semana (no es pasajero);
+- en cuanto un aparato la **ve bien un minuto**, se olvida todo: si estaba
+  oculta vuelve ya, y la próxima falla empieza otra vez por 3 horas
+  (`servicios.registrar_estabilidad`, `VISTO_PARA_PERDONAR`).
+
+En Organizar contenido el canal aparece como "Oculto un rato porque no se
+reproduce en los aparatos (motivo). Vuelve solo a la app el 14/10 a las 18:00".
+Nadie tiene que hacer nada. Si falla porque el aparato no tiene internet, la
+app no avisa. Y la app ya no esconde por su cuenta un canal que no conecta
+(desde la 1.2.19): solo lo que ese aparato no sabe mostrar (formato).
+
+Las **caídas** (las que tampoco le andan al servidor) también vuelven solas:
+la verificación programada (`verificar_fuentes`, cada 6 horas) las prueba de
+nuevo y las que andan pasan a "funciona".
+
+**Destacado en la TV** (`Canal.destacado`): se marca en Organizar contenido →
+Editar ("★ Destacado en la TV"; en una serie se marcan todos sus capítulos) o
+en la página del canal. La API lo manda (`destacado`) y el modo reposo de la
+TV lo muestra más seguido que lo que sale al azar, sin que salga siempre
+(ver `app_movil/lib/tv/reposo.dart`). En Organizar, "Mostrar → Destacado en la
+TV (★)" lista lo marcado, y la tarjeta lleva una ★.
 
 **La mejor fuente, primera:** la app arranca por la primera fuente de cada
 canal, así que el servidor las manda ordenadas (`consultas.ordenadas_por_estabilidad`):

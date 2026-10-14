@@ -117,10 +117,13 @@ class FuenteSerializer(serializers.ModelSerializer):
 
 
 class CanalSerializer(serializers.ModelSerializer):
-    """Un canal con sus fuentes activas, en orden de prioridad (la app prueba la primera y sigue)."""
+    """
+    Un canal con sus fuentes activas, en orden de prioridad (la app prueba la
+    primera y sigue). `destacado`: el modo reposo de la TV lo muestra más seguido.
+    """
     fuentes = FuenteSerializer(source='fuentes_activas', many=True)
 
     class Meta:
         model = Canal
-        fields = ['id', 'nombre', 'numero', 'logo', 'fuentes']
+        fields = ['id', 'nombre', 'numero', 'logo', 'destacado', 'fuentes']
 

@@ -1330,6 +1330,17 @@ class _ReproductorYoutubeTvState extends State<ReproductorYoutubeTv> {
                         ),
                         const SizedBox(width: 18),
                       ],
+                      if (estado.audios.length > 1) ...[
+                        _BotonCuadrado(
+                          icono: Icons.record_voice_over_rounded,
+                          etiqueta: 'Idioma: ${estado.nombreDelAudio.isEmpty ? 'cambiar' : estado.nombreDelAudio}',
+                          alOk: () {
+                            video.cambiarAudio();
+                            _reiniciarEspera();
+                          },
+                        ),
+                        const SizedBox(width: 18),
+                      ],
                       _BotonCuadrado(
                         icono: estado.subtitulos.isEmpty
                             ? Icons.closed_caption_off_outlined

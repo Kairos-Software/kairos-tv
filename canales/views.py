@@ -382,9 +382,10 @@ def _preparar_para_editar(pagina, contenido):
                         vistos.add(fuente.origen)
                         fuentes.append(fuente)
             serie.activo = any(c.canal.activo for c in serie.capitulos)
+            serie.destacado = any(c.canal.destacado for c in serie.capitulos)
             serie.datos = json.dumps({
                 'tipo': 'serie', 'nombre': serie.nombre, 'logo': serie.logo, 'portada': bool(serie.portada),
-                'activo': serie.activo,
+                'activo': serie.activo, 'destacado': serie.destacado,
                 'categoria': serie.categoria_id or 'ninguna', 'capitulos': serie.cantidad,
                 'en_app': serie.completa, 'motivo': serie.por_que_no_se_ve,
                 'fuentes': _origenes_de(fuentes, importaciones),
@@ -396,6 +397,7 @@ def _preparar_para_editar(pagina, contenido):
         canal.datos = json.dumps({
             'tipo': 'canal', 'pk': canal.pk, 'nombre': canal.nombre, 'logo': canal.logo, 'numero': canal.numero,
             'categoria': canal.categoria_id or 'ninguna', 'contenido': canal.contenido, 'activo': canal.activo,
+            'destacado': canal.destacado,
             'en_app': not canal.no_se_ve, 'motivo': canal.no_se_ve,
             'fuentes': _origenes_de(canal.fuentes.all(), importaciones),
             'mas': reverse('canales:canal_editar', args=[canal.pk]),
@@ -523,7 +525,8 @@ def organizar_editar(request):
             categoria = _categoria_elegida(request, Contenido.SERIE)
             nombre = request.POST.get('serie', '')
             cambios = organizar.editar_serie(nombre, request.user, nombre=datos['nombre'], logo=datos['logo'],
-                                             categoria=categoria, activo=datos['activo'])
+                                             categoria=categoria, activo=datos['activo'],
+                                             destacado=datos['destacado'])
             titulo = datos['nombre'] or nombre
         else:
             canal = get_object_or_404(Canal, pk=request.POST.get('canal', '0'))
@@ -531,7 +534,7 @@ def organizar_editar(request):
             extra = {'contenido': datos['contenido']} if datos['contenido'] else {}
             cambios = organizar.editar_canal(canal, request.user, nombre=datos['nombre'], logo=datos['logo'],
                                              categoria=categoria, activo=datos['activo'],
-                                             numero=datos['numero'].strip(), **extra)
+                                             numero=datos['numero'].strip(), destacado=datos['destacado'], **extra)
             titulo = canal.nombre
     except organizar.NoSePuede as error:
         messages.error(request, str(error))

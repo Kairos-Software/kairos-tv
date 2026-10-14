@@ -9,7 +9,9 @@
 ///   - logo:      el logo de Kairos TV y la hora. Siempre se vuelve a ella.
 ///   - titulo:    una película, serie o canal: la imagen grande y borrosa de
 ///                fondo con un zoom lento, el póster nítido, el título y qué es.
-///                Va una distinta entre cada una de las otras.
+///                Va una distinta entre cada una de las otras. Lo marcado
+///                en el panel como "Destacado en la TV" sale más seguido
+///                ([intercalarDestacados]).
 ///   - estrenos:  los pósters de las películas más nuevas (por el año del nombre).
 ///   - cifras:    "Más de 700 películas · 400 series · 70 canales en vivo".
 ///   - enVivo:    los logos de los canales.
@@ -54,6 +56,15 @@ const _cadaCuanto = Duration(seconds: 12);
 const _fundido = Duration(milliseconds: 1400);
 const _encendidaHasta = Duration(minutes: 30);
 const _maximoTitulos = 20;
+
+/// Lo destacado en el panel ("Destacado en la TV") sale más seguido que lo
+/// demás, pero no todo el tiempo: en la lista de títulos, uno de cada
+/// [_cadaCuantosUnDestacado] lugares es para un destacado (como mucho
+/// [_lugaresDestacados] destacados distintos por vez, cada uno hasta dos
+/// veces); lo que sale al azar aparece una vez. En los grupos (series, canales)
+/// van primero.
+const _cadaCuantosUnDestacado = 3;
+const _lugaresDestacados = 7;
 
 /// Cuántos pósters o logos van en las escenas de grupo, y cuántos hacen falta para armarlas.
 const _porGrupo = 5;
@@ -157,24 +168,36 @@ class Vidriera {
     final series = catalogo.series.where((s) => s.imagen.isNotEmpty).toList();
     final canales = catalogo.canales.where((c) => c.logo.isNotEmpty).toList();
 
+    // Lo destacado en el panel y lo demás (que sale al azar)
+    final destacados = [
+      for (final p in peliculas.where((p) => p.destacado)) dePelicula(p),
+      for (final s in series.where((s) => s.destacada)) deSerie(s),
+      for (final c in canales.where((c) => c.destacado)) deCanal(c),
+    ];
+    final comunes = [
+      for (final p in algunos(peliculas.where((p) => !p.destacado), 9)) dePelicula(p),
+      for (final s in algunos(series.where((s) => !s.destacada), 7)) deSerie(s),
+      for (final c in algunos(canales.where((c) => !c.destacado), 4)) deCanal(c),
+    ]..shuffle(azar);
+
+    /// [cuantos] de la lista, primero los destacados (al azar entre ellos) y después los demás.
+    List<T> primeroDestacados<T>(List<T> lista, bool Function(T) destacado, int cuantos) => [
+      ...algunos(lista.where(destacado), cuantos),
+      ...algunos(lista.where((x) => !destacado(x)), cuantos),
+    ].take(cuantos).toList();
+
     // Estrenos: de las 15 más nuevas, 5 al azar (así cambian de una vez a la otra)
     final conAnio = peliculas.where((p) => anioDe(p.nombre) != null).toList()
       ..sort((a, b) => anioDe(b.nombre)!.compareTo(anioDe(a.nombre)!));
     final nuevas = algunos(conAnio.take(20), _porGrupo * _candidatos);
     final masNueva = nuevas.isEmpty ? 0 : nuevas.map((p) => anioDe(p.nombre)!).reduce(max);
 
-    final titulos = [
-      for (final p in algunos(peliculas, 9)) dePelicula(p),
-      for (final s in algunos(series, 7)) deSerie(s),
-      for (final c in algunos(canales, 4)) deCanal(c),
-    ]..shuffle(azar);
-
     return Vidriera(
-      titulos: titulos.take(_maximoTitulos).toList(),
+      titulos: intercalarDestacados(comunes, algunos(destacados, _lugaresDestacados)),
       estrenos: [for (final p in nuevas) dePelicula(p)],
       sonEstrenos: masNueva >= anioActual - 1,
-      canales: [for (final c in algunos(canales, _logosEnVivo * 2)) deCanal(c)],
-      series: [for (final s in algunos(series, _porGrupo * _candidatos)) deSerie(s)],
+      canales: [for (final c in primeroDestacados(canales, (c) => c.destacado, _logosEnVivo * 2)) deCanal(c)],
+      series: [for (final s in primeroDestacados(series, (s) => s.destacada, _porGrupo * _candidatos)) deSerie(s)],
       peliculas: catalogo.peliculas.length,
       cantidadSeries: catalogo.series.length,
       cantidadCanales: catalogo.canales.length,
@@ -198,6 +221,28 @@ class Vidriera {
       if (grupos.isEmpty && titulos.isNotEmpty) ...List.filled(3, Escena.titulo),
     ];
   }
+}
+
+/// Los títulos del reposo: [comunes] (al azar) con [destacados] intercalados,
+/// uno cada [_cadaCuantosUnDestacado] lugares (el segundo, el quinto...). Si
+/// hay pocos destacados, cada uno va dos veces (nunca seguidas): así sale más
+/// seguido que lo común, que va una sola vez.
+List<T> intercalarDestacados<T>(List<T> comunes, List<T> destacados) {
+  final lugares = [...destacados, ...destacados].take(_lugaresDestacados).toList();
+  final titulos = <T>[];
+  var comun = 0;
+  var destacado = 0;
+  while (titulos.length < _maximoTitulos && (comun < comunes.length || destacado < lugares.length)) {
+    final tocaDestacado = titulos.length % _cadaCuantosUnDestacado == 1 || comun >= comunes.length;
+    if (tocaDestacado && destacado < lugares.length) {
+      titulos.add(lugares[destacado++]);
+    } else if (comun < comunes.length) {
+      titulos.add(comunes[comun++]);
+    } else {
+      break;
+    }
+  }
+  return titulos;
 }
 
 /// "+700", "+1.000": redondea para abajo (a 10 o a 50/100), así la cifra nunca

@@ -612,7 +612,7 @@ def ordenar_capitulos(nombre_serie, temporada, en_orden, usuario=None):
 def editar_canal(canal, usuario=None, **datos):
     """
     Cambia lo que vino en `datos` (nombre, logo, numero, categoria, contenido,
-    activo) de un canal, película o capítulo. Si cambia de sección, su
+    activo, destacado) de un canal, película o capítulo. Si cambia de sección, su
     categoría pasa a la del mismo nombre en la sección nueva. Devuelve los
     nombres de lo que cambió.
     """
@@ -621,7 +621,7 @@ def editar_canal(canal, usuario=None, **datos):
                         'pone el nombre de la serie y el número de capítulo.')
     cambios = []
     logo_viejo = canal.logo
-    for campo in ('nombre', 'logo', 'numero', 'categoria', 'contenido', 'activo'):
+    for campo in ('nombre', 'logo', 'numero', 'categoria', 'contenido', 'activo', 'destacado'):
         if campo in datos and getattr(canal, campo) != datos[campo]:
             setattr(canal, campo, datos[campo])
             cambios.append(campo)
@@ -653,7 +653,8 @@ def primera_imagen(serie):
 def editar_serie(serie, usuario=None, **datos):
     """
     Lo mismo para una serie entera (todos sus capítulos): nombre (los
-    renombra), logo, categoria y activo. Devuelve los nombres de lo que cambió.
+    renombra), logo, categoria, activo y destacado (en la app, la serie está
+    destacada si lo está algún capítulo). Devuelve los nombres de lo que cambió.
     El logo es la PORTADA de la serie (imagenes.PortadaDeSerie): los
     capítulos conservan cada uno su imagen. Vacío = sin portada (la app usa
     la del primer capítulo).
@@ -675,6 +676,9 @@ def editar_serie(serie, usuario=None, **datos):
         capitulos.update(activo=datos['activo'], motivo_quitado='' if datos['activo'] else 'Quitado a mano.',
                          modificado=ahora, modificado_por=quien)
         cambios.append('activo')
+    if 'destacado' in datos and capitulos.exclude(destacado=datos['destacado']).exists():
+        capitulos.update(destacado=datos['destacado'], modificado=ahora, modificado_por=quien)
+        cambios.append('destacado')
     # Con comparar el texto alcanza: así también se puede corregir un acento ("Pocoyo" -> "Pocoyó")
     if datos.get('nombre') and _limpio(datos['nombre'], 90) != _limpio(serie, 90):
         renombrar_serie(serie, datos['nombre'], usuario)

@@ -371,7 +371,7 @@
                     {% endif %}
                     {% if puede_editar %}<label class="espejo-seleccionar" for="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}">{% else %}<div class="espejo-seleccionar">{% endif %}
                     <span class="espejo-imagen" data-iniciales="{{ item.nombre|iniciales }}">{% if item.logo %}<img src="{{ item.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ item.nombre|iniciales }}{% endif %}</span>
-                    <span class="espejo-nombre" title="{{ item.nombre }}">{{ item.nombre }}</span>
+                    <span class="espejo-nombre" title="{{ item.nombre }}">{% if item.destacado %}<span title="Destacado en la TV" aria-label="Destacado en la TV">★</span> {% endif %}{{ item.nombre }}</span>
                     <span class="espejo-detalle">
                         {% if contenido == 'serie' %}
                         <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% endif %}
@@ -540,6 +540,13 @@
                             <input class="form-check-input" type="checkbox" name="activo" id="editar-activo">
                             <label class="form-check-label" for="editar-activo">Se muestra en la app</label>
                         </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" name="destacado" id="editar-destacado">
+                            <label class="form-check-label" for="editar-destacado">★ Destacado en la TV</label>
+                        </div>
+                        <div class="espejo-ayuda">Cuando nadie usa la TV, la app muestra una vidriera con películas, series y canales. Lo destacado sale ahí más seguido que lo demás (no todo el tiempo).</div>
                     </div>
                 </div>
             </div>
@@ -830,6 +837,7 @@
         editar.nueva_categoria.dispatchEvent(new Event('input', {bubbles: true}));   // la lista vuelve a valer (sistema.js)
         if (editar.contenido) editar.contenido.value = datos.contenido;
         editar.activo.checked = !!datos.activo;
+        editar.destacado.checked = !!datos.destacado;
         document.getElementById('editar-titulo').textContent = esSerie ? 'Serie «' + datos.nombre + '» (' + datos.capitulos + ' capítulos)' : datos.nombre;
         var estado = document.getElementById('editar-estado');
         estado.textContent = datos.en_app ? 'Se ve en la app.' : 'No se ve en la app: ' + (datos.motivo || '');

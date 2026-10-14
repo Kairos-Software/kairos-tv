@@ -5,10 +5,11 @@ Lo que el sistema BUSCA de los canales (capa Base).
 from dataclasses import dataclass, field
 
 from django.db.models import Case, Count, Exists, F, OuterRef, Prefetch, Q, Value, When
+from django.utils import timezone
 
 from . import clasificar, imagenes, secciones
 from .models import (CORTES_POR_HORA_TOLERABLES, MINIMO_VISTO_PARA_JUZGAR, PROPORCION_PANTALLA_COMPLETA,
-                     VELOCIDAD_SOBRADA, Canal, Categoria, Contenido, Fuente, Importacion, hace_dias_oculta)
+                     VELOCIDAD_SOBRADA, Canal, Categoria, Contenido, Fuente, Importacion)
 
 # Lo que el reproductor de la app sabe reproducir. La app nueva lo dice al
 # pedir los canales (?formatos=hls,dash,directo,rtsp,youtube,pagina); la
@@ -37,7 +38,7 @@ def fuentes_usables(tipos=None):
     """
     return (Fuente.objects.filter(activa=True, tipo__in=tipos or TIPOS_QUE_REPRODUCE_LA_APP)
             .exclude(estado=Fuente.Estado.CAIDA)
-            .exclude(oculta_desde__gt=hace_dias_oculta()))
+            .exclude(oculta_hasta__gt=timezone.now()))
 
 
 # El orden en que la app prueba las fuentes de un canal (ver ordenadas_por_estabilidad)
@@ -141,7 +142,7 @@ def resumen_de(contenido, nombre=''):
         'funcionan': por_estado.get(Fuente.Estado.FUNCIONA, 0),
         'caidas': por_estado.get(Fuente.Estado.CAIDA, 0),
         'sin_verificar': por_estado.get(Fuente.Estado.SIN_VERIFICAR, 0),
-        'ocultas': fuentes.filter(oculta_desde__gt=hace_dias_oculta()).count(),
+        'ocultas': fuentes.filter(oculta_hasta__gt=timezone.now()).count(),
         'fuentes': sum(por_estado.values()),
     }
 
@@ -350,6 +351,7 @@ MOSTRAR = {
     'fuera': 'Lo que NO se ve (caído o quitado)',
     'caidos': 'No se ve porque sus señales no andan',
     'quitados': 'Quitado a mano',
+    'destacados': 'Destacado en la TV (★)',
 }
 
 
@@ -363,6 +365,8 @@ def canales_filtrados(contenido='', mostrar='todo', texto='', origen='', sin_log
                        estado=estado)
     if mostrar == 'fuera':
         canales = canales.filter(Q(activo=False) | Q(tiene_usable=False))
+    elif mostrar == 'destacados':
+        canales = canales.filter(destacado=True)
     return canales
 
 
@@ -387,6 +391,8 @@ def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', orig
             items = [s for s in items if not s.completa and alguno_activo(s)]
         elif mostrar == 'quitados':
             items = [s for s in items if not alguno_activo(s)]
+        elif mostrar == 'destacados':
+            items = [s for s in items if any(c.canal.destacado for c in s.capitulos)]
         pares = [(s, s.categoria_id) for s in items]
     else:
         canales = canales_filtrados(contenido, mostrar, texto=texto, origen=origen, sin_logo=sin_logo, idioma=idioma)
@@ -451,7 +457,7 @@ def catalogo(texto='', categoria='', idioma='', estado='', sin_logo=False, orige
             fuentes_funcionan=Count('fuentes', filter=Q(fuentes__estado=Fuente.Estado.FUNCIONA), distinct=True),
             fuentes_caidas=Count('fuentes', filter=Q(fuentes__estado=Fuente.Estado.CAIDA), distinct=True),
             tiene_usable=Exists(usables),
-            fuentes_ocultas=Count('fuentes', filter=Q(fuentes__oculta_desde__gt=hace_dias_oculta()), distinct=True),
+            fuentes_ocultas=Count('fuentes', filter=Q(fuentes__oculta_hasta__gt=timezone.now()), distinct=True),
         )
         .prefetch_related(Prefetch('fuentes', queryset=Fuente.objects.order_by('prioridad', 'pk')))
         .order_by(*ORDEN_DE_CATEGORIAS, 'orden', 'nombre')
@@ -494,8 +500,9 @@ def por_que_no_se_ve(canal):
     if canal.fuentes_ocultas:
         oculta = next((f for f in canal.fuentes.all() if f.oculta_por_aparatos), None)
         if oculta:
-            return (f'Oculto porque no se reproduce en los aparatos ({oculta.falla_en_aparatos}). '
-                    f'La app lo vuelve a intentar el {oculta.vuelve_a_probarse:%d/%m}.')
+            vuelve = timezone.localtime(oculta.vuelve_a_probarse)
+            return (f'Oculto un rato porque no se reproduce en los aparatos ({oculta.falla_en_aparatos}). '
+                    f'Vuelve solo a la app el {vuelve:%d/%m} a las {vuelve:%H:%M}.')
     return 'Sus fuentes están apagadas a mano o son de un formato que la app no reproduce.'
 
 

@@ -66,6 +66,48 @@ void main() {
     expect(Vidriera.delCatalogo(_catalogo()).recorrido, [Escena.logo]);
   });
 
+  test('lo destacado en el panel sale más seguido, pero no todo el tiempo', () {
+    final catalogo = _catalogo(peliculas: 30, capitulos: 10, canales: 20);
+    catalogo.peliculas[7] = Canal({
+      'id': 7,
+      'nombre': 'Toy Story (2019)',
+      'logo': 'http://prueba/7.jpg',
+      'destacado': true,
+    }, contenido: 'pelicula');
+    for (var vez = 0; vez < 20; vez++) {
+      final titulos = Vidriera.delCatalogo(catalogo, azar: Random(vez)).titulos.map((t) => t.titulo).toList();
+      // Sale dos veces (lo demás, una o ninguna), y nunca seguidas
+      expect(titulos.where((t) => t == 'Toy Story').length, 2);
+      expect(titulos.toSet().length, titulos.length - 1);
+      expect(titulos.indexOf('Toy Story') + 1, lessThan(titulos.lastIndexOf('Toy Story')));
+    }
+  });
+
+  test('los destacados se intercalan: uno de cada tres lugares', () {
+    final comunes = [for (var i = 0; i < 20; i++) 'c$i'];
+    expect(intercalarDestacados(comunes, ['D']).take(6), ['c0', 'D', 'c1', 'c2', 'D', 'c3']);
+    final muchos = intercalarDestacados(comunes, [for (var i = 0; i < 7; i++) 'D$i']);
+    expect(muchos, hasLength(20));
+    expect(muchos.where((t) => t.startsWith('D')), hasLength(7)); // cada uno una vez: 7 de 20
+    // Sin destacados, todo como antes
+    expect(intercalarDestacados(comunes, <String>[]), comunes);
+  });
+
+  test('en los grupos de series y canales, los destacados van primero', () {
+    final catalogo = _catalogo(capitulos: 30, canales: 40);
+    catalogo.categoriasEnVivo = [
+      CategoriaCanales({
+        'nombre': 'Noticias',
+        'canales': [
+          for (var i = 0; i < 40; i++)
+            {'id': 2000 + i, 'nombre': 'Canal $i', 'logo': 'http://prueba/c$i.png', 'destacado': i == 33},
+        ],
+      }),
+    ];
+    final vidriera = Vidriera.delCatalogo(catalogo, azar: Random(4));
+    expect(vidriera.canales.first.titulo, 'Canal 33');
+  });
+
   test('las cifras se redondean para abajo', () {
     expect(cifraRedonda(7), '7');
     expect(cifraRedonda(70), '70');

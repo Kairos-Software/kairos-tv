@@ -39,7 +39,7 @@ from . import clasificar, organizar, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
 from .consultas import fuentes_usables
 from .m3u import leer_m3u, normalizar
-from .models import Canal, Contenido, EntradaImportada, Fuente, Importacion, medidas_de_calidad
+from .models import OCULTA_POR, Canal, Contenido, EntradaImportada, Fuente, Importacion, medidas_de_calidad
 from .verificacion import NOMBRES_DE_CODECS, Resultado
 
 # De a cuántas se verifican, y cuánto puede tardar como máximo una tanda en
@@ -1071,13 +1071,34 @@ AVISOS_PARA_OCULTAR = 2
 ESPERA_ENTRE_AVISOS = 30 * 60   # segundos
 
 
+def _cuanto_se_oculta(veces, motivo):
+    """
+    Cuánto se oculta la `veces`-ésima vez seguida (OCULTA_POR: 3 horas, 1 día,
+    una semana). Si los aparatos no pueden leer el formato no es algo pasajero:
+    va directo a lo más largo.
+    """
+    if motivo == 'formato':
+        return OCULTA_POR[-1]
+    return OCULTA_POR[min(veces, len(OCULTA_POR)) - 1]
+
+
+def _texto_de_tiempo(tiempo):
+    horas = round(tiempo.total_seconds() / 3600)
+    if horas < 24:
+        return f'{horas} hora{"s" if horas != 1 else ""}'
+    dias = round(horas / 24)
+    return f'{dias} día{"s" if dias != 1 else ""}'
+
+
 def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):
     """
     Cuenta un aviso de falla de un aparato (`quien`: algo que lo identifique,
     ej. el id de su sesión). Con AVISOS_PARA_OCULTAR en un día, la fuente se
-    oculta DIAS_OCULTA días aunque al servidor le ande: se ve que en los
-    aparatos no se reproduce. El mismo aparato cuenta una vez cada
-    ESPERA_ENTRE_AVISOS (reintentar diez veces seguidas no la oculta).
+    oculta un rato aunque al servidor le ande: se ve que en los aparatos no se
+    reproduce. La primera vez, poco (suele ser un corte pasajero del canal);
+    si al volver sigue fallando, cada vez más (OCULTA_POR). Cuando un aparato
+    la ve bien, se olvida (registrar_estabilidad). El mismo aparato cuenta una
+    vez cada ESPERA_ENTRE_AVISOS (reintentar diez veces seguidas no la oculta).
     Devuelve True si quedó oculta.
     """
     if fuente.oculta_por_aparatos:
@@ -1091,12 +1112,17 @@ def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):
     texto = MOTIVOS_DE_LOS_APARATOS.get(motivo, MOTIVOS_DE_LOS_APARATOS['error'])
     fuente.falla_en_aparatos = (f'{texto}: {detalle}' if detalle else texto)[:200]
     if fuente.avisos_de_aparatos >= AVISOS_PARA_OCULTAR:
-        fuente.oculta_desde = ahora
+        fuente.veces_oculta += 1
+        tiempo = _cuanto_se_oculta(fuente.veces_oculta, motivo)
+        fuente.oculta_desde, fuente.oculta_hasta = ahora, ahora + tiempo
+        # Los próximos avisos cuentan desde cero (cuando vuelva, si sigue fallando)
+        fuente.avisos_de_aparatos, fuente.primer_aviso = 0, None
         registrar(None, Accion.SISTEMA,
-                  f'Se ocultó una fuente de {fuente.canal}: no se reproduce en los aparatos ({texto}).',
-                  modulo='canales')
-    fuente.save(update_fields=['avisos_de_aparatos', 'primer_aviso', 'falla_en_aparatos', 'oculta_desde'])
-    return fuente.oculta_desde is not None and fuente.oculta_por_aparatos
+                  f'Se ocultó por {_texto_de_tiempo(tiempo)} una fuente de {fuente.canal}: no se reproduce en los '
+                  f'aparatos ({texto}). Después vuelve sola a la app.', modulo='canales')
+    fuente.save(update_fields=['avisos_de_aparatos', 'primer_aviso', 'falla_en_aparatos', 'oculta_desde',
+                               'oculta_hasta', 'veces_oculta'])
+    return fuente.oculta_por_aparatos
 
 
 # Lo que un aparato puede contar de una sola vez (más es un error o un abuso).
@@ -1104,6 +1130,9 @@ MAXIMO_VISTO_POR_AVISO = 6 * 3600     # segundos
 # Cuando lo visto pasa esto, lo viejo pesa la mitad: cuenta más lo reciente
 # (una fuente que antes se cortaba y ahora anda bien sube sola, y al revés).
 MEMORIA_DE_ESTABILIDAD = 10 * 3600    # segundos
+# Con esto visto en un aparato, la fuente anda: se olvidan sus fallas (si
+# estaba oculta, vuelve ya; la próxima vez que falle se oculta poco).
+VISTO_PARA_PERDONAR = 60   # segundos
 
 
 def registrar_estabilidad(fuente, segundos, cortes, proporcion=None):
@@ -1113,6 +1142,9 @@ def registrar_estabilidad(fuente, segundos, cortes, proporcion=None):
     esta `proporcion` (ancho / alto; opcional). Se suma a lo que contaron los
     demás; con eso la API pone primero las que no se cortan y llenan la
     pantalla (consultas.ordenadas_por_estabilidad). No se guarda quién lo mandó.
+
+    Si se vio VISTO_PARA_PERDONAR o más, anda: se olvida que había fallado
+    (registrar_falla_en_aparato) y, si estaba oculta, vuelve a la app.
     """
     segundos = max(0, min(int(segundos), MAXIMO_VISTO_POR_AVISO))
     cortes = max(0, min(int(cortes), segundos // 5 + 1))   # más de uno cada 5 s no es real
@@ -1129,4 +1161,16 @@ def registrar_estabilidad(fuente, segundos, cortes, proporcion=None):
             fuente.cortes_en_aparatos //= 2
         if proporcion:
             fuente.proporcion = proporcion
-        fuente.save(update_fields=['segundos_en_aparatos', 'cortes_en_aparatos', 'proporcion'])
+        campos = ['segundos_en_aparatos', 'cortes_en_aparatos', 'proporcion']
+        if segundos >= VISTO_PARA_PERDONAR and (fuente.veces_oculta or fuente.avisos_de_aparatos
+                                                 or fuente.oculta_hasta):
+            volvio = fuente.oculta_por_aparatos
+            fuente.veces_oculta = fuente.avisos_de_aparatos = 0
+            fuente.primer_aviso = fuente.oculta_desde = fuente.oculta_hasta = None
+            fuente.falla_en_aparatos = ''
+            campos += ['veces_oculta', 'avisos_de_aparatos', 'primer_aviso', 'oculta_desde', 'oculta_hasta',
+                       'falla_en_aparatos']
+            if volvio:
+                registrar(None, Accion.SISTEMA, f'Volvió a la app una fuente de {fuente.canal}: un aparato la vio '
+                                                f'bien.', modulo='canales')
+        fuente.save(update_fields=campos)

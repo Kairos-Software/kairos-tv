@@ -14,9 +14,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.core.content.FileProvider
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugins.webviewflutter.WebViewFlutterAndroidExternalApi
 import java.io.File
 
 /**
@@ -37,6 +40,10 @@ import java.io.File
  *   - El idioma preferido de la app es el español: el WebView se lo dice a
  *     YouTube, que en los videos con varios audios elige el castellano (y
  *     sus menús, en castellano), aunque la TV esté configurada en inglés.
+ *   - "dentroDeYoutube": mete un script en el reproductor de YouTube (el marco
+ *     de youtube.com, al que la página de la app no tiene acceso) antes de
+ *     que cargue. Con eso la app elige el audio en castellano y cambia de
+ *     idioma (la API oficial de YouTube no lo permite).
  *   - En la TV el WebView nunca se queda con el foco del control remoto: si
  *     Android le pasaba el foco (una flecha que la app no usaba), las flechas
  *     siguientes le llegaban a YouTube y no a la app (no se podía adelantar).
@@ -123,6 +130,18 @@ class MainActivity : FlutterActivity() {
                         resultado.success(true)
                     } catch (e: Exception) {
                         resultado.error("sin_instalador", e.message, null)
+                    }
+                }
+                "dentroDeYoutube" -> {
+                    @Suppress("DEPRECATION")
+                    val vista = WebViewFlutterAndroidExternalApi.getWebView(
+                        flutterEngine, llamada.argument<Number>("webview")!!.toLong())
+                    if (vista != null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                        WebViewCompat.addDocumentStartJavaScript(
+                            vista, llamada.argument<String>("script")!!, setOf("https://www.youtube.com"))
+                        resultado.success(true)
+                    } else {
+                        resultado.success(false)   // WebView viejo: sigue andando, sin elegir el audio
                     }
                 }
                 "abrir" -> {
