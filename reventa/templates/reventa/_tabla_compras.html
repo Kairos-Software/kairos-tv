@@ -27,7 +27,7 @@
                 </td>
                 <td class="text-end">
                     {% if compra.estado == 'pendiente' %}
-                    <form method="post" action="{% url 'reventa:compra_resolver' compra.pk %}" class="d-inline-flex gap-1">
+                    <form method="post" action="{% url 'reventa:compra_resolver' compra.pk %}" class="d-inline-flex flex-wrap justify-content-end gap-1">
                         {% csrf_token %}<input type="hidden" name="volver" value="{{ volver }}">
                         {% if permisos.confirmar_compras %}
                         <button type="submit" name="accion" value="confirmar" class="btn btn-primary btn-sm">Confirmar pago</button>

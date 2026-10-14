@@ -7,7 +7,7 @@
 {% load humanize %}
 
 {% block titulo %}Estadísticas{% endblock %}
-{% block clase_body %}pagina-listado{% endblock %}
+{% block clase_body %}pagina-listado pagina-estadisticas-reventa{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -27,8 +27,8 @@
 
 <section class="tarjeta mb-4 p-0">
     <h2 class="tarjeta-titulo px-4 pt-4">Mes a mes</h2>
-    <div class="table-responsive">
-        <table class="table tabla mb-0">
+    <div class="table-responsive tabla-ancha-con-fija" tabindex="0" aria-label="Estadísticas mensuales; desplazá horizontalmente para ver todas las columnas">
+        <table class="table tabla tabla-estadisticas mb-0">
             <thead><tr>
                 <th scope="col">Mes</th>
                 <th scope="col" class="text-end">Clientes nuevos</th>
@@ -94,8 +94,8 @@
 <section class="tarjeta p-0">
     <h2 class="tarjeta-titulo px-4 pt-4">Ranking de revendedores</h2>
     {% if ranking %}
-    <div class="table-responsive">
-        <table class="table tabla mb-0">
+    <div class="table-responsive tabla-ancha-con-fija" tabindex="0" aria-label="Ranking de revendedores; desplazá horizontalmente para ver todas las columnas">
+        <table class="table tabla tabla-estadisticas mb-0">
             <thead><tr>
                 <th scope="col">#</th><th scope="col">Revendedor</th>
                 <th scope="col" class="text-end">Créditos usados</th><th scope="col" class="text-end">Este mes</th>

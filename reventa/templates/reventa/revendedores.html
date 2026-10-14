@@ -2,7 +2,7 @@
 {% load humanize %}
 
 {% block titulo %}Revendedores{% endblock %}
-{% block clase_body %}pagina-listado{% endblock %}
+{% block clase_body %}pagina-listado pagina-reventa-listado pagina-revendedores{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -27,9 +27,13 @@
     {% if texto %}<a href="{% url 'reventa:revendedores' %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 
-<div class="tarjeta p-0">
+<div class="tarjeta p-0 tabla-reventa">
     {% if revendedores %}
-    <div class="table-responsive">
+    <div class="tabla-reventa-encabezado">
+        <span><strong>{{ revendedores|length }}</strong> revendedor{{ revendedores|length|pluralize:"es" }}</span>
+        <small>Tocá un nombre para ver clientes, créditos y compras</small>
+    </div>
+    <div class="table-responsive" tabindex="0" aria-label="Listado de revendedores">
         <table class="table tabla mb-0">
             <thead><tr>
                 <th scope="col">Revendedor</th><th scope="col">Usuario</th><th scope="col">Créditos</th>
@@ -38,7 +42,7 @@
             <tbody>
                 {% for r in revendedores %}
                 <tr>
-                    <td><a href="{% url 'reventa:revendedor' r.pk %}">{{ r }}</a></td>
+                    <td><a href="{% url 'reventa:revendedor' r.pk %}">{{ r }}</a>{% if r.usuario.telefono %}<small class="tabla-subtexto">{{ r.usuario.telefono }}</small>{% endif %}</td>
                     <td class="texto-suave">{{ r.usuario.username }}{% if not r.usuario.is_active %} <span class="chip chip-no">Inactivo</span>{% endif %}</td>
                     <td class="dato">{{ r.saldo_actual }}</td>
                     <td class="dato">{{ r.clientes_vigentes }}</td>

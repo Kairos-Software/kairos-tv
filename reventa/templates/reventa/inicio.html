@@ -64,7 +64,7 @@
 <section class="tarjeta tarjeta-datos mb-4">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
         <h2 class="tarjeta-titulo">Mis números</h2>
-        <div class="d-flex gap-2">
+        <div class="reventa-acciones-rapidas">
             <a href="{% url 'reventa:cliente_nuevo' %}" class="btn btn-acento btn-sm"><i class="bi bi-person-plus" aria-hidden="true"></i> Nuevo cliente</a>
             {# Para ver la app: el revendedor se activa a sí mismo con sus créditos #}
             <form method="post" action="{% url 'reventa:mi_pantalla' %}" class="d-inline">
@@ -78,8 +78,11 @@
     {% include "reventa/_numeros_revendedor.html" with n=mio %}
 </section>
 
-<section class="tarjeta tarjeta-datos">
-    <h2 class="tarjeta-titulo">Clientes por vencer</h2>
+<section class="tarjeta tarjeta-datos clientes-por-vencer">
+    <div class="reventa-seccion-encabezado">
+        <div><span class="seccion-sobrelinea">Próximos 7 días</span><h2 class="tarjeta-titulo mb-0">Clientes por vencer</h2></div>
+        <a href="{% url 'reventa:clientes' %}?estado=por_vencer" class="btn btn-sm btn-outline-secondary">Ver todos</a>
+    </div>
     {% if por_vencer %}
     <ul class="mb-0">
         {% for c in por_vencer %}

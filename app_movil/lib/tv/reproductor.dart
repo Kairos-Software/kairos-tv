@@ -1331,6 +1331,21 @@ class _ReproductorYoutubeTvState extends State<ReproductorYoutubeTv> {
                         const SizedBox(width: 18),
                       ],
                       _BotonCuadrado(
+                        icono: estado.subtitulos.isEmpty
+                            ? Icons.closed_caption_off_outlined
+                            : Icons.closed_caption_rounded,
+                        etiqueta: switch ((estado.haySubtitulos, estado.subtitulos)) {
+                          (false, _) => 'Este video no tiene subtítulos',
+                          (_, '') => 'Subtítulos: no',
+                          (_, final idioma) => 'Subtítulos: $idioma',
+                        },
+                        alOk: () {
+                          video.cambiarSubtitulos();
+                          _reiniciarEspera();
+                        },
+                      ),
+                      const SizedBox(width: 18),
+                      _BotonCuadrado(
                         icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                         color: favorito ? Tono.rubi : null,
                         etiqueta: favorito ? 'Quitar de favoritos' : 'Agregar a favoritos',

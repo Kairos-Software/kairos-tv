@@ -2,6 +2,7 @@
 {% comment %} Formulario genérico de reventa (revendedor, cliente, paquete). {% endcomment %}
 
 {% block titulo %}{{ titulo }}{% endblock %}
+{% block clase_body %}pagina-reventa-formulario{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -12,7 +13,7 @@
 {% endblock %}
 
 {% block contenido %}
-<form method="post" novalidate class="formulario">
+<form method="post" novalidate class="formulario formulario-reventa">
     {% csrf_token %}
     {% if form.errors %}
     <div class="alert alert-danger" role="alert">

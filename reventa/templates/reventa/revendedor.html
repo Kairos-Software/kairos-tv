@@ -3,6 +3,7 @@
 {% load humanize %}
 
 {% block titulo %}{{ revendedor }}{% endblock %}
+{% block clase_body %}pagina-reventa-detalle pagina-revendedor{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -13,15 +14,21 @@
 {% endblock %}
 
 {% block contenido %}
-<section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">Números</h2>
+<section class="tarjeta reventa-resumen-detalle mb-4">
+    <div class="reventa-seccion-encabezado">
+        <div>
+            <span class="seccion-sobrelinea">Estado general</span>
+            <h2 class="tarjeta-titulo mb-0">Números del revendedor</h2>
+        </div>
+    </div>
     {% include "reventa/_numeros_revendedor.html" with n=numeros %}
 </section>
 
-<div class="row g-4 mb-4">
-    <div class="col-lg-6">
-        <section class="tarjeta h-100">
-            <h2 class="tarjeta-titulo">Créditos</h2>
+<div class="reventa-gestion-grid mb-4">
+        <section class="tarjeta">
+            <div class="reventa-seccion-encabezado">
+                <div><span class="seccion-sobrelinea">Saldo y compras</span><h2 class="tarjeta-titulo mb-0">Gestionar créditos</h2></div>
+            </div>
             <form method="post" action="{% url 'reventa:revendedor_accion' revendedor.pk %}" class="row g-2 align-items-end" novalidate>
                 {% csrf_token %}
                 {% include "parciales/_campo.html" with campo=form_creditos.cantidad ancho="col-sm-4" %}
@@ -42,21 +49,20 @@
             </form>
             {% endif %}
         </section>
-    </div>
-    <div class="col-lg-6">
-        <section class="tarjeta h-100">
-            <h2 class="tarjeta-titulo">Precio por dispositivo</h2>
+        <section class="tarjeta">
+            <div class="reventa-seccion-encabezado">
+                <div><span class="seccion-sobrelinea">Cobro sugerido</span><h2 class="tarjeta-titulo mb-0">Precio por pantalla</h2></div>
+            </div>
             <form method="post" action="{% url 'reventa:revendedor_accion' revendedor.pk %}" class="row g-2 align-items-end" novalidate>
                 {% csrf_token %}
                 {% include "parciales/_campo.html" with campo=form_precio.precio_pantalla ancho="col-sm-8" %}
                 <div class="col-sm-4"><button type="submit" name="accion" value="precio" class="btn btn-outline-secondary w-100">Guardar</button></div>
             </form>
         </section>
-    </div>
 </div>
 
 <section class="tarjeta mb-4 p-0">
-    <div class="d-flex justify-content-between align-items-center px-4 pt-4">
+    <div class="d-flex justify-content-between align-items-center gap-3 px-4 pt-4">
         <h2 class="tarjeta-titulo">Clientes</h2>
         <a href="{% url 'reventa:clientes' %}?revendedor={{ revendedor.pk }}" class="small">Ver todos</a>
     </div>

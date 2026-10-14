@@ -2,7 +2,7 @@
 {% load humanize %}
 
 {% block titulo %}Paquetes de créditos{% endblock %}
-{% block clase_body %}pagina-listado{% endblock %}
+{% block clase_body %}pagina-listado pagina-paquetes{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -15,29 +15,32 @@
 {% endblock %}
 
 {% block contenido %}
+{% if paquetes %}
+<div class="paquetes-grid">
+    {% for p in paquetes %}
+    <article class="tarjeta paquete-tarjeta{% if not p.activo %} paquete-inactivo{% endif %}">
+        <div class="paquete-encabezado">
+            <span class="paquete-icono"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+            {% if p.activo %}<span class="chip chip-si">A la venta</span>{% else %}<span class="chip">Inactivo</span>{% endif %}
+        </div>
+        <h2>{{ p.nombre }}</h2>
+        <div class="paquete-precio">$ {{ p.precio|floatformat:2|intcomma }}</div>
+        <dl class="paquete-datos">
+            <div><dt>Créditos</dt><dd>{{ p.creditos }}</dd></div>
+            <div><dt>Por crédito</dt><dd>$ {% widthratio p.precio p.creditos 1 %}</dd></div>
+        </dl>
+        <a href="{% url 'reventa:paquete_editar' p.pk %}" class="btn btn-outline-secondary w-100">
+            <i class="bi bi-pencil" aria-hidden="true"></i> Editar paquete
+        </a>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
 <div class="tarjeta p-0">
-    {% if paquetes %}
-    <div class="table-responsive">
-        <table class="table tabla mb-0">
-            <thead><tr><th scope="col">Nombre</th><th scope="col">Créditos</th><th scope="col">Precio</th><th scope="col">Precio por crédito</th><th scope="col">Estado</th></tr></thead>
-            <tbody>
-            {% for p in paquetes %}
-                <tr>
-                    <td><a href="{% url 'reventa:paquete_editar' p.pk %}">{{ p.nombre }}</a></td>
-                    <td class="dato">{{ p.creditos }}</td>
-                    <td class="dato">$ {{ p.precio|floatformat:2|intcomma }}</td>
-                    <td class="dato texto-suave">$ {% widthratio p.precio p.creditos 1 %}</td>
-                    <td>{% if p.activo %}<span class="chip chip-si">A la venta</span>{% else %}<span class="chip">Inactivo</span>{% endif %}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
     <div class="vacio">
         <i class="bi bi-box-seam" aria-hidden="true"></i>
         <p>Todavía no hay paquetes. Creá el primero para que los revendedores puedan comprar.</p>
     </div>
-    {% endif %}
 </div>
+{% endif %}
 {% endblock %}

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block titulo %}Clientes{% endblock %}
-{% block clase_body %}pagina-listado{% endblock %}
+{% block clase_body %}pagina-listado pagina-reventa-listado pagina-clientes{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -57,9 +57,13 @@
     {% if hay_filtros %}<a href="{% url 'reventa:clientes' %}" class="btn btn-link">Limpiar</a>{% endif %}
 </form>
 
-<div class="tarjeta p-0">
+<div class="tarjeta p-0 tabla-reventa">
     {% if pagina.object_list %}
-    <div class="table-responsive">
+    <div class="tabla-reventa-encabezado">
+        <span><strong>{{ pagina.paginator.count }}</strong> cliente{{ pagina.paginator.count|pluralize }}</span>
+        <small>Tocá un nombre para abrir su ficha</small>
+    </div>
+    <div class="table-responsive" tabindex="0" aria-label="Listado de clientes">
         <table class="table tabla mb-0">
             <thead><tr>
                 <th scope="col">Cliente</th>
@@ -69,7 +73,7 @@
             <tbody>
             {% for c in pagina %}
                 <tr>
-                    <td><a href="{% url 'reventa:cliente' c.pk %}">{{ c.nombre }}</a></td>
+                    <td><a href="{% url 'reventa:cliente' c.pk %}">{{ c.nombre }}</a><small class="tabla-subtexto">Código {{ c.codigo_legible }}</small></td>
                     {% if revendedores is not None %}<td class="texto-suave">{{ c.revendedor|default:"Directo" }}</td>{% endif %}
                     <td class="texto-suave">{{ c.telefono|default:"—" }}</td>
                     <td class="dato">{% if c.vigente and c.dispositivos_hoy %}{{ c.dispositivos_hoy }}{% else %}—{% endif %}</td>

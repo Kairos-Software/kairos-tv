@@ -64,6 +64,14 @@ String? idDeVideo(String direccion) {
 ///
 /// Cada 5 s avisa cuántos cuadros dibujó y cuántos tarde ("fluidez"): si el
 /// aparato no da abasto, la app baja la calidad.
+///
+/// Subtítulos (la TV, que no tiene los botones de YouTube): `siguienteSubtitulo()`
+/// pasa al siguiente (primero los en castellano, después los demás, al final
+/// ninguno) y avisa cuál quedó ("subtitulos").
+///
+/// El idioma del audio no se puede elegir desde afuera de YouTube: en los
+/// videos con varios audios, YouTube usa el del idioma del aparato, que la
+/// app pone en castellano (MainActivity.preferirEspanol).
 @visibleForTesting
 String paginaDelReproductor(String id, {required bool controles, Duration desde = Duration.zero, int limite = 0}) {
   final opciones = jsonEncode({
@@ -75,7 +83,8 @@ String paginaDelReproductor(String id, {required bool controles, Duration desde 
     'fs': 0,
     'iv_load_policy': 3,
     'cc_load_policy': 0,
-    'hl': 'es',
+    'hl': 'es-419',
+    'cc_lang_pref': 'es',
     'start': desde.inSeconds,
     'origin': sitioDeKairos,
   });
@@ -98,6 +107,33 @@ function acomodar() {
 acomodar();
 addEventListener('resize', acomodar);
 function cambiarLimite(ancho) { LIMITE = ancho; acomodar(); }
+var subtitulo = -1, conSubtitulos = false;
+function pistasDeSubtitulos() {
+  var lista = [];
+  try { lista = reproductor.getOption('captions', 'tracklist') || []; } catch (e) {}
+  var espanol = function (p) { return (p.languageCode || '').indexOf('es') === 0 ? 0 : 1; };
+  return lista.slice().sort(function (a, b) { return espanol(a) - espanol(b); });
+}
+function siguienteSubtitulo() {
+  var elegir = function () {
+    var lista = pistasDeSubtitulos();
+    if (!lista.length) { avisar({e: 'subtitulos', n: '', hay: false}); return; }
+    subtitulo++;
+    if (subtitulo >= lista.length) {
+      subtitulo = -1; conSubtitulos = false;
+      reproductor.unloadModule('captions');
+      avisar({e: 'subtitulos', n: '', hay: true});
+      return;
+    }
+    var pista = lista[subtitulo];
+    reproductor.setOption('captions', 'track', {languageCode: pista.languageCode});
+    avisar({e: 'subtitulos', n: pista.displayName || pista.languageName || pista.languageCode, hay: true});
+  };
+  if (conSubtitulos) { elegir(); return; }
+  conSubtitulos = true;
+  reproductor.loadModule('captions');
+  setTimeout(elegir, 900);   // la lista llega cuando YouTube cargó los subtítulos
+}
 function avisar(datos) { Kairos.postMessage(JSON.stringify(datos)); }
 var cuadros = 0, lentos = 0, anterior = 0;
 function contarCuadro(ahora) {
@@ -163,6 +199,12 @@ class EstadoYoutube extends ChangeNotifier {
 
   /// Lo que midió la página cada 5 s: cuántos cuadros dibujó y cuántos tarde.
   void Function(int cuadros, int lentos)? alMedirFluidez;
+
+  /// Los subtítulos que se están mostrando ('' = ninguno).
+  String subtitulos = '';
+
+  /// Si el video tiene subtítulos (null = todavía no se preguntó).
+  bool? haySubtitulos;
   bool get termino => estado == _termino;
 
   void recibir(String mensaje) {
@@ -179,6 +221,9 @@ class EstadoYoutube extends ChangeNotifier {
         estado = (datos['v'] as num?)?.toInt() ?? estado;
       case 'error':
         error = (datos['v'] as num?)?.toInt() ?? 5;
+      case 'subtitulos':
+        subtitulos = (datos['n'] as String?) ?? '';
+        haySubtitulos = datos['hay'] as bool?;
       case 'fluidez':
         alMedirFluidez?.call((datos['c'] as num?)?.toInt() ?? 0, (datos['l'] as num?)?.toInt() ?? 0);
         return;
@@ -196,6 +241,8 @@ class EstadoYoutube extends ChangeNotifier {
   void reiniciar({int? error}) {
     listo = false;
     estado = -1;
+    subtitulos = '';
+    haySubtitulos = null;
     this.error = error;
     duracion = Duration.zero;
     posicion = Duration.zero;
@@ -356,6 +403,9 @@ class ControlYoutube extends ChangeNotifier {
     final indice = episodios.indexOf(actual);
     return indice >= 0 && indice + 1 < episodios.length ? episodios[indice + 1] : null;
   }
+
+  /// Pasa a los subtítulos siguientes: en castellano, los demás idiomas, ninguno.
+  void cambiarSubtitulos() => _js('siguienteSubtitulo();');
 
   void alternarPausa() => _js(estado.reproduciendo ? 'reproductor.pauseVideo();' : 'reproductor.playVideo();');
 

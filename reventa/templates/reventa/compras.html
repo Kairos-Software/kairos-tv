@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block titulo %}Compras de créditos{% endblock %}
-{% block clase_body %}pagina-listado{% endblock %}
+{% block clase_body %}pagina-listado pagina-reventa-listado pagina-compras{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block contenido %}
-<form method="get" class="filtros">
+<form method="get" class="filtros filtros-compactos">
     <div>
         <label for="estado" class="visually-hidden">Estado</label>
         <select id="estado" name="estado" class="form-select">
@@ -24,7 +24,7 @@
     <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
 </form>
 
-<div class="tarjeta p-0">
+<div class="tarjeta p-0 tabla-reventa">
     {% if pagina.object_list %}
     {% include "reventa/_tabla_compras.html" with compras=pagina volver="compras" mostrar_revendedor=request.es_admin %}
     {% else %}

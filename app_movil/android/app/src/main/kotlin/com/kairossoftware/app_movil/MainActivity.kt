@@ -8,6 +8,11 @@ import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.os.LocaleList
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,8 +32,66 @@ import java.io.File
  *     negra con sonido", o franjas verdes y la imagen rota).
  * Y "instalar": abre el instalador de Android con esa APK (lib/actualizacion.dart);
  * "abrir": abre un enlace en otra app (ej: el WhatsApp del vendedor).
+ *
+ * Además, para el reproductor de YouTube (un WebView, lib/movil/reproductor_youtube.dart):
+ *   - El idioma preferido de la app es el español: el WebView se lo dice a
+ *     YouTube, que en los videos con varios audios elige el castellano (y
+ *     sus menús, en castellano), aunque la TV esté configurada en inglés.
+ *   - En la TV el WebView nunca se queda con el foco del control remoto: si
+ *     Android le pasaba el foco (una flecha que la app no usaba), las flechas
+ *     siguientes le llegaban a YouTube y no a la app (no se podía adelantar).
  */
 class MainActivity : FlutterActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        preferirEspanol()
+        super.onCreate(savedInstanceState)
+        if (esTv()) {
+            window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener { anterior, nuevo ->
+                if (nuevo != null && dentroDeUnWebView(nuevo)) {
+                    nuevo.isFocusable = false
+                    nuevo.isFocusableInTouchMode = false
+                    (anterior?.takeIf { !dentroDeUnWebView(it) } ?: vistaDeFlutter(window.decorView))?.requestFocus()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        preferirEspanol()   // Android lo vuelve al del sistema si cambió la configuración
+        super.onResume()
+    }
+
+    private fun esTv(): Boolean =
+        (getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+
+    /** Castellano primero (latinoamericano y después cualquiera), y detrás los idiomas del aparato. */
+    private fun preferirEspanol() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        val delSistema = LocaleList.getDefault().toLanguageTags()
+        if (delSistema.startsWith("es-419")) return
+        LocaleList.setDefault(LocaleList.forLanguageTags("es-419,es,$delSistema"))
+    }
+
+    private fun dentroDeUnWebView(vista: View): Boolean {
+        var actual: View? = vista
+        while (actual != null) {
+            if (actual is WebView) return true
+            actual = actual.parent as? View
+        }
+        return false
+    }
+
+    private fun vistaDeFlutter(vista: View): View? {
+        if (vista.javaClass.name.contains("FlutterView")) return vista
+        if (vista is ViewGroup) {
+            for (i in 0 until vista.childCount) {
+                vistaDeFlutter(vista.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kairos/dispositivo").setMethodCallHandler { llamada, resultado ->

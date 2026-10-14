@@ -92,6 +92,19 @@ void main() {
     expect(estado.frenado, isTrue);
   });
 
+  test('YouTube en castellano y subtítulos que se eligen desde la TV', () {
+    final pagina = paginaDelReproductor('NvQqHzqClf0', controles: false);
+    expect(pagina, contains('"hl":"es-419"'));
+    expect(pagina, contains('"cc_lang_pref":"es"'));
+    expect(pagina, contains('function siguienteSubtitulo()'));
+    final estado = EstadoYoutube()..recibir('{"e":"subtitulos","n":"Español (Latinoamérica)","hay":true}');
+    expect((estado.subtitulos, estado.haySubtitulos), ('Español (Latinoamérica)', true));
+    estado.recibir('{"e":"subtitulos","n":"","hay":false}');
+    expect((estado.subtitulos, estado.haySubtitulos), ('', false));
+    estado.reiniciar(); // otro video: no se sabe todavía
+    expect(estado.haySubtitulos, isNull);
+  });
+
   test('los errores de YouTube, en castellano y con el motivo para el servidor', () {
     expect(EstadoYoutube.mensajeDe(150), contains('no deja verlo fuera de YouTube'));
     expect(EstadoYoutube.mensajeDe(100), contains('ya no está'));

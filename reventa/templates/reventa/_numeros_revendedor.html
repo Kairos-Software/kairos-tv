@@ -1,5 +1,6 @@
 {% comment %} Los números de un revendedor. Uso: include with n=numeros {% endcomment %}
 {% load humanize %}
+<div class="reventa-metricas">
 <div class="metricas-bloque">
 <h3 class="metricas-bloque-titulo"><i class="bi bi-coin" aria-hidden="true"></i> Créditos</h3>
 <dl class="ficha-datos resumen-metricas resumen-creditos">
@@ -26,4 +27,5 @@
     <div><dt>Invertido en créditos</dt><dd class="dato">$ {{ n.invertido|floatformat:2|intcomma }}</dd></div>
     <div><dt>Ganancia</dt><dd class="dato">$ {{ n.ganancia|floatformat:2|intcomma }}</dd></div>
 </dl>
+</div>
 </div>

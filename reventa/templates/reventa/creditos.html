@@ -3,6 +3,7 @@
 {% load humanize %}
 
 {% block titulo %}Mis créditos{% endblock %}
+{% block clase_body %}pagina-creditos-reventa{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -13,20 +14,24 @@
 
 {% block contenido %}
 <section class="tarjeta mb-4">
-    <h2 class="tarjeta-titulo">Comprar créditos</h2>
+    <div class="reventa-seccion-encabezado">
+        <div>
+            <span class="seccion-sobrelinea">Paquetes disponibles</span>
+            <h2 class="tarjeta-titulo mb-0">Comprar créditos</h2>
+        </div>
+        <span class="saldo-destacado"><small>Saldo actual</small><strong>{{ numeros.saldo }}</strong></span>
+    </div>
     {% if paquetes %}
-    <div class="row g-3">
+    <div class="paquetes-compra-grid">
         {% for p in paquetes %}
-        <div class="col-sm-6 col-lg-4">
-            <form method="post" action="{% url 'reventa:pedir_compra' %}" class="tarjeta h-100 d-flex flex-column gap-2"
+            <form method="post" action="{% url 'reventa:pedir_compra' %}" class="paquete-compra"
                   onsubmit="return confirm('¿Pedir el paquete {{ p.nombre|escapejs }}? Los créditos se suman cuando se confirme el pago.');">
                 {% csrf_token %}<input type="hidden" name="paquete" value="{{ p.pk }}">
-                <strong>{{ p.nombre }}</strong>
-                <span class="dato fs-4">{{ p.creditos }} créditos</span>
-                <span class="texto-suave">$ {{ p.precio|floatformat:2|intcomma }}</span>
-                <button type="submit" class="btn btn-primary mt-auto">Pedir</button>
+                <span class="paquete-compra-nombre">{{ p.nombre }}</span>
+                <strong>{{ p.creditos }} <small>créditos</small></strong>
+                <span class="paquete-compra-precio">$ {{ p.precio|floatformat:2|intcomma }}</span>
+                <button type="submit" class="btn btn-primary">Pedir paquete</button>
             </form>
-        </div>
         {% endfor %}
     </div>
     {% else %}
@@ -34,7 +39,7 @@
     {% endif %}
 </section>
 
-<section class="tarjeta mb-4">
+<section class="tarjeta reventa-precio mb-4">
     <h2 class="tarjeta-titulo">Mi precio</h2>
     <p class="texto-suave small">Lo que les cobrás a tus clientes por cada pantalla, por mes. Se propone solo al activarlos o cargarles meses (siempre se puede cambiar el monto).</p>
     <form method="post" action="{% url 'reventa:mi_precio' %}" class="row g-2 align-items-end">
