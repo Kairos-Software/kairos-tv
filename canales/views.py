@@ -7,7 +7,8 @@ Pantallas de canales del panel:
                                     editar, mover, cambiar el tipo, quitar o eliminar, de dónde salió cada cosa y
                                     los datos técnicos de cada señal (formato, códec, error, cuándo se probó)
   /canales/catalogo/ y /series/     las pantallas viejas: llevan a Organizar contenido con los mismos filtros
-  /canales/series/detalle/          temporadas, capítulos, disponibilidad y fuentes de una serie
+  /canales/series/detalle/          temporadas, capítulos, disponibilidad y fuentes de una serie; su categoría y
+                                    nombre (series/editar/) y pasar capítulos de una temporada a otra (series/temporada/)
   /canales/canal/<id>/editar/       nombre, logo, categoría... de un canal, y sus fuentes
   /canales/fuentes/<id>/borrar/     borra UNA fuente (POST), desde Organizar o la página del canal
   /canales/youtube/                 traer las películas de un canal oficial de YouTube (se prueban y cargan como una lista)
@@ -96,7 +97,15 @@ def traer_de_youtube(request):
     datos) y se arma una importación como la de una lista, que se prueba y se
     carga en la misma pantalla.
     """
-    form = TraerDeYoutubeForm(request.POST or None)
+    inicial = {}
+    if request.GET.get('serie'):
+        # Desde la página de una serie ("Agregar capítulos"): ya va elegida, con su categoría y temporada
+        existe, suya = organizar.categoria_de_la_serie(request.GET['serie'])
+        temporada = request.GET.get('temporada', '')
+        inicial = {'es_serie': True, 'nombre_serie': request.GET['serie'][:90], 'minimo_minutos': 5,
+                   'temporada': int(temporada) if temporada.isdigit() and 0 < int(temporada) < 100 else 1,
+                   'categoria_destino': suya.nombre if existe and suya else ''}
+    form = TraerDeYoutubeForm(request.POST or None, initial=inicial)
     if request.method == 'POST' and form.is_valid():
         datos = form.cleaned_data
         try:
@@ -110,7 +119,8 @@ def traer_de_youtube(request):
                 minimo_minutos=datos['minimo_minutos'], maximo_minutos=datos.get('maximo_minutos'),
                 solo_espanol=datos['solo_espanol'])
             return redirect(f'{importacion_url(importacion)}?empezar=1')
-    return render(request, 'canales/youtube.html', {'form': form, 'sugeridos': youtube.SUGERIDOS})
+    return render(request, 'canales/youtube.html', {'form': form, 'sugeridos': youtube.SUGERIDOS,
+                                                    'arbol_de_series': consultas.arbol_de_series()})
 
 
 def importacion_url(importacion):
@@ -571,6 +581,10 @@ def organizar_contenido(request):
         'parametros': _parametros_sin_pagina(request),
         'base': base.urlencode(),
         'puede_editar': puede_editar,
+        # Para "Unir en una sola serie" y "Pasar a Series": Categoría -> Serie -> Temporada (js/destino_serie.js,
+        # que pide las series a series_arbol recién cuando se abre una de esas dos)
+        'categorias_de_series': (Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre')
+                                 if puede_editar else []),
         # Lo que tiene la categoría elegida SIN filtros (borrarla con todo se lleva eso, no lo que se ve)
         'total_de_la_categoria': next((c.total for c in categorias if nodo and nodo['categoria']
                                        and c.pk == nodo['categoria'].pk), 0),
@@ -760,10 +774,60 @@ def serie_detalle(request):
             capitulo.numero_en_el_titulo = _numero_en_el_titulo(capitulo.titulo)
         serie.temporadas_ordenadas.append((numero, capitulos, _como_esta_el_orden(capitulos)))
 
+    numeros = serie.numeros_de_temporada
     return render(request, 'canales/serie_detalle.html', {
         'serie': serie,
         'puede_editar': chequear_permiso(request.user, 'importar_canales'),
+        'categorias_de_series': Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre'),
+        'temporada_nueva': (max(numeros) + 1) if numeros else 1,
+        'agregar_de_youtube': f"{reverse('canales:youtube')}?{urlencode({'serie': serie.nombre})}",
     })
+
+
+@requiere_permiso('importar_canales')
+def series_arbol(request):
+    """Categoría -> serie -> temporadas (JSON) para el selector "Dónde va" de Organizar (consultas.arbol_de_series)."""
+    return JsonResponse(consultas.arbol_de_series())
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def serie_editar(request):
+    """Desde la página de la serie: su categoría y su nombre (todos los capítulos)."""
+    nombre = request.POST.get('nombre', '').strip()
+    elegida = ' '.join((request.POST.get('categoria_nueva') or request.POST.get('categoria') or '').split())
+    datos = {'categoria': organizar.categoria_por_nombre(elegida, Contenido.SERIE, usuario=request.user)
+             if elegida else None}
+    if request.POST.get('nuevo_nombre', '').strip():
+        datos['nombre'] = request.POST['nuevo_nombre']
+    try:
+        cambios = organizar.editar_serie(nombre, request.user, **datos)
+    except organizar.NoSePuede as error:
+        messages.error(request, str(error))
+        return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}")
+    if 'nombre' in cambios:
+        nombre = organizar.nombre_de_serie_valido(datos['nombre'])
+    messages.success(request, 'Listo: la serie quedó así.' if cambios else 'No cambió nada.')
+    return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}")
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def serie_temporada(request):
+    """Pasa los capítulos elegidos de una serie a otra temporada (una que tiene o una nueva)."""
+    nombre = request.POST.get('nombre', '').strip()
+    destino = request.POST.get('a_temporada', '')
+    try:
+        cantidad = organizar.mover_a_temporada(nombre, request.POST.getlist('elegido'), destino, request.user)
+    except organizar.NoSePuede as error:
+        messages.error(request, str(error))
+        return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}")
+    messages.success(request, f'Listo: {cantidad} capítulo(s) pasaron a la temporada {destino}, al final. Las '
+                              f'temporadas de donde salieron se renumeraron sin huecos.')
+    if not organizar.ultimo_capitulo(nombre, 1):
+        messages.warning(request, 'Ojo: la temporada 1 quedó vacía. La app muestra la serie recién cuando tiene '
+                                  'su temporada 1: pasá capítulos a la 1 (o renumerá las temporadas).')
+    return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}#temporada-{destino}")
 
 
 def _como_esta_el_orden(capitulos):
@@ -900,6 +964,16 @@ def _avisar_cambio_de_tipo(request, cantidad, contenido, nombre_serie=''):
     messages.success(request, f'{cantidad} pasaron a la sección {secciones.nombre(contenido)}.')
 
 
+def _categoria_de_la_serie_elegida(request, nombre_serie):
+    """
+    La categoría de Series elegida en el selector "Dónde va" (o la de la serie,
+    si ya existe: organizar.destino_de_serie). NoSePuede si no se entiende.
+    """
+    organizar.nombre_de_serie_valido(nombre_serie)   # antes de crear una categoría por nada
+    elegida = request.POST.get('serie_categoria_nueva', '').strip() or request.POST.get('serie_categoria', '')
+    return organizar.destino_de_serie(nombre_serie, elegida, request.user)
+
+
 @require_POST
 @requiere_permiso('importar_canales')
 def catalogo_contenido(request):
@@ -912,8 +986,11 @@ def catalogo_contenido(request):
         return _volver_al_catalogo(request)
     nombre_serie = request.POST.get('nombre_serie', '').strip()
     try:
+        destino = {}
+        if contenido == Contenido.SERIE and nombre_serie:
+            destino['categoria'] = _categoria_de_la_serie_elegida(request, nombre_serie)
         cantidad = organizar.cambiar_contenido(_canales_elegidos(request), contenido, nombre_serie, temporada,
-                                               request.user)
+                                               request.user, **destino)
     except organizar.NoSePuede as error:
         messages.error(request, str(error))
         return _volver_al_catalogo(request)
@@ -944,8 +1021,9 @@ def series_acciones(request):
                 temporada = max(1, min(int(request.POST.get('temporada') or 1), 99))
             except ValueError:
                 temporada = 1
+            categoria = _categoria_de_la_serie_elegida(request, nombre_serie)
             cantidad = organizar.unir_en_una_serie(request.POST.getlist('serie'), nombre_serie, temporada,
-                                                   request.user, capitulos=capitulos)
+                                                   request.user, capitulos=capitulos, categoria=categoria)
             _avisar_cambio_de_tipo(request, cantidad, Contenido.SERIE, nombre_serie)
         elif request.POST.get('accion') == 'quitar':
             cantidad = servicios.quitar_canales(capitulos, request.POST.get('motivo', ''), request.user)

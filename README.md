@@ -34,6 +34,7 @@ Cada carpeta tiene su propio `README.md` que explica qué contiene y para qué s
 | `actividad/` | Registro de actividad: quién hizo qué y cuándo |
 | `notificaciones/` | Avisos internos (la campanita) |
 | `canales/` | Canales de TV en vivo: categorías, canales, fuentes e importación de listas M3U |
+| `biblioteca/` | Favoritos, "Continuar viendo" y últimos canales vistos de cada cuenta (no del aparato) |
 | `herramientas/` | Código reutilizable en todo el sistema (modelo base, formularios...) |
 | `api/` | La API (JSON) para las apps de celular/TV y otros sistemas: login por token, perfil, usuarios, notificaciones |
 | `app_movil/` | La app Android (Flutter) que usa la API. Tiene su propio README |

@@ -84,7 +84,8 @@ class _PantallaTvState extends State<PantallaTv> {
   static const _cadaCuanto = Duration(minutes: 15);
 
   late final Catalogo _catalogo = widget.catalogo ?? Catalogo(SesionScope.leer(context).api);
-  late final Biblioteca _biblioteca = widget.biblioteca ?? Biblioteca();
+  late final Biblioteca _biblioteca =
+      widget.biblioteca ?? Biblioteca(api: SesionScope.leer(context).api, cuenta: SesionScope.leer(context).cuenta);
   late SeccionTv _seccion = widget.seccionInicial;
 
   /// Dónde se estaba antes de ir a Buscar: desde Series se buscan series.
@@ -116,8 +117,14 @@ class _PantallaTvState extends State<PantallaTv> {
     _catalogo.addListener(_alCargarPorPrimeraVez);
     if (widget.catalogo != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _catalogo.cargar());
-    _ciclo = AppLifecycleListener(onResume: _catalogo.cargar);
-    _refresco = Timer.periodic(_cadaCuanto, (_) => _catalogo.cargar());
+    _ciclo = AppLifecycleListener(onResume: _alVolver, onHide: _biblioteca.sincronizar);
+    _refresco = Timer.periodic(_cadaCuanto, (_) => _alVolver());
+  }
+
+  /// Al volver a la app y cada tanto: el catálogo y lo de la cuenta (lo que cambió en otros aparatos).
+  void _alVolver() {
+    _catalogo.cargar();
+    _biblioteca.sincronizar();
   }
 
   @override

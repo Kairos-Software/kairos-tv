@@ -71,6 +71,11 @@ class Sesion extends ChangeNotifier {
 
   bool get esCliente => (api.token ?? '').startsWith('c_');
 
+  /// De quién es lo guardado en este aparato (favoritos, "Continuar
+  /// viendo"...: ver Biblioteca): el código con que entró el cliente (el
+  /// suyo o el propio de una pantalla) o el usuario del panel.
+  String get cuenta => esCliente ? 'c$ultimoCodigo' : 'u${perfil?.username ?? ''}';
+
   /// Al abrir la app: ¿quedó una sesión guardada de la vez anterior?
   Future<void> iniciar() async {
     // El servidor es siempre el de esta versión de la app (config.dart)

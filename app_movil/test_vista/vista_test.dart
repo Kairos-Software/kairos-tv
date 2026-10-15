@@ -3,15 +3,22 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:app_movil/api/cliente.dart';
 import 'package:app_movil/api/modelos.dart';
+import 'package:app_movil/aparato.dart';
 import 'package:app_movil/marca.dart';
+import 'package:app_movil/movil/datos.dart';
+import 'package:app_movil/movil/estructura.dart';
+import 'package:app_movil/sesion.dart';
 import 'package:app_movil/tv/cuenta.dart';
 import 'package:app_movil/tv/escenario.dart';
+import 'package:app_movil/tv/estructura.dart';
 import 'package:app_movil/tv/reposo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const salida = String.fromEnvironment('SALIDA', defaultValue: 'build/vista');
 
@@ -54,7 +61,88 @@ Future<void> foto(
   });
 }
 
+/// Un servidor con lo que la cuenta estaba mirando en OTRO aparato (para "Seguir acá").
+class _CuentaConAlgo extends ApiCliente {
+  _CuentaConAlgo(this.aparato) : super(urlBase: 'http://prueba/api/v1/');
+
+  final String aparato;
+
+  @override
+  Future<dynamic> get(String ruta, {Map<String, String>? parametros}) async => {
+    'favoritos': <String>[],
+    'progresos': [
+      {
+        'id': 5,
+        'p': 2590,
+        'd': 5880,
+        't': DateTime.now().subtract(const Duration(minutes: 12)).millisecondsSinceEpoch,
+        'aparato': aparato,
+      },
+    ],
+    'recientes': <dynamic>[],
+  };
+}
+
+Future<(Catalogo, Biblioteca)> _datosConAlgoEnOtroAparato(WidgetTester tester, String otroAparato) async {
+  SharedPreferences.setMockInitialValues({});
+  final api = _CuentaConAlgo(otroAparato);
+  final catalogo = Catalogo(api)
+    ..peliculas = [
+      Canal(
+        {'id': 5, 'nombre': 'Toy Story (1995)', 'fuentes': <dynamic>[]},
+        categoria: 'Infantil',
+        contenido: 'pelicula',
+      ),
+    ]
+    ..categoriasEnVivo = [
+      CategoriaCanales({
+        'nombre': 'Noticias',
+        'canales': [
+          for (var i = 1; i <= 6; i++) {'id': 100 + i, 'nombre': 'Canal $i', 'fuentes': <dynamic>[]},
+        ],
+      }),
+    ]
+    ..cargado = true;
+  final biblioteca = Biblioteca(api: api, cuenta: 'vista');
+  await tester.runAsync(biblioteca.cargar);
+  return (catalogo, biblioteca);
+}
+
 void main() {
+  testWidgets('seguir acá en la TV', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    await cargarLetras();
+    Aparato.nombre = 'Smart TV Philips';
+    final (catalogo, biblioteca) = await _datosConAlgoEnOtroAparato(tester, 'Celular de Ana');
+    await foto(
+      tester,
+      'tv-seguir-aca',
+      SesionScope(
+        sesion: Sesion(),
+        child: PantallaTv(catalogo: catalogo, biblioteca: biblioteca),
+      ),
+      espera: const Duration(milliseconds: 600),
+    );
+  });
+
+  testWidgets('seguir acá en el celular', (tester) async {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    await cargarLetras();
+    Aparato.nombre = 'Celular de Ana';
+    final (catalogo, biblioteca) = await _datosConAlgoEnOtroAparato(tester, 'Smart TV Philips');
+    await foto(
+      tester,
+      'movil-seguir-aca',
+      SesionScope(
+        sesion: Sesion(),
+        child: PantallaMovil(catalogo: catalogo, biblioteca: biblioteca),
+      ),
+      espera: const Duration(milliseconds: 600),
+    );
+  });
+
   testWidgets('escenario', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1;

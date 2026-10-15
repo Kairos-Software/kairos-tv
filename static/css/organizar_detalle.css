@@ -24,19 +24,23 @@
 .detalle-lateral-pie {
     display: flex; flex-wrap: wrap; gap: .5rem; padding: .75rem 1rem; border-top: 1px solid var(--borde);
 }
-.detalle-varios {
-    margin-bottom: .75rem; padding: .45rem .65rem; border-radius: 10px;
-    background: var(--celeste-fondo); font-size: .78rem;
-}
-.detalle-varios[hidden] { display: none; }
 
 .detalle-datos { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .75rem; margin: 0 0 1rem; font-size: .82rem; }
 .detalle-datos dt { font-weight: 600; color: var(--texto-suave); }
 .detalle-datos dd { margin: 0; word-break: break-word; }
 .detalle-subtitulo { margin: 0 0 .25rem; font-size: .9rem; font-weight: 700; }
 
-/* La tarjeta que se está mostrando en el panel */
-.espejo-tarjeta.detalle-actual .espejo-imagen { border-color: var(--celeste); }
+/* Los botones de cada tarjeta: «Detalles» (abre el panel) y «Editar» */
+.espejo-botones { display: flex; flex-wrap: wrap; gap: .35rem; }
+.espejo-ver {
+    display: inline-flex; align-items: center; gap: .25rem;
+    padding: .15rem .6rem; border-radius: 8px;
+    border: 1px solid var(--borde); background: var(--capa-alta); color: var(--texto-suave); font-size: .75rem;
+}
+.espejo-ver:hover { color: var(--celeste-claro); border-color: var(--celeste-borde); }
+/* La tarjeta que se está mostrando en el panel: se marca su botón, no la imagen
+   (el borde celeste de la imagen es "elegida", no se tienen que confundir) */
+.espejo-tarjeta.detalle-actual .espejo-ver { color: var(--fondo, #0e0e12); background: var(--celeste); border-color: var(--celeste); }
 
 /* Las señales (en el panel y en el cuadro de edición) */
 .lista-senales { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .55rem; }
@@ -62,6 +66,9 @@
     .pagina-organizar:has(.detalle-lateral:not([hidden])) .pagina { padding-right: calc(400px + 1.5rem); }
     .pagina-organizar:has(.detalle-lateral:not([hidden])) .espejo-barra { right: calc(400px + 2rem); }
 }
+/* Los filtros partidos en varios renglones (columna angosta o panel abierto) tapaban las tarjetas
+   si quedaban fijos arriba: ahí se van al bajar. Lo marca organizar_detalle.js */
+.organizar-filtros.no-entra { position: static; }
 /* Más chica: el panel va por encima, a lo ancho (se cierra con la X) */
 @media (max-width: 1199.98px) {
     .detalle-lateral { width: min(var(--detalle-ancho), calc(100vw - 2rem)); }

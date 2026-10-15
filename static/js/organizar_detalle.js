@@ -97,12 +97,22 @@
 
     window.KairosSenales = {pintar: pintar};
 
+    // ── Los filtros quedan fijos arriba solo si entran en un renglón: partidos en dos o tres
+    // (columna angosta, panel abierto) tapaban las tarjetas. Ahí se van al bajar, como el resto ──
+    var filtros = document.querySelector('.organizar-filtros');
+    if (filtros && window.ResizeObserver) {
+        new ResizeObserver(function () {
+            var visibles = Array.prototype.filter.call(filtros.children, function (hijo) { return hijo.offsetParent; });
+            var partidos = visibles.some(function (hijo) { return Math.abs(hijo.offsetTop - visibles[0].offsetTop) > 8; });
+            filtros.classList.toggle('no-entra', partidos);
+        }).observe(filtros);
+    }
+
     // ── El panel de al lado ──
     var panel = document.getElementById('detalle-lateral');
     if (!panel) return;
     var tarjetas = Array.prototype.slice.call(document.querySelectorAll('.espejo-tarjeta'));
     var mostrada = null;
-    var tocadas = [];   // las tildadas, la última al final
 
     function datosDe(tarjeta) {
         var boton = tarjeta.querySelector('.espejo-editar');
@@ -154,10 +164,6 @@
         var mas = panel.querySelector('[data-detalle-mas]');
         mas.href = datos.mas;
         mas.textContent = esSerie ? 'Ver y ordenar capítulos' : 'Más opciones';
-        var otras = tocadas.length - 1;
-        var aviso = panel.querySelector('[data-detalle-varios]');
-        aviso.hidden = otras < 1;
-        aviso.textContent = 'Tenés ' + tocadas.length + ' elegidos: acá ves el último que tocaste.';
         panel.hidden = false;
         panel.querySelector('.detalle-lateral-cuerpo').scrollTop = 0;
     }
@@ -168,33 +174,14 @@
         mostrada = null;
     }
 
+    // Elegir tarjetas (para cambiarles la categoría, borrarlas...) NO abre el panel: molestaba al
+    // trabajar con varias. Lo abre el botón «Detalles»; otra vez sobre la misma, lo cierra.
     tarjetas.forEach(function (tarjeta) {
-        var casilla = tarjeta.querySelector('.canal-elegir');
-        if (!casilla) return;
-        casilla.addEventListener('change', function () {
-            tocadas = tocadas.filter(function (t) { return t !== tarjeta; });
-            if (casilla.checked) {
-                tocadas.push(tarjeta);
-                mostrar(tarjeta);
-            } else if (mostrada === tarjeta) {
-                // Se destildó la que se veía: la anterior que siga elegida, o se cierra
-                if (tocadas.length) mostrar(tocadas[tocadas.length - 1]);
-                else cerrar();
-            }
-        });
-    });
-    // "Toda la página" o "Cancelar selección": no se abre el panel con cada una
-    ['elegir-todos', 'limpiar-seleccion'].forEach(function (id) {
-        var control = document.getElementById(id);
-        if (!control) return;
-        control.addEventListener('click', function () {
-            window.setTimeout(function () {
-                tocadas = tarjetas.filter(function (t) {
-                    var c = t.querySelector('.canal-elegir');
-                    return c && c.checked;
-                });
-                if (!tocadas.length) cerrar();
-            }, 0);
+        var ver = tarjeta.querySelector('.espejo-ver');
+        if (!ver) return;
+        ver.addEventListener('click', function () {
+            if (mostrada === tarjeta) cerrar();
+            else mostrar(tarjeta);
         });
     });
 

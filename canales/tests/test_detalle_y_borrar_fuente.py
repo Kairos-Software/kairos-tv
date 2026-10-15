@@ -39,11 +39,14 @@ class DetalleYBorrarFuenteTests(TestCase):
         crudo = re.search(r'class="espejo-editar" data-datos="([^"]+)"', respuesta.content.decode()).group(1)
         return json.loads(unescape(crudo))
 
-    def test_al_elegir_algo_se_ve_todo_lo_suyo(self):
+    def test_con_detalles_se_ve_todo_lo_suyo(self):
         respuesta = self.client.get(reverse('canales:organizar'), {'contenido': 'vivo'})
         self.assertContains(respuesta, 'id="detalle-lateral"')
         self.assertContains(respuesta, 'js/organizar_detalle.js')
-        self.assertContains(respuesta, 'Tocá una tarjeta: al costado ves todo lo suyo')
+        # Elegir tarjetas no abre el panel (molestaba al trabajar con varias): lo abre «Detalles»
+        self.assertContains(respuesta, 'class="espejo-ver"')
+        self.assertContains(respuesta, '<strong>Detalles</strong> muestra al costado')
+        self.assertNotContains(respuesta, 'data-detalle-varios')
         datos = self.datos_de_la_tarjeta(respuesta)
         filas = dict(datos['datos'])
         self.assertEqual(filas['Idioma'], 'Español')

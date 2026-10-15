@@ -2,6 +2,7 @@
 Lo que el sistema BUSCA de los canales (capa Base).
 """
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from django.db.models import Case, Count, Exists, F, OuterRef, Prefetch, Q, Value, When
@@ -269,6 +270,35 @@ def series(texto='', estado='', categoria='', idioma='', origen='', sin_logo=Fal
     elif estado == 'fuera':
         resultado = [s for s in resultado if not s.en_la_app]
     return resultado
+
+
+def arbol_de_series():
+    """
+    Categoría -> serie -> temporadas de la sección Series, para el selector
+    "Dónde va" (Traer de YouTube, Unir, Pasar a Series y la página de cada
+    serie): que se vea qué hay antes de elegir.
+      {'categorias': [{'nombre': 'Disney', 'series': [{'nombre': 'Buena suerte Charlie',
+                       'temporadas': [[1, 26, 26], [2, 30, 30]]}]}]}
+    Cada temporada: [número, cuántos capítulos, el número más alto]. La serie
+    va en la categoría de la mayoría de sus capítulos; las sin categoría, en
+    una de nombre '' (en la app, "Otros"). Las series se agrupan como en la
+    app (sin mayúsculas).
+    """
+    series = {}
+    for nombre, categoria_id in Canal.objects.filter(contenido=Contenido.SERIE).values_list('nombre', 'categoria_id'):
+        serie, temporada, numero, _ = clasificar.episodio(nombre)
+        datos = series.setdefault(serie.lower(), {'nombre': serie, 'categorias': Counter(), 'temporadas': {}})
+        datos['categorias'][categoria_id] += 1
+        cantidad, ultimo = datos['temporadas'].get(temporada, (0, 0))
+        datos['temporadas'][temporada] = (cantidad + 1, max(ultimo, numero or 0))
+    grupos = {c.pk: {'nombre': c.nombre, 'series': []}
+              for c in Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre')}
+    sin_categoria = {'nombre': '', 'series': []}
+    for datos in sorted(series.values(), key=lambda d: d['nombre'].lower()):
+        grupo = grupos.get(datos['categorias'].most_common(1)[0][0], sin_categoria)
+        grupo['series'].append({'nombre': datos['nombre'], 'temporadas': [
+            [temporada, cantidad, ultimo] for temporada, (cantidad, ultimo) in sorted(datos['temporadas'].items())]})
+    return {'categorias': [*grupos.values(), *([sin_categoria] if sin_categoria['series'] else [])]}
 
 
 # ── Como en la app: lo que ve un cliente, categoría por categoría ────

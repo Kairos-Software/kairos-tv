@@ -242,19 +242,28 @@ class OrganizarTests(TestCase):
             _con_fuente(titulo, contenido=Contenido.SERIE)
         respuesta = self.client.post(reverse('canales:series_acciones'), {
             'serie': ['El tornado', 'A comer', 'Bailando'], 'accion': 'unir', 'nombre_serie': 'Pocoyó',
-            'temporada': '1'}, follow=True)
+            'temporada': '1', 'serie_categoria': 'Infantiles'}, follow=True)
         self.assertContains(respuesta, 'capítulos de la serie')
         self.assertNotContains(respuesta, 'la app solo muestra series')
-        self.assertEqual([(s.nombre, s.cantidad, s.completa) for s in consultas.series()], [('Pocoyó', 3, True)])
+        self.assertEqual([(s.nombre, s.cantidad, s.completa, s.categoria) for s in consultas.series()],
+                         [('Pocoyó', 3, True, 'Infantiles')])
 
     def test_una_serie_nueva_aparece_desde_su_primer_capitulo(self):
         _con_fuente('El tornado', contenido=Contenido.PELICULA)
         respuesta = self.client.post(reverse('canales:catalogo_contenido'), {
-            'canal': [Canal.objects.get().pk], 'contenido': 'serie', 'nombre_serie': 'Pocoyó'}, follow=True)
+            'canal': [Canal.objects.get().pk], 'contenido': 'serie', 'nombre_serie': 'Pocoyó',
+            'serie_categoria_nueva': 'Dibujitos'}, follow=True)
         self.assertContains(respuesta, 'quedaron como capítulos de la serie &quot;Pocoyó&quot;')
         self.assertNotContains(respuesta, 'la app solo muestra series')
         serie = consultas.series()[0]
-        self.assertEqual((serie.nombre, serie.cantidad, serie.completa), ('Pocoyó', 1, True))
+        self.assertEqual((serie.nombre, serie.cantidad, serie.completa, serie.categoria), ('Pocoyó', 1, True, 'Dibujitos'))
+
+    def test_una_serie_nueva_pide_su_categoria(self):
+        _con_fuente('El tornado', contenido=Contenido.PELICULA)
+        respuesta = self.client.post(reverse('canales:catalogo_contenido'), {
+            'canal': [Canal.objects.get().pk], 'contenido': 'serie', 'nombre_serie': 'Pocoyó'}, follow=True)
+        self.assertContains(respuesta, 'Elegí en qué categoría de Series va')
+        self.assertEqual(Canal.objects.get().contenido, Contenido.PELICULA)   # no cambió nada
 
     def test_edicion_rapida(self):
         canal = _con_fuente('Zenón', self.noticias)

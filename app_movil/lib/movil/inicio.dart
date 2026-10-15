@@ -7,7 +7,8 @@
 /// TV en vivo primero (diseno_kairos_tv/DESIGN.md, principio 1): la portada es
 /// un canal (el último que se vio, o un favorito); si no hay canales, una
 /// película o serie. Todo con datos reales: favoritos, últimos vistos y
-/// "Continuar Viendo" salen de lo que se hizo en este aparato.
+/// "Continuar Viendo" son de la cuenta (lo que se hizo en cualquiera de sus
+/// aparatos). Arriba, si se estaba mirando algo en otro aparato: "Seguir acá".
 library;
 
 import 'package:flutter/material.dart';
@@ -49,6 +50,7 @@ class SeccionInicio extends StatelessWidget {
             padding: EdgeInsets.only(top: altoBarraSuperior(context), bottom: altoBarraInferior(context) + 40),
             children: [
               const _Chips(),
+              const _SeguirAca(),
               const _Portada(),
               _FilaCanales(
                 titulo: 'Tus canales favoritos',
@@ -74,6 +76,106 @@ class SeccionInicio extends StatelessWidget {
       },
     );
   }
+}
+
+/// "Estabas viendo X en la TV — Seguir acá": lo último que se miró en otro
+/// aparato de la misma cuenta (Biblioteca.seguirDeOtroAparato). Una
+/// película o capítulo sigue en el mismo minuto; un canal, en vivo.
+class _SeguirAca extends StatelessWidget {
+  const _SeguirAca();
+
+  @override
+  Widget build(BuildContext context) {
+    final datos = DatosScope.of(context);
+    final seguir = datos.biblioteca.seguirDeOtroAparato;
+    final canal = seguir == null ? null : datos.catalogo.canalPorId(seguir.id);
+    if (seguir == null || canal == null) return const SizedBox.shrink();
+    final serie = canal.contenido == 'serie' ? datos.catalogo.serieDe(canal) : null;
+    final progreso = seguir.progreso;
+    final titulo = serie?.nombre ?? sinAnio(canal.nombre);
+    final detalle = progreso == null
+        ? 'En vivo · ${hace(seguir.cuando)}'
+        : 'Ibas por ${reloj(progreso.posicion)} · ${hace(seguir.cuando)}';
+    void seguirAca() {
+      datos.biblioteca.descartarSeguir(seguir);
+      if (progreso == null) {
+        NavegacionMovil.of(context).irA(Seccion.enVivo, canal: canal.id);
+      } else {
+        reproducirContenido(context, canal, serie: serie, desde: progreso.posicion);
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Espacio.margen, 0, Espacio.margen, Espacio.lg),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Tono.capa,
+          borderRadius: BorderRadius.circular(Curva.tarjeta),
+          border: Border.all(color: Tono.celeste.withValues(alpha: .35)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 4, 14),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(Curva.medio),
+                    child: SizedBox(
+                      width: 64,
+                      height: 40,
+                      child: Imagen(
+                        url: canal.logo.isNotEmpty ? canal.logo : (serie?.imagen ?? ''),
+                        nombre: titulo,
+                        ajuste: progreso == null ? BoxFit.contain : BoxFit.cover,
+                        relleno: progreso == null ? const EdgeInsets.all(4) : EdgeInsets.zero,
+                        fondo: Tono.capaMinima,
+                        tamanioIniciales: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Estabas viendo en ${seguir.aparato}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Letra.mini.copyWith(color: Tono.celeste),
+                        ),
+                        Text(titulo, maxLines: 1, overflow: TextOverflow.ellipsis, style: Letra.etiqueta),
+                        Text(detalle, maxLines: 1, overflow: TextOverflow.ellipsis, style: Letra.mini),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'No, gracias',
+                    onPressed: () => datos.biblioteca.descartarSeguir(seguir),
+                    icon: const Icon(Icons.close_rounded, size: 20, color: Tono.textoApagado),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: BotonPrincipal(texto: 'Seguir acá', alto: 42, tamanioTexto: 13, alTocar: seguirAca),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Hace 5 min", "hace 2 h" (para lo que se miró en otro aparato).
+String hace(DateTime cuando) {
+  final diferencia = DateTime.now().difference(cuando);
+  if (diferencia.inMinutes < 1) return 'recién';
+  if (diferencia.inMinutes < 60) return 'hace ${diferencia.inMinutes} min';
+  return 'hace ${diferencia.inHours} h';
 }
 
 /// "categoryChips": Todo · En Vivo · Películas · Series · las secciones nuevas

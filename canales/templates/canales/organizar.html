@@ -17,7 +17,7 @@
 {% block titulo %}Organizar contenido{% endblock %}
 {% block clase_body %}pagina-organizar{% endblock %}
 
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}">{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -357,7 +357,7 @@
                     <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
                     <input type="hidden" name="origen" value="{{ filtros.origen }}">
                     <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
-            {% if puede_editar %}<p class="espejo-ayuda mx-0"><i class="bi bi-hand-index" aria-hidden="true"></i> Tocá una tarjeta: al costado ves todo lo suyo (de qué lista o link salió, cada señal y cómo anda) y abajo, qué hacer con ella.</p>{% endif %}
+            {% if puede_editar %}<p class="espejo-ayuda mx-0"><i class="bi bi-hand-index" aria-hidden="true"></i> Tocá las tarjetas para elegirlas (una o varias) y abajo elegí qué hacer con ellas. <strong>Detalles</strong> muestra al costado todo lo de una (de dónde salió, cada señal y cómo anda).</p>{% endif %}
             {% for categoria, items in datos.grupos %}
             {% if datos.elegida == 'todas' %}
             <h3 class="espejo-seccion">{% if categoria %}{{ categoria.nombre }}{% else %}Sin categoría (en la app: «Otros»){% endif %}</h3>
@@ -383,7 +383,10 @@
                         {% endif %}
                     </span>
                     {% if puede_editar %}</label>{% else %}</div>{% endif %}
-                    <button type="button" class="espejo-editar" data-datos="{{ item.datos }}">{% if puede_editar %}Editar{% else %}Ver{% endif %}</button>
+                    <div class="espejo-botones">
+                        <button type="button" class="espejo-ver" aria-label="Detalles de {{ item.nombre }}" title="Ver todo lo suyo al costado"><i class="bi bi-info-circle" aria-hidden="true"></i> Detalles</button>
+                        <button type="button" class="espejo-editar" data-datos="{{ item.datos }}">{% if puede_editar %}Editar{% else %}Ver{% endif %}</button>
+                    </div>
                 </article>
                 {% endfor %}
             </div>
@@ -430,10 +433,27 @@
                 </div>
                 {% if contenido == 'serie' %}
                 <div class="espejo-barra-fila" data-accion="unir" hidden>
-                    <input type="text" name="nombre_serie" class="form-control form-control-sm" maxlength="90" placeholder="Nombre de la serie (ej: Pocoyó)" data-obligatorio>
-                    <input type="number" name="temporada" class="form-control form-control-sm" style="width:6rem" min="1" max="99" value="1" title="Temporada">
-                    <button type="submit" class="btn btn-sm btn-primary" name="accion" value="unir">Unir</button>
-                    <span class="espejo-ayuda">Todas las elegidas quedan como UNA serie con ese nombre: sus videos pasan a ser los capítulos 1, 2, 3… (en orden alfabético). Si esa serie ya tiene capítulos, siguen después del último (así se puede unir de a una página). Sirve para juntar «series» de un capítulo.</span>
+                    <div class="ds-barra" data-destino-serie data-arbol-url="{% url 'canales:series_arbol' %}" data-ds-categoria="serie_categoria" data-ds-nueva="serie_categoria_nueva" data-ds-serie="nombre_serie" data-ds-temporada="temporada">
+                        <div class="ds-paso">
+                            <p class="ds-paso-titulo"><span>1</span> Categoría</p>
+                            <select name="serie_categoria" class="form-select form-select-sm" aria-label="Categoría de Series">
+                                <option value="">Elegí la categoría…</option>
+                                {% for c in categorias_de_series %}<option value="{{ c.nombre }}">{{ c.nombre }}</option>{% endfor %}
+                            </select>
+                            <input type="text" name="serie_categoria_nueva" class="form-control form-control-sm" maxlength="80" placeholder="o una nueva" aria-label="Categoría nueva">
+                        </div>
+                        <div class="ds-paso">
+                            <p class="ds-paso-titulo"><span>2</span> Serie</p>
+                            <input type="text" name="nombre_serie" class="form-control form-control-sm" maxlength="90" placeholder="Nombre de la serie nueva" aria-label="Nombre de la serie">
+                        </div>
+                        <div class="ds-paso">
+                            <p class="ds-paso-titulo"><span>3</span> Temporada</p>
+                            <input type="number" name="temporada" class="form-control form-control-sm" min="1" max="99" value="1" aria-label="Número de temporada">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary" name="accion" value="unir">Unir</button>
+                        <p class="ds-resumen" data-ds-resumen></p>
+                    </div>
+                    <span class="espejo-ayuda">Todas las elegidas quedan como UNA serie: elegí la categoría, la serie (una que ya existe o una nueva) y la temporada. Sus videos pasan a ser los capítulos que siguen en esa temporada (en orden alfabético), así se puede unir de a una página. Una serie que ya existe queda en su categoría.</span>
                 </div>
                 <div class="espejo-barra-fila" data-accion="a_peliculas" hidden>
                     <button type="submit" class="btn btn-sm btn-primary" name="accion" value="a_peliculas">Pasar a Películas</button>
@@ -447,10 +467,26 @@
                         <option value="serie">a Series (como capítulos de una serie)</option>
                         {% for s in secciones_nuevas %}{% if s.clave != contenido %}<option value="{{ s.clave }}">a {{ s.nombre }}</option>{% endif %}{% endfor %}
                     </select>
-                    <span class="espejo-barra-serie" style="display:none">
-                        <input type="text" name="nombre_serie" class="form-control form-control-sm" maxlength="90" placeholder="Nombre de la serie (ej: Pocoyó)">
-                        <input type="number" name="temporada" class="form-control form-control-sm" style="width:6rem" min="1" max="99" value="1" title="Temporada">
-                    </span>
+                    <div class="ds-barra espejo-barra-serie" style="display:none" data-destino-serie data-arbol-url="{% url 'canales:series_arbol' %}" data-ds-categoria="serie_categoria" data-ds-nueva="serie_categoria_nueva" data-ds-serie="nombre_serie" data-ds-temporada="temporada">
+                        <div class="ds-paso">
+                            <p class="ds-paso-titulo"><span>1</span> Categoría</p>
+                            <select name="serie_categoria" class="form-select form-select-sm" aria-label="Categoría de Series">
+                                <option value="">Elegí la categoría…</option>
+                                {% for c in categorias_de_series %}<option value="{{ c.nombre }}">{{ c.nombre }}</option>{% endfor %}
+                            </select>
+                            <input type="text" name="serie_categoria_nueva" class="form-control form-control-sm" maxlength="80" placeholder="o una nueva" aria-label="Categoría nueva">
+                        </div>
+                        <div class="ds-paso">
+                            <p class="ds-paso-titulo"><span>2</span> Serie</p>
+                            <input type="text" name="nombre_serie" class="form-control form-control-sm" maxlength="90" placeholder="Nombre de la serie nueva" aria-label="Nombre de la serie">
+                        </div>
+                        <div class="ds-paso">
+                            <p class="ds-paso-titulo"><span>3</span> Temporada</p>
+                            <input type="number" name="temporada" class="form-control form-control-sm" min="1" max="99" value="1" aria-label="Número de temporada">
+                        </div>
+                        
+                        <p class="ds-resumen" data-ds-resumen></p>
+                    </div>
                     <button type="submit" class="btn btn-sm btn-primary" formaction="{% url 'canales:catalogo_contenido' %}">Pasar</button>
                     <span class="espejo-ayuda" id="seccion-ayuda"></span>
                 </div>
@@ -569,7 +605,8 @@
     <input type="hidden" name="volver" value="{{ request.get_full_path }}">
 </form>
 
-{# ── Detalles: al elegir una tarjeta, todo lo que se sabe de ella (static/js/organizar_detalle.js) ── #}
+{# ── Detalles: con el botón «Detalles» de una tarjeta, todo lo que se sabe de ella (static/js/organizar_detalle.js).
+   Elegir tarjetas NO lo abre: se eligen varias para trabajar sin que nada tape ── #}
 <aside class="detalle-lateral" id="detalle-lateral" data-forma="{{ forma }}" aria-labelledby="detalle-nombre" hidden>
     <div class="detalle-lateral-cabeza">
         <div class="espejo-imagen" data-detalle-imagen></div>
@@ -580,7 +617,6 @@
         <button type="button" class="btn-close" data-detalle-cerrar aria-label="Cerrar los detalles"></button>
     </div>
     <div class="detalle-lateral-cuerpo">
-        <p class="detalle-varios" data-detalle-varios hidden></p>
         <dl class="detalle-datos" data-detalle-datos></dl>
         <h3 class="detalle-subtitulo">Señales (<span data-detalle-cuantas></span>)</h3>
         <p class="espejo-ayuda mx-0" data-detalle-ayuda></p>
@@ -699,6 +735,7 @@
 
 {% block scripts %}
 <script src="{% static 'js/organizar_detalle.js' %}"></script>
+{% if puede_editar %}<script src="{% static 'js/destino_serie.js' %}"></script>{% endif %}
 <script>
 (function () {
     // Confirmar lo que no se puede deshacer (en cualquier formulario de la página)
@@ -795,14 +832,15 @@
             });
             if (seccion) {
                 var aSerie = seccion.value === 'serie';
-                form.querySelector('.espejo-barra-serie').style.display = aSerie ? 'inline-flex' : 'none';
-                form.querySelector('.espejo-barra-serie [name=nombre_serie]').required = aSerie && !form.querySelector('[data-accion=seccion]').hidden;
+                var cajaSerie = form.querySelector('.espejo-barra-serie');
+                cajaSerie.style.display = aSerie ? 'flex' : 'none';
+                // Categoría, serie y temporada solo cuentan si van a Series (si no, ni se mandan ni se piden)
+                var sinSerie = form.querySelector('[data-accion=seccion]').hidden || !aSerie;
+                cajaSerie.querySelectorAll('input, select').forEach(function (campo) { campo.disabled = sinSerie; });
                 ayudaSeccion.textContent = aSerie
-                    ? 'Los elegidos quedan como UNA serie con ese nombre: capítulos 1, 2, 3… en orden alfabético (si la serie ya existe, siguen después de su último capítulo).'
+                    ? 'Los elegidos quedan como capítulos de UNA serie: elegí la categoría, la serie (una que ya existe o una nueva) y la temporada. Siguen después del último capítulo de esa temporada, en orden alfabético.'
                     : 'Los elegidos se mueven a esa sección (con una categoría del mismo nombre allá).';
             }
-            var unir = form.querySelector('[data-accion=unir] [data-obligatorio]');
-            if (unir) unir.required = !form.querySelector('[data-accion=unir]').hidden;
         };
         casillas.forEach(function (c) { c.addEventListener('change', actualizar); });
         if (elegirPagina) {

@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'canales',  # canales de TV en vivo: categorías, canales y sus fuentes (listas M3U)
     'reventa',  # revendedores, sus clientes, créditos, paquetes y compras
     'descargas',  # la APK de la app Android para descargar desde el panel
+    'biblioteca',  # favoritos y "Continuar viendo" de cada cuenta (no del aparato)
     'api',  # la API (JSON) para las apps de celular/TV: login por token, perfil, usuarios...
 ]
 

@@ -605,19 +605,23 @@ class FuentePreferida {
 
 /// Por dónde iba una película o capítulo.
 class Progreso {
-  Progreso({required this.id, required this.posicion, required this.duracion, required this.cuando});
+  Progreso({required this.id, required this.posicion, required this.duracion, required this.cuando, this.aparato = ''});
 
   factory Progreso.desdeJson(Map<String, dynamic> json) => Progreso(
     id: json['id'] as int,
     posicion: Duration(seconds: json['p'] as int? ?? 0),
     duracion: Duration(seconds: json['d'] as int? ?? 0),
     cuando: DateTime.fromMillisecondsSinceEpoch(json['t'] as int? ?? 0),
+    aparato: '${json['aparato'] ?? ''}',
   );
 
   final int id;
   final Duration posicion;
   final Duration duracion;
   final DateTime cuando;
+
+  /// En qué aparato se miró (lo informa la app: "Smart TV Philips").
+  final String aparato;
 
   double get fraccion => duracion.inSeconds == 0 ? 0 : (posicion.inSeconds / duracion.inSeconds).clamp(0, 1);
 
@@ -631,28 +635,112 @@ class Progreso {
     'p': posicion.inSeconds,
     'd': duracion.inSeconds,
     't': cuando.millisecondsSinceEpoch,
+    'aparato': aparato,
   };
 }
 
-/// Los favoritos ("Mi lista"), "Continuar viendo", los últimos canales vistos
-/// y las preferencias. Se guarda en el aparato (no en el servidor).
+/// Un canal en vivo que se miró hace poco: cuál, cuándo y en qué aparato.
+class Visto {
+  Visto({required this.id, required this.cuando, this.aparato = ''});
+
+  factory Visto.desdeJson(Map<String, dynamic> json) => Visto(
+    id: json['id'] as int,
+    cuando: DateTime.fromMillisecondsSinceEpoch(json['t'] as int? ?? 0),
+    aparato: '${json['aparato'] ?? ''}',
+  );
+
+  final int id;
+  final DateTime cuando;
+  final String aparato;
+
+  Map<String, dynamic> aJson() => {'id': id, 't': cuando.millisecondsSinceEpoch, 'aparato': aparato};
+}
+
+/// "Estabas viendo X en la TV — Seguir acá": lo último que se miró en OTRO
+/// aparato de la misma cuenta (una película o capítulo con su minuto, o un
+/// canal en vivo).
+class SeguirViendo {
+  SeguirViendo({required this.id, required this.aparato, required this.cuando, this.progreso});
+
+  final int id;
+  final String aparato;
+  final DateTime cuando;
+
+  /// Null = un canal en vivo.
+  final Progreso? progreso;
+
+  String get clave => '$id@${cuando.millisecondsSinceEpoch}';
+}
+
+/// Los favoritos ("Mi lista"), "Continuar viendo" y los últimos canales
+/// vistos son de la CUENTA, no del aparato (desde la 1.2.20): se guardan en
+/// el servidor (/api/v1/biblioteca/) y los ven todos los aparatos de quien
+/// entró. Si en una TV entra otro cliente, ve lo suyo, no lo del anterior.
+/// Acá queda una copia por cuenta (abre al instante y anda sin internet) y
+/// los cambios se mandan de a tandas (`_pendientes`): si la TV y el celular
+/// cambian algo a la vez, se suman, no se pisan.
+///
+/// Lo que es del APARATO sigue acá nomás: volver al último canal al abrir
+/// (con el último canal que se vio EN ESTE aparato), el modo de video y
+/// "probar igual lo que quizá no lea".
+///
+/// Sin `api` (las pruebas) todo queda en memoria.
 class Biblioteca extends ChangeNotifier {
-  static const _claveLista = 'kairos.mi_lista';
-  static const _claveProgreso = 'kairos.progreso';
-  static const _claveRecientes = 'kairos.recientes';
+  Biblioteca({this.api, this.cuenta = ''});
+
+  final ApiCliente? api;
+
+  /// Quién entró (el código del cliente o de la pantalla, o el usuario del
+  /// panel): la copia guardada en el aparato es de esa cuenta.
+  final String cuenta;
+
+  // Lo que guardaban las versiones anteriores (en el aparato, de nadie): pasa a la cuenta del que esté
+  static const _claveListaVieja = 'kairos.mi_lista';
+  static const _claveProgresoViejo = 'kairos.progreso';
+  static const _claveRecientesViejos = 'kairos.recientes';
+
   static const _claveVolverAlUltimo = 'kairos.volver_al_ultimo';
+  static const _claveUltimoAca = 'kairos.ultimo_canal_aca';
+  static const _claveVideoEnSuperficie = 'kairos.video_superficie';
+  static const _claveProbarTodo = 'kairos.probar_todo';
+  static const _claveSeguirDescartados = 'kairos.seguir_descartados';
   static const _maximoProgresos = 60;
   static const _maximoRecientes = 12;
+
+  /// Cuánto espera para mandar los cambios (junta varios en un solo pedido).
+  static const esperaParaMandar = Duration(seconds: 3);
+
+  /// "Seguir acá" ofrece lo que se miró en otro aparato en estas últimas horas.
+  static const seguirHasta = Duration(hours: 6);
+
+  String get _claveCopia => 'kairos.biblioteca.$cuenta';
 
   SharedPreferences? _preferencias;
   final Set<String> _miLista = {};
   final Map<int, Progreso> _progresos = {};
-  final List<int> _recientes = [];
+  final List<Visto> _recientes = [];
+  int? _ultimoAca;
   bool _volverAlUltimo = false;
-  static const _claveVideoEnSuperficie = 'kairos.video_superficie';
   bool? _videoEnSuperficie;
-  static const _claveProbarTodo = 'kairos.probar_todo';
   bool _probarTodo = false;
+  final Set<String> _seguirDescartados = {};
+
+  // Lo que todavía no llegó al servidor
+  final Set<String> _agregar = {};
+  final Set<String> _quitar = {};
+  final Map<int, Progreso> _progresosPendientes = {};
+  final Set<int> _olvidar = {};
+  final Map<int, Visto> _vistosPendientes = {};
+  Timer? _mandar;
+  bool _mandando = false;
+  bool _cerrada = false;
+
+  bool get _hayPendientes =>
+      _agregar.isNotEmpty ||
+      _quitar.isNotEmpty ||
+      _progresosPendientes.isNotEmpty ||
+      _olvidar.isNotEmpty ||
+      _vistosPendientes.isNotEmpty;
 
   Future<void> cargar() async {
     ControlSenal.enSuperficie = videoEnSuperficie;
@@ -661,20 +749,203 @@ class Biblioteca extends ChangeNotifier {
       _preferencias = preferencias;
       _probarTodo = preferencias.getBool(_claveProbarTodo) ?? false;
       FuenteCanal.probarTodo = _probarTodo;
-      _miLista.addAll(preferencias.getStringList(_claveLista) ?? []);
-      _recientes.addAll((preferencias.getStringList(_claveRecientes) ?? []).map(int.tryParse).nonNulls);
       _volverAlUltimo = preferencias.getBool(_claveVolverAlUltimo) ?? false;
+      _ultimoAca = preferencias.getInt(_claveUltimoAca);
       _videoEnSuperficie = preferencias.getBool(_claveVideoEnSuperficie);
       ControlSenal.enSuperficie = videoEnSuperficie;
-      final guardados = jsonDecode(preferencias.getString(_claveProgreso) ?? '[]') as List;
-      for (final p in guardados) {
-        final progreso = Progreso.desdeJson(p as Map<String, dynamic>);
-        _progresos[progreso.id] = progreso;
+      _seguirDescartados.addAll(preferencias.getStringList(_claveSeguirDescartados) ?? []);
+      if (api != null) {
+        _leerCopia(preferencias);
+        _pasarLoViejo(preferencias);
       }
     } catch (_) {
       // Si no se puede leer (ej: en los tests), se arranca vacía
     }
     notifyListeners();
+    await sincronizar();
+  }
+
+  /// La copia de esta cuenta que quedó en el aparato (con lo que no se llegó a mandar).
+  void _leerCopia(SharedPreferences preferencias) {
+    final texto = preferencias.getString(_claveCopia);
+    if (texto == null) return;
+    final copia = jsonDecode(texto) as Map<String, dynamic>;
+    _ponerDelServidor(copia);
+    final pendientes = copia['pendientes'] as Map<String, dynamic>? ?? {};
+    _agregar.addAll([for (final c in pendientes['agregar'] as List? ?? []) '$c']);
+    _quitar.addAll([for (final c in pendientes['quitar'] as List? ?? []) '$c']);
+    _olvidar.addAll([for (final i in pendientes['olvidar'] as List? ?? []) i as int]);
+    for (final p in pendientes['progresos'] as List? ?? []) {
+      final progreso = Progreso.desdeJson(p as Map<String, dynamic>);
+      _progresosPendientes[progreso.id] = progreso;
+    }
+    for (final v in pendientes['vistos'] as List? ?? []) {
+      final visto = Visto.desdeJson(v as Map<String, dynamic>);
+      _vistosPendientes[visto.id] = visto;
+    }
+    _aplicarPendientes();
+  }
+
+  /// Hasta la 1.2.19 esto quedaba en el aparato: lo que había pasa a la cuenta del que está (una sola vez).
+  void _pasarLoViejo(SharedPreferences preferencias) {
+    final lista = preferencias.getStringList(_claveListaVieja);
+    final progresos = preferencias.getString(_claveProgresoViejo);
+    final recientes = preferencias.getStringList(_claveRecientesViejos);
+    if (lista == null && progresos == null && recientes == null) return;
+    _agregar.addAll((lista ?? []).where((c) => !_quitar.contains(c)));
+    for (final p in jsonDecode(progresos ?? '[]') as List) {
+      final progreso = Progreso.desdeJson(p as Map<String, dynamic>);
+      _progresosPendientes[progreso.id] = progreso;
+    }
+    final ahora = DateTime.now();
+    final ids = (recientes ?? []).map(int.tryParse).nonNulls.toList();
+    for (final (orden, id) in ids.indexed) {
+      // Sin hora guardada: se respeta el orden (el primero, el más reciente)
+      _vistosPendientes[id] = Visto(
+        id: id,
+        cuando: ahora.subtract(Duration(minutes: 30 + orden)),
+      );
+    }
+    _ultimoAca ??= ids.firstOrNull;
+    if (_ultimoAca != null) preferencias.setInt(_claveUltimoAca, _ultimoAca!);
+    _aplicarPendientes();
+    _guardarCopia();
+    preferencias
+      ..remove(_claveListaVieja)
+      ..remove(_claveProgresoViejo)
+      ..remove(_claveRecientesViejos);
+  }
+
+  /// Manda lo pendiente y trae lo de la cuenta (lo que cambió en otros aparatos).
+  /// Se llama al abrir, al volver a la app y cada tanto (ver estructura.dart).
+  Future<void> sincronizar() async {
+    final api = this.api;
+    if (api == null || _mandando || _cerrada) return;
+    _mandar?.cancel();
+    _mandando = true;
+    final enviados = (
+      agregar: {..._agregar},
+      quitar: {..._quitar},
+      progresos: {..._progresosPendientes},
+      olvidar: {..._olvidar},
+      vistos: {..._vistosPendientes},
+    );
+    try {
+      final respuesta = _hayPendientes
+          ? await api.post('biblioteca/', {
+              'aparato': Aparato.nombre,
+              'agregar': enviados.agregar.toList(),
+              'quitar': enviados.quitar.toList(),
+              'progresos': [for (final p in enviados.progresos.values) p.aJson()],
+              'olvidar': enviados.olvidar.toList(),
+              'vistos': [for (final v in enviados.vistos.values) v.aJson()],
+            })
+          : await api.get('biblioteca/');
+      if (_cerrada) return;
+      // Ya llegó: se saca de pendientes (lo que cambió mientras tanto queda para la próxima)
+      _agregar.removeAll(enviados.agregar);
+      _quitar.removeAll(enviados.quitar);
+      _olvidar.removeAll(enviados.olvidar);
+      enviados.progresos.forEach((id, p) {
+        if (identical(_progresosPendientes[id], p)) _progresosPendientes.remove(id);
+      });
+      enviados.vistos.forEach((id, v) {
+        if (identical(_vistosPendientes[id], v)) _vistosPendientes.remove(id);
+      });
+      _ponerDelServidor(respuesta as Map<String, dynamic>);
+      _aplicarPendientes();
+      _guardarCopia();
+      notifyListeners();
+    } on ApiError {
+      // Sin internet o el servidor no está: queda pendiente y se manda la próxima vez
+    } catch (_) {
+      // Una respuesta rara no puede romper la app
+    } finally {
+      _mandando = false;
+    }
+    if (_hayPendientes && !_cerrada) _programarEnvio();
+  }
+
+  void _ponerDelServidor(Map<String, dynamic> datos) {
+    _miLista
+      ..clear()
+      ..addAll([for (final c in datos['favoritos'] as List? ?? []) '$c']);
+    _progresos
+      ..clear()
+      ..addAll({
+        for (final p in datos['progresos'] as List? ?? [])
+          (p as Map<String, dynamic>)['id'] as int: Progreso.desdeJson(p),
+      });
+    _recientes
+      ..clear()
+      ..addAll([for (final v in datos['recientes'] as List? ?? []) Visto.desdeJson(v as Map<String, dynamic>)])
+      ..sort((a, b) => b.cuando.compareTo(a.cuando));
+  }
+
+  /// Lo que se hizo acá y el servidor todavía no sabe, encima de lo que mandó.
+  void _aplicarPendientes() {
+    _miLista
+      ..addAll(_agregar)
+      ..removeAll(_quitar);
+    for (final id in _olvidar) {
+      _progresos.remove(id);
+    }
+    _progresosPendientes.forEach((id, p) {
+      final actual = _progresos[id];
+      if (actual == null || !actual.cuando.isAfter(p.cuando)) _progresos[id] = p;
+    });
+    for (final visto in _vistosPendientes.values) {
+      final actual = _recientes.where((r) => r.id == visto.id).firstOrNull;
+      if (actual != null && actual.cuando.isAfter(visto.cuando)) continue;
+      _recientes
+        ..remove(actual)
+        ..add(visto);
+    }
+    _recientes.sort((a, b) => b.cuando.compareTo(a.cuando));
+    if (_recientes.length > _maximoRecientes) _recientes.removeRange(_maximoRecientes, _recientes.length);
+    while (_progresos.length > _maximoProgresos) {
+      final viejo = _progresos.values.reduce((a, b) => a.cuando.isBefore(b.cuando) ? a : b);
+      _progresos.remove(viejo.id);
+    }
+  }
+
+  void _guardarCopia() {
+    if (api == null) return;
+    _preferencias?.setString(
+      _claveCopia,
+      jsonEncode({
+        'favoritos': _miLista.toList(),
+        'progresos': [for (final p in _progresos.values) p.aJson()],
+        'recientes': [for (final v in _recientes) v.aJson()],
+        'pendientes': {
+          'agregar': _agregar.toList(),
+          'quitar': _quitar.toList(),
+          'olvidar': _olvidar.toList(),
+          'progresos': [for (final p in _progresosPendientes.values) p.aJson()],
+          'vistos': [for (final v in _vistosPendientes.values) v.aJson()],
+        },
+      }),
+    );
+  }
+
+  /// Un cambio hecho acá: se ve ya y se manda al servidor en unos segundos.
+  void _cambio() {
+    _guardarCopia();
+    notifyListeners();
+    _programarEnvio();
+  }
+
+  void _programarEnvio() {
+    if (api == null || _cerrada) return;
+    _mandar?.cancel();
+    _mandar = Timer(esperaParaMandar, sincronizar);
+  }
+
+  @override
+  void dispose() {
+    _cerrada = true;
+    _mandar?.cancel();
+    super.dispose();
   }
 
   // Mi lista: canales y películas por "c:<id>", series por "s:<nombre>"
@@ -685,30 +956,39 @@ class Biblioteca extends ChangeNotifier {
   Iterable<String> get miLista => _miLista;
 
   void alternarMiLista(String clave) {
-    if (!_miLista.remove(clave)) {
+    if (_miLista.remove(clave)) {
+      _agregar.remove(clave);
+      _quitar.add(clave);
+    } else {
       _miLista.add(clave);
+      _quitar.remove(clave);
+      _agregar.add(clave);
       Medidor.favorito(clave); // para "Lo más visto" del panel (sin decir quién)
     }
-    _preferencias?.setStringList(_claveLista, _miLista.toList());
-    notifyListeners();
+    _cambio();
   }
 
-  // Últimos canales vistos
-  List<int> get recientes => List.unmodifiable(_recientes);
+  // Últimos canales vistos (de la cuenta, en cualquier aparato)
+  List<int> get recientes => [for (final v in _recientes) v.id];
 
-  int? get ultimoCanal => _recientes.firstOrNull;
+  /// El último canal que se vio EN ESTE aparato (para "volver al último canal al abrir").
+  int? get ultimoCanal => _ultimoAca;
 
   void registrarCanalVisto(int id) {
-    if (_recientes.firstOrNull == id) return;
+    if (_ultimoAca != id) {
+      _ultimoAca = id;
+      _preferencias?.setInt(_claveUltimoAca, id);
+    }
+    final visto = Visto(id: id, cuando: DateTime.now(), aparato: Aparato.nombre);
     _recientes
-      ..remove(id)
-      ..insert(0, id);
+      ..removeWhere((r) => r.id == id)
+      ..insert(0, visto);
     if (_recientes.length > _maximoRecientes) _recientes.removeLast();
-    _preferencias?.setStringList(_claveRecientes, [for (final r in _recientes) '$r']);
-    notifyListeners();
+    _vistosPendientes[id] = visto;
+    _cambio();
   }
 
-  /// Al abrir la app, ¿arrancar con el último canal que se vio? (Mi cuenta)
+  /// Al abrir la app, ¿arrancar con el último canal que se vio? (Mi cuenta; es de este aparato)
   bool get volverAlUltimo => _volverAlUltimo;
 
   set volverAlUltimo(bool valor) {
@@ -751,18 +1031,63 @@ class Biblioteca extends ChangeNotifier {
 
   void guardarProgreso(int id, Duration posicion, Duration duracion) {
     if (duracion.inSeconds < 60) return; // un vivo o algo muy corto: no tiene sentido
-    _progresos[id] = Progreso(id: id, posicion: posicion, duracion: duracion, cuando: DateTime.now());
+    final progreso = Progreso(
+      id: id,
+      posicion: posicion,
+      duracion: duracion,
+      cuando: DateTime.now(),
+      aparato: Aparato.nombre,
+    );
+    _progresos[id] = progreso;
+    _olvidar.remove(id);
+    _progresosPendientes[id] = progreso;
     if (_progresos.length > _maximoProgresos) {
       final viejo = _progresos.values.reduce((a, b) => a.cuando.isBefore(b.cuando) ? a : b);
       _progresos.remove(viejo.id);
     }
-    _preferencias?.setString(_claveProgreso, jsonEncode([for (final p in _progresos.values) p.aJson()]));
-    notifyListeners();
+    _cambio();
   }
 
   void olvidarProgreso(int id) {
     _progresos.remove(id);
-    _preferencias?.setString(_claveProgreso, jsonEncode([for (final p in _progresos.values) p.aJson()]));
+    _progresosPendientes.remove(id);
+    _olvidar.add(id);
+    _cambio();
+  }
+
+  /// "Estabas viendo X en la TV — Seguir acá": lo último que se miró en OTRO
+  /// aparato de esta cuenta en las últimas [seguirHasta] (null si no hay, o
+  /// si ya se descartó o se siguió).
+  SeguirViendo? get seguirDeOtroAparato {
+    final desde = DateTime.now().subtract(seguirHasta);
+    bool deOtro(String aparato, DateTime cuando) =>
+        aparato.isNotEmpty && aparato != Aparato.nombre && cuando.isAfter(desde);
+    final candidatos = [
+      for (final p in _progresos.values)
+        if (deOtro(p.aparato, p.cuando) && !p.terminado)
+          SeguirViendo(id: p.id, aparato: p.aparato, cuando: p.cuando, progreso: p),
+      for (final v in _recientes)
+        if (deOtro(v.aparato, v.cuando)) SeguirViendo(id: v.id, aparato: v.aparato, cuando: v.cuando),
+    ]..sort((a, b) => b.cuando.compareTo(a.cuando));
+    final ultimo = candidatos.firstOrNull;
+    if (ultimo == null || _seguirDescartados.contains(ultimo.clave)) return null;
+    // Si después ya se miró algo en ESTE aparato, no se ofrece
+    final aca = [
+      ..._progresos.values.where((p) => p.aparato == Aparato.nombre).map((p) => p.cuando),
+      ..._recientes.where((v) => v.aparato == Aparato.nombre).map((v) => v.cuando),
+    ];
+    if (aca.any((cuando) => cuando.isAfter(ultimo.cuando))) return null;
+    return ultimo;
+  }
+
+  /// Ya se siguió o se cerró el aviso: no se vuelve a ofrecer ese mismo.
+  void descartarSeguir(SeguirViendo seguir) {
+    _seguirDescartados.add(seguir.clave);
+    final ultimos = _seguirDescartados.toList();
+    _preferencias?.setStringList(
+      _claveSeguirDescartados,
+      ultimos.sublist(ultimos.length > 20 ? ultimos.length - 20 : 0),
+    );
     notifyListeners();
   }
 }

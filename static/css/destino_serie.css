@@ -1,0 +1,31 @@
+/* "Dónde va" una serie: Categoría → Serie → Temporada (js/destino_serie.js) */
+
+.ds-lista[hidden], [data-destino-serie] input[hidden] { display: none !important; }
+/* El nombre de una serie nueva va debajo de la lista que dice "+ Una serie nueva" */
+.ds-lista + input:not([hidden]) { margin-top: .4rem; }
+.ds-aviso {
+    margin: .4rem 0 0; padding: .4rem .6rem; border-radius: 8px;
+    background: var(--celeste-fondo); color: var(--texto); font-size: .8rem;
+}
+.ds-aviso[hidden] { display: none; }
+.ds-resumen {
+    margin: 0; padding: .55rem .75rem; border-radius: 10px;
+    background: var(--capa-baja); border: 1px dashed var(--celeste-borde);
+    font-weight: 600; font-size: .9rem; color: var(--celeste-claro);
+}
+
+/* Los pasos numerados (1 Categoría, 2 Serie, 3 Temporada) */
+.ds-paso { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.ds-paso-titulo { display: flex; align-items: center; gap: .45rem; margin: 0; font-weight: 700; font-size: .85rem; }
+.ds-paso-titulo span {
+    display: inline-grid; place-items: center; width: 1.4rem; height: 1.4rem; flex: none;
+    border-radius: 50%; background: var(--celeste-fondo); color: var(--celeste); font-size: .75rem; font-weight: 800;
+}
+
+/* En la barra de abajo de Organizar: los tres pasos en fila (se acomodan en varios renglones si no entran) */
+.ds-barra { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; width: 100%; }
+.ds-barra .ds-paso { flex: 1 1 12rem; max-width: 20rem; }
+/* La barra le da a sus campos 16rem de largo (.espejo-barra-fila .form-control): en una columna eso era ALTO */
+.ds-barra .ds-paso .form-control, .ds-barra .ds-paso .form-select { flex: none; width: 100%; }
+.ds-barra .ds-paso-titulo { font-size: .75rem; }
+.ds-barra .ds-resumen { flex-basis: 100%; font-size: .8rem; padding: .4rem .6rem; }

@@ -12,7 +12,11 @@
             {% else %}<span>{{ serie.nombre|iniciales }}</span>{% endif %}
         </div>
         <div>
-            <p class="serie-categoria">{{ serie.categoria|default:"Sin categoría" }}</p>
+            <nav class="serie-camino" aria-label="Dónde está">
+                <a href="{% url 'canales:organizar' %}?contenido=serie">Series</a> <span aria-hidden="true">›</span>
+                <a href="{% url 'canales:organizar' %}?contenido=serie&amp;categoria={{ serie.categoria_id|default:'ninguna' }}">{{ serie.categoria|default:"Sin categoría" }}</a> <span aria-hidden="true">›</span>
+                <span>{{ serie.nombre }}</span>
+            </nav>
             <h1 class="pagina-titulo">{{ serie.nombre }}</h1>
             <p class="pagina-bajada mb-3">{{ serie.numeros_de_temporada|length }} temporada{{ serie.numeros_de_temporada|length|pluralize }} · {{ serie.cantidad }} capítulo{{ serie.cantidad|pluralize }}.</p>
             <div class="d-flex flex-wrap gap-2">
@@ -31,6 +35,34 @@
     mismo: arrastrando (de los puntitos) o con las flechas, y "Guardar orden" (static/js/ordenar_capitulos.js ->
     organizar.ordenar_capitulos, que los numera 1, 2, 3... en ese orden).
 {% endcomment %}
+{% if puede_editar %}
+{# Las 3 cosas de una serie: su categoría y su nombre acá; las temporadas, abajo (pasar capítulos de una a otra) #}
+<form method="post" action="{% url 'canales:serie_editar' %}" class="tarjeta serie-datos">
+    {% csrf_token %}
+    <input type="hidden" name="nombre" value="{{ serie.nombre }}">
+    <div class="ds-paso">
+        <label class="ds-paso-titulo" for="serie-categoria"><span>1</span> Categoría</label>
+        <select name="categoria" id="serie-categoria" class="form-select">
+            {% for c in categorias_de_series %}<option value="{{ c.nombre }}" {% if c.pk == serie.categoria_id %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}
+            <option value="" {% if not serie.categoria_id %}selected{% endif %}>Sin categoría («Otros» en la app)</option>
+        </select>
+        <input type="text" name="categoria_nueva" class="form-control" maxlength="80" placeholder="o una nueva" aria-label="Categoría nueva">
+    </div>
+    <div class="ds-paso">
+        <label class="ds-paso-titulo" for="serie-nombre"><span>2</span> Serie</label>
+        <input type="text" name="nuevo_nombre" id="serie-nombre" class="form-control" maxlength="90" value="{{ serie.nombre }}" required>
+        <small class="texto-suave">Cambiarlo renombra todos sus capítulos.</small>
+    </div>
+    <div class="ds-paso">
+        <p class="ds-paso-titulo"><span>3</span> Temporadas</p>
+        <small class="texto-suave">Abajo, en cada temporada: tildá capítulos y «pasarlos a» otra temporada (o a una nueva).</small>
+        <a href="{{ agregar_de_youtube }}&amp;temporada={{ temporada_nueva }}" class="small"><i class="bi bi-youtube" aria-hidden="true"></i> Traer la temporada {{ temporada_nueva }} desde YouTube</a>
+    </div>
+    <div class="serie-datos-acciones">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check2" aria-hidden="true"></i> Guardar categoría y nombre</button>
+    </div>
+</form>
+{% endif %}
 <div class="temporadas-lista">
     {% for numero, capitulos, orden in serie.temporadas_ordenadas %}
     <details class="temporada" id="temporada-{{ numero }}" {% if forloop.first or orden.desordenada %}open{% endif %}>
@@ -50,15 +82,28 @@
                 <button type="button" class="btn btn-primary btn-sm" data-orden-por-titulo>Ordenarlos por el número del título</button>
             </div>
             {% endif %}
-            {% if capitulos|length > 1 %}
-            <p class="orden-ayuda"><i class="bi bi-grip-vertical" aria-hidden="true"></i> Para cambiar el orden, <strong>arrastrá</strong> un capítulo de los puntitos o usá las <strong>flechas</strong>. Después tocá <strong>Guardar orden</strong>.</p>
-            {% endif %}
+            <p class="orden-ayuda">
+                {% if capitulos|length > 1 %}<i class="bi bi-grip-vertical" aria-hidden="true"></i> Para cambiar el orden, <strong>arrastrá</strong> un capítulo de los puntitos o usá las <strong>flechas</strong>. Después tocá <strong>Guardar orden</strong>.{% endif %}
+                Para pasar capítulos a otra temporada, <strong>tildalos</strong> (con Shift elegís varios seguidos).
+                <a href="{{ agregar_de_youtube }}&amp;temporada={{ numero }}" class="temporada-agregar"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar capítulos a la temporada {{ numero }} desde YouTube</a>
+            </p>
+            <div class="temporada-mover" data-mover-barra hidden>
+                <strong data-mover-cuenta aria-live="polite"></strong>
+                <label for="a-temporada-{{ numero }}">pasarlos a</label>
+                <select name="a_temporada" id="a-temporada-{{ numero }}" class="form-select form-select-sm w-auto">
+                    {% for otra in serie.numeros_de_temporada %}{% if otra != numero %}<option value="{{ otra }}">la temporada {{ otra }} (al final)</option>{% endif %}{% endfor %}
+                    <option value="{{ temporada_nueva }}">＋ una temporada nueva: la {{ temporada_nueva }}</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-primary" formaction="{% url 'canales:serie_temporada' %}">Pasar</button>
+                <span class="texto-suave small">Los que quedan en la {{ numero }} se renumeran sin huecos.</span>
+            </div>
         {% endif %}
         <ol class="cap-lista">
             {% for capitulo in capitulos %}
             <li class="cap{% if capitulo.no_se_ve %} cap-fuera{% endif %}" id="capitulo-{{ capitulo.canal.pk }}" data-numero-en-el-titulo="{{ capitulo.numero_en_el_titulo|default_if_none:'' }}">
                 {% if puede_editar %}
                 <input type="hidden" name="capitulo" value="{{ capitulo.canal.pk }}">
+                <input type="checkbox" class="form-check-input cap-elegir" name="elegido" value="{{ capitulo.canal.pk }}" aria-label="Elegir «{{ capitulo.titulo|default:capitulo.canal.nombre }}»">
                 {% if capitulos|length > 1 %}<span class="cap-agarre" title="Arrastrar para cambiarlo de lugar" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>{% endif %}
                 {% endif %}
                 <span class="cap-numero">{{ forloop.counter }}</span>
@@ -126,6 +171,31 @@
 {% if puede_editar %}
 <script src="{% static 'js/ordenar_capitulos.js' %}"></script>
 <script>
+// Elegir capítulos para pasarlos a otra temporada: aparece la barra "N elegidos, pasarlos a…".
+// Con Shift se eligen todos los del medio (desde el último que se tocó).
+document.querySelectorAll('form[data-orden]').forEach(function (form) {
+    var barra = form.querySelector('[data-mover-barra]');
+    var cuenta = form.querySelector('[data-mover-cuenta]');
+    var ultima = null;
+    function casillas() { return Array.prototype.slice.call(form.querySelectorAll('.cap-elegir')); }
+    function contar() {
+        var elegidos = casillas().filter(function (c) { return c.checked; }).length;
+        barra.hidden = !elegidos;
+        cuenta.textContent = elegidos === 1 ? '1 capítulo elegido:' : elegidos + ' capítulos elegidos:';
+    }
+    form.addEventListener('click', function (evento) {
+        var casilla = evento.target.closest('.cap-elegir');
+        if (!casilla) return;
+        var todas = casillas();
+        if (evento.shiftKey && ultima && ultima !== casilla) {
+            var desde = todas.indexOf(ultima), hasta = todas.indexOf(casilla);
+            todas.slice(Math.min(desde, hasta), Math.max(desde, hasta) + 1).forEach(function (c) { c.checked = casilla.checked; });
+        }
+        ultima = casilla;
+        contar();
+    });
+});
+
 // "Borrar" una señal de un capítulo: se pregunta antes (no se deshace)
 document.querySelectorAll('form[data-orden]').forEach(function (form) {
     form.addEventListener('submit', function (evento) {
@@ -136,4 +206,5 @@ document.querySelectorAll('form[data-orden]').forEach(function (form) {
 </script>
 {% endif %}
 <link rel="stylesheet" href="{% static 'css/ordenar_capitulos.css' %}">
+<link rel="stylesheet" href="{% static 'css/destino_serie.css' %}">
 {% endblock %}

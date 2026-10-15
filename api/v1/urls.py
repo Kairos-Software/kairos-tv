@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from . import app, auth, canales, cliente, notificaciones, perfil, usuarios
+from . import app, auth, biblioteca, canales, cliente, notificaciones, perfil, usuarios
 
 app_name = 'api_v1'
 
@@ -30,6 +30,7 @@ def indice(request):
             'cliente_login': url('cliente_login'),
             'cliente': url('cliente'),
             'cliente_logout': url('cliente_logout'),
+            'biblioteca': url('biblioteca'),
             'app': url('app'),
         },
     })
@@ -65,6 +66,9 @@ urlpatterns = [
     path('cliente/login/', cliente.login, name='cliente_login'),
     path('cliente/', cliente.estado, name='cliente'),
     path('cliente/logout/', cliente.logout, name='cliente_logout'),
+
+    # Favoritos, "Continuar viendo" y últimos canales vistos de la cuenta (no del aparato)
+    path('biblioteca/', biblioteca.biblioteca, name='biblioteca'),
 
     path('notificaciones/', notificaciones.lista, name='notificaciones'),
     path('notificaciones/<int:pk>/leida/', notificaciones.marcar_leida, name='notificacion_leida'),

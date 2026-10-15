@@ -21,6 +21,8 @@ numerada.
     organizar.mover_a_categoria(canales, noticias)                 -> cuántos se movieron
     organizar.cambiar_contenido(canales, 'serie', nombre_serie='Pocoyó')
     organizar.ordenar_capitulos('Pocoyó', 1, [pk, pk, ...])        -> los renumera 1, 2, 3... en ese orden
+    organizar.mover_a_temporada('Pocoyó', [pk, ...], 2)           -> esos capítulos pasan a la temporada 2
+    organizar.destino_de_serie('Pocoyó', 'Infantiles')             -> la categoría donde van sus capítulos nuevos
     organizar.categorias_parecidas(categorias)                     -> [[cat, cat], ...] posibles repetidas
     organizar.borrar_categoria(infantil, con_contenido=True)       -> la borra con todo lo de adentro
     organizar.eliminar_contenido(canales)                          -> los borra (si se vuelven a importar, vuelven)
@@ -28,6 +30,7 @@ numerada.
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -355,8 +358,11 @@ def ultimo_capitulo(nombre_serie, temporada=1, excluir=()):
     return ultimo
 
 
+_SIN_ELEGIR = object()
+
+
 @transaction.atomic
-def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=None):
+def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=None, categoria=_SIN_ELEGIR):
     """
     Cambia el tipo (en vivo / película / serie) de los elegidos. Pasan a esa
     sección con una categoría del mismo nombre (la crea si no existe).
@@ -366,6 +372,9 @@ def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=
     para que la app los arme como UNA serie. Sin nombre solo se puede si ya
     dicen temporada y capítulo ("Arrow S02 E05"): si no, quedarían sin un
     T1:E1 identificable y la app no los mostraría.
+
+    `categoria` (a Series): la de la serie, para todos (None = sin categoría;
+    ver destino_de_serie). Sin decirla, cada uno a la del mismo nombre.
 
     Devuelve cuántos cambiaron.
     """
@@ -387,7 +396,9 @@ def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=
     # Si la serie ya tiene capítulos (de otra tanda o importación), se sigue desde el último
     primero = ultimo_capitulo(nombre_serie, temporada, excluir=[c.pk for c in elegidos]) + 1 if nombre_serie else 1
     for numero, canal in enumerate(elegidos, start=primero):
-        if canal.categoria is not None and canal.categoria.contenido != contenido:
+        if categoria is not _SIN_ELEGIR and contenido == Contenido.SERIE:
+            canal.categoria = categoria
+        elif canal.categoria is not None and canal.categoria.contenido != contenido:
             canal.categoria = categoria_por_nombre(canal.categoria.nombre, contenido, indice, usuario)
         canal.contenido = contenido
         if nombre_serie:
@@ -409,7 +420,8 @@ def capitulos_de(nombres_de_series):
     return Canal.objects.filter(pk__in=pks)
 
 
-def unir_en_una_serie(nombres_de_series, nombre_serie, temporada=1, usuario=None, capitulos=None):
+def unir_en_una_serie(nombres_de_series, nombre_serie, temporada=1, usuario=None, capitulos=None,
+                      categoria=_SIN_ELEGIR):
     """
     Junta varias series (por ejemplo, 239 "series" de un capítulo que eran
     videos sueltos) en UNA serie: todos sus capítulos quedan numerados en orden.
@@ -419,7 +431,7 @@ def unir_en_una_serie(nombres_de_series, nombre_serie, temporada=1, usuario=None
         raise NoSePuede('Escribí el nombre de la serie que va a juntarlas.')
     if capitulos is None:
         capitulos = capitulos_de(nombres_de_series)
-    cantidad = cambiar_contenido(capitulos, Contenido.SERIE, nombre_serie, temporada, usuario)
+    cantidad = cambiar_contenido(capitulos, Contenido.SERIE, nombre_serie, temporada, usuario, categoria)
     for nombre in nombres_de_series:
         # Si alguna tenía portada, la serie unida se queda con ella (solo si pasó entera: si no, sigue siendo suya)
         if _clave(nombre) == _clave(nombre_serie) or not capitulos_de([nombre]).exists():
@@ -604,6 +616,93 @@ def ordenar_capitulos(nombre_serie, temporada, en_orden, usuario=None):
         registrar(usuario, Accion.EDITAR, f'Ordenó los capítulos de "{nombre_serie}" (temporada {temporada}): '
                                           f'{len(cambiados)} cambiaron de número.', modulo='canales')
     return len(cambiados)
+
+
+@transaction.atomic
+def mover_a_temporada(nombre_serie, pks, temporada, usuario=None):
+    """
+    Pasa esos capítulos de la serie a otra temporada (una que ya tiene o una
+    nueva): van al final de esa temporada, en el orden en que estaban. Las
+    temporadas de donde salieron se renumeran 1, 2, 3... (sin huecos: la app
+    arranca cada temporada en su capítulo 1). Devuelve cuántos pasaron.
+    """
+    try:
+        temporada, pks = int(temporada), {int(pk) for pk in pks}
+    except (TypeError, ValueError):
+        raise NoSePuede('Lo que llegó no se entiende: volvé a cargar la página.') from None
+    if not 1 <= temporada <= 99:
+        raise NoSePuede('La temporada tiene que ser del 1 al 99.')
+    capitulos = list(capitulos_de([nombre_serie]))
+    if not capitulos:
+        raise NoSePuede(f'No se encontró la serie "{nombre_serie}".')
+    partes = {canal.pk: clasificar.episodio(canal.nombre) for canal in capitulos}
+    serie = partes[capitulos[0].pk][0]   # como está escrita en sus capítulos
+
+    def en_orden(canal):
+        _, de_temporada, numero, _ = partes[canal.pk]
+        return de_temporada, numero is None, numero or 0, canal.nombre
+
+    elegidos = sorted((c for c in capitulos if c.pk in pks and partes[c.pk][1] != temporada), key=en_orden)
+    if not elegidos:
+        raise NoSePuede(f'Elegí al menos un capítulo que no sea de la temporada {temporada}.')
+    siguiente = max((partes[c.pk][2] or 0 for c in capitulos if partes[c.pk][1] == temporada), default=0)
+    cambiados = {}
+    for canal in elegidos:
+        siguiente += 1
+        canal.nombre = nombre_de_capitulo(serie, temporada, siguiente, partes[canal.pk][3])
+        cambiados[canal.pk] = canal
+    for origen in {partes[c.pk][1] for c in elegidos}:
+        quedan = sorted((c for c in capitulos if partes[c.pk][1] == origen and c.pk not in cambiados), key=en_orden)
+        for numero, canal in enumerate(quedan, start=1):
+            if partes[canal.pk][2] != numero:
+                canal.nombre = nombre_de_capitulo(serie, origen, numero, partes[canal.pk][3])
+                cambiados[canal.pk] = canal
+    ahora = timezone.now()
+    for canal in cambiados.values():
+        canal.modificado = ahora
+        canal.marcar_autor(usuario)
+    Canal.objects.bulk_update(list(cambiados.values()), ['nombre', 'modificado', 'modificado_por'])
+    registrar(usuario, Accion.EDITAR, f'Pasó {len(elegidos)} capítulo(s) de "{serie}" a la temporada {temporada}.',
+              modulo='canales')
+    return len(elegidos)
+
+
+def categoria_de_la_serie(nombre_serie):
+    """
+    (existe, categoría) de la serie con ese nombre. Una serie va en UNA
+    categoría: la de la mayoría de sus capítulos (None = sin categoría).
+    """
+    cuantos = Counter(capitulos_de([nombre_serie]).values_list('categoria', flat=True))
+    if not cuantos:
+        return False, None
+    pk = cuantos.most_common(1)[0][0]
+    return True, (Categoria.objects.filter(pk=pk).first() if pk else None)
+
+
+def categoria_para_la_serie(nombre_serie, nombre_categoria):
+    """
+    El NOMBRE de la categoría donde van los capítulos que se suman a la serie
+    (Traer de YouTube, Unir, Pasar a Series). Si la serie ya existe, la SUYA:
+    elegir otra la partiría en dos categorías, así que eso se explica
+    (NoSePuede). Si es nueva, la elegida ('' si no se eligió ninguna).
+    """
+    existe, suya = categoria_de_la_serie(nombre_serie)
+    nombre_categoria = _limpio(nombre_categoria)
+    if existe and suya is not None:
+        if nombre_categoria and _clave(nombre_categoria) != _clave(suya.nombre):
+            raise NoSePuede(f'"{_limpio(nombre_serie, 90)}" ya está en la categoría "{suya.nombre}": sus capítulos '
+                            f'nuevos van ahí. Elegí "{suya.nombre}", o cambiale la categoría a la serie desde su '
+                            f'página (Temporadas y capítulos).')
+        return suya.nombre
+    return nombre_categoria
+
+
+def destino_de_serie(nombre_serie, nombre_categoria, usuario=None):
+    """La Categoria de categoria_para_la_serie (la crea si es nueva). Sin ninguna, NoSePuede."""
+    nombre = categoria_para_la_serie(nombre_serie, nombre_categoria)
+    if not nombre:
+        raise NoSePuede(f'Elegí en qué categoría de Series va "{_limpio(nombre_serie, 90)}" (o escribí una nueva).')
+    return categoria_por_nombre(nombre, Contenido.SERIE, usuario=usuario)
 
 
 # ── Editar desde "Organizar contenido" ───────────────────────────────

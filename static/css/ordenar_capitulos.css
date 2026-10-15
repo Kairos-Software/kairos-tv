@@ -74,3 +74,38 @@
     .orden-barra-botones { width: 100%; }
     .orden-barra-botones .btn { flex: 1; }
 }
+
+/* Dónde está la serie: Series › Categoría › Serie */
+.serie-camino {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .35rem;
+    font-size: .8rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-suave);
+}
+.serie-camino a { color: var(--celeste); text-decoration: none; }
+.serie-camino a:hover { text-decoration: underline; }
+
+/* Categoría y nombre de la serie (arriba de las temporadas) */
+.serie-datos {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem 1.25rem;
+    margin-bottom: 1rem; padding: 1rem 1.25rem;
+}
+.serie-datos .ds-paso { gap: .4rem; }
+.serie-datos .ds-paso a { color: var(--celeste); }
+.serie-datos-acciones { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+
+/* Elegir capítulos y pasarlos a otra temporada */
+.cap-elegir { flex: none; width: 1.2rem; height: 1.2rem; margin: 0; cursor: pointer; }
+.cap:has(.cap-elegir:checked) { border-color: var(--celeste); background: var(--celeste-fondo); }
+.temporada-agregar { display: inline-flex; align-items: center; gap: .3rem; margin-left: .35rem; color: var(--celeste); white-space: nowrap; }
+.temporada-mover {
+    position: sticky; top: calc(var(--barra-alto, 4rem) + .5rem); z-index: 6;
+    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem;
+    margin: .75rem 1.25rem 0; padding: .7rem .9rem;
+    background: var(--capa-maxima); border: 1px solid var(--celeste-borde); border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+.temporada-mover[hidden] { display: none; }
+.temporada-mover label { margin: 0; }
+@media (max-width: 575.98px) {
+    .temporada-mover { margin: .6rem .6rem 0; }
+    .temporada-agregar { margin-left: 0; white-space: normal; }
+}

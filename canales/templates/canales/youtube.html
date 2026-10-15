@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% comment %}
     Traer de YouTube arma una importación revisable con los videos largos de
     un canal oficial. No descarga videos ni los publica sin revisión.
@@ -6,6 +7,7 @@
 
 {% block titulo %}Traer de YouTube · Contenido{% endblock %}
 {% block clase_body %}pagina-herramienta-contenido pagina-youtube{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/destino_serie.css' %}">{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
@@ -54,14 +56,10 @@
 
         <fieldset class="herramienta-paso">
             <legend><span>2</span> Cómo va a quedar</legend>
-            <div class="row g-3 align-items-start">
+            {# Serie: 1 Categoría → 2 Serie → 3 Temporada, con lo que ya hay (static/js/destino_serie.js) #}
+            <div class="row g-3 align-items-start" data-destino-serie data-arbol="arbol-series"
+                 data-ds-categoria="categoria_destino" data-ds-nueva="categoria_nueva" data-ds-serie="nombre_serie" data-ds-temporada="temporada">
                 {% include "parciales/_campo.html" with campo=form.es_serie ancho="col-12" %}
-                <div class="col-12" data-solo-serie {% if not form.es_serie.value %}hidden{% endif %}>
-                    <div class="row g-3">
-                        {% include "parciales/_campo.html" with campo=form.nombre_serie ancho="col-md-8" %}
-                        {% include "parciales/_campo.html" with campo=form.temporada ancho="col-md-4" %}
-                    </div>
-                </div>
                 <div class="col-12" data-sin-serie {% if form.es_serie.value %}hidden{% endif %}>
                     <div class="row g-3">
                         {% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-6" %}
@@ -69,6 +67,13 @@
                 </div>
                 {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-6" %}
                 {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-6" %}
+                <div class="col-12" data-solo-serie {% if not form.es_serie.value %}hidden{% endif %}>
+                    <div class="row g-3">
+                        {% include "parciales/_campo.html" with campo=form.nombre_serie ancho="col-md-6" %}
+                        {% include "parciales/_campo.html" with campo=form.temporada ancho="col-md-6" %}
+                        <div class="col-12"><p class="ds-resumen" data-ds-resumen></p></div>
+                    </div>
+                </div>
             </div>
         </fieldset>
 
@@ -120,9 +125,16 @@
         return seccion.value ? seccion.selectedOptions[0].text : 'Películas';
     }
 
+    var titulos = [[lista, 'Categoría', '1. Categoría'], [nombreSerie, 'Serie', '2. Serie'], [temporada, 'Temporada', '3. Temporada']];
+    var destinoSerie = form.querySelector('[data-destino-serie]');
+
     function acomodar() {
         var serie = esSerie.checked;
         var destino = nombreDeLaSeccion();
+        titulos.forEach(function (t) {
+            var etiqueta = form.querySelector('label[for="' + t[0].id + '"]');
+            if (etiqueta) etiqueta.textContent = serie ? t[2] : t[1];
+        });
         form.querySelector('[data-solo-serie]').hidden = !serie;
         form.querySelector('[data-sin-serie]').hidden = serie || seccion.options.length < 2;
         Array.prototype.forEach.call(lista.querySelectorAll('optgroup'), function (grupo) {
@@ -143,9 +155,7 @@
         var largo = 'desde ' + desde + ' min' + (maximo.value ? ' hasta ' + maximo.value + ' min' : ', sin máximo');
         filtrosResumen.textContent = largo + (soloEspanol.checked ? ' · solo en español' : '');
         if (esSerie.checked) {
-            var nombre = nombreSerie.value.trim() || '(falta el nombre)';
-            resumen.textContent = 'Series → ' + (categoria || '(falta la categoría)') + ' → ' + nombre +
-                ' → temporada ' + (temporada.value || 1) + '.';
+            resumen.textContent = destinoSerie.dataset.resumen || '';
         } else if (seccion.value) {
             resumen.textContent = nombreDeLaSeccion() + ' → ' +
                 (categoria || 'una categoría con el nombre del canal') + '.';
@@ -175,6 +185,7 @@
             lista.value = existe ? existe.value : '';
             nueva.value = boton.dataset.categoria && !existe ? boton.dataset.categoria : '';
             minimo.value = boton.dataset.minutos;
+            destinoSerie.dispatchEvent(new Event('destino-serie:refrescar'));
             explicar();
             form.querySelector('[name=url]').focus({preventScroll: true});
         });
@@ -192,6 +203,7 @@
     [temporada, minimo, maximo].forEach(function (campo) { campo.addEventListener('input', explicar); });
     soloEspanol.addEventListener('change', explicar);
     esSerie.addEventListener('change', acomodar);
+    form.addEventListener('destino-serie', explicar);
     seccion.addEventListener('change', acomodar);
     acomodar();
 
@@ -202,4 +214,6 @@
     });
 })();
 </script>
+{{ arbol_de_series|json_script:"arbol-series" }}
+<script src="{% static 'js/destino_serie.js' %}"></script>
 {% endblock %}

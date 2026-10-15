@@ -134,17 +134,18 @@ class TraerDeYoutubeForm(EstiloBootstrapMixin, forms.Form):
     )
     es_serie = forms.BooleanField(
         label='Es una serie: cada video es un capítulo', required=False,
-        help_text='Para canales de UNA serie (Masha y el Oso, Pocoyó...). Los capítulos se numeran del más viejo al '
-                  'más nuevo y en la app quedan en Series → la categoría que elijas → la serie. Si ya la trajiste '
-                  'antes, los nuevos siguen la numeración.',
+        help_text='Para canales o listas de UNA serie (Masha y el Oso, Pocoyó...). Elegís 3 cosas: la categoría '
+                  '(Infantiles, Disney...), la serie (una que ya existe o una nueva) y la temporada. Los capítulos '
+                  'se numeran del más viejo al más nuevo, después del último que ya tenga esa temporada.',
     )
-    nombre_serie = forms.CharField(label='Nombre de la serie', max_length=90, required=False,
-                                   help_text='Como se va a ver en la app.')
+    nombre_serie = forms.CharField(label='Serie', max_length=90, required=False,
+                                   help_text='Una que ya existe en esa categoría (los capítulos se suman a ella) o '
+                                             '«＋ Una serie nueva», con el nombre como se va a ver en la app.')
     temporada = forms.IntegerField(
         label='Temporada', min_value=1, max_value=99, initial=1, required=False,
-        help_text='Si la serie tiene varias, traé cada una con su link y el MISMO nombre de serie: en la app '
-                  'quedan juntas, cada temporada con sus capítulos desde el 1. La app muestra la serie cuando '
-                  'ya tiene la temporada 1.',
+        help_text='Una que ya tiene (los capítulos siguen desde el último) o una nueva. Si en YouTube cada '
+                  'temporada es una lista aparte, traé cada una con su link eligiendo la misma serie. La app '
+                  'muestra la serie cuando tiene la temporada 1.',
     )
     seccion_destino = forms.ChoiceField(
         label='Sección', required=False,
@@ -183,7 +184,16 @@ class TraerDeYoutubeForm(EstiloBootstrapMixin, forms.Form):
                 datos['nombre_serie'] = organizar.nombre_de_serie_valido(datos.get('nombre_serie', ''))
             except organizar.NoSePuede as error:
                 self.add_error('nombre_serie', str(error))
-            if not _nombre_de_la_categoria(datos):
+            else:
+                # Una serie que ya existe suma capítulos en SU categoría (sin elegir, se pone sola)
+                try:
+                    suya = organizar.categoria_para_la_serie(datos['nombre_serie'], _nombre_de_la_categoria(datos))
+                except organizar.NoSePuede as error:
+                    self.add_error('categoria_destino', str(error))
+                else:
+                    if suya and not _nombre_de_la_categoria(datos):
+                        datos['categoria_destino'] = suya
+            if not _nombre_de_la_categoria(datos) and 'categoria_destino' not in self.errors:
                 self.add_error('categoria_destino', 'Elegí en qué categoría de Series va (por ejemplo, Series '
                                                     'Infantiles), o escribí una nueva.')
         minimo, maximo = datos.get('minimo_minutos'), datos.get('maximo_minutos')

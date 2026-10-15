@@ -13,6 +13,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../api/modelos.dart';
+import '../movil/componentes.dart' show reloj;
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
 import '../sesion.dart';
@@ -33,6 +34,8 @@ class InicioTv extends StatelessWidget {
       builder: (context, _) {
         final catalogo = datos.catalogo;
         final biblioteca = datos.biblioteca;
+        final seguir = biblioteca.seguirDeOtroAparato;
+        final hayQueSeguir = seguir != null && catalogo.canalPorId(seguir.id) != null;
         final favoritos = catalogo.canalesFavoritos(biblioteca);
         final recientes = catalogo.canalesRecientes(biblioteca);
         final destacado = [
@@ -71,7 +74,8 @@ class InicioTv extends StatelessWidget {
                 alOk: () => NavegacionTv.of(context).irA(SeccionTv.buscar),
               ),
             ),
-            if (destacado != null) _Portada(canal: destacado),
+            if (hayQueSeguir) _SeguirAca(seguir: seguir),
+            if (destacado != null) _Portada(canal: destacado, foco: !hayQueSeguir),
             if (catalogo.canales.isEmpty &&
                 catalogo.peliculas.isEmpty &&
                 catalogo.series.isEmpty &&
@@ -134,9 +138,12 @@ class InicioTv extends StatelessWidget {
 
 /// La portada: el canal destacado, con su logo grande a la derecha sobre una luz celeste.
 class _Portada extends StatelessWidget {
-  const _Portada({required this.canal});
+  const _Portada({required this.canal, this.foco = true});
 
   final Canal canal;
+
+  /// El foco arranca en "Ver en vivo" (salvo que arriba esté "Seguir acá").
+  final bool foco;
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +213,7 @@ class _Portada extends StatelessWidget {
                             texto: 'Ver en vivo',
                             icono: Icons.play_arrow_rounded,
                             principal: true,
-                            autofocus: true,
+                            autofocus: foco,
                             alOk: () => verCanalTv(context, canal),
                           ),
                           const SizedBox(width: 18),
@@ -245,6 +252,88 @@ class _Portada extends StatelessWidget {
                   ),
                   child: LogoCanalTv(canal: canal, tamanioIniciales: 84, relleno: const EdgeInsets.all(34)),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Estabas viendo X en el celular — Seguir acá": lo último que se miró en
+/// otro aparato de la misma cuenta (Biblioteca.seguirDeOtroAparato). Una
+/// película o capítulo sigue en el mismo minuto; un canal, en vivo. El foco
+/// arranca en "Seguir acá".
+class _SeguirAca extends StatelessWidget {
+  const _SeguirAca({required this.seguir});
+
+  final SeguirViendo seguir;
+
+  @override
+  Widget build(BuildContext context) {
+    final datos = DatosScope.of(context);
+    final canal = datos.catalogo.canalPorId(seguir.id)!;
+    final serie = canal.contenido == 'serie' ? datos.catalogo.serieDe(canal) : null;
+    final episodio = serie?.episodios.where((e) => e.canal.id == canal.id).firstOrNull;
+    final progreso = seguir.progreso;
+    final titulo = serie == null
+        ? sinAnio(canal.nombre)
+        : '${serie.nombre} · T${episodio?.temporada ?? 1} E${episodio?.numero ?? 1}';
+    final minutos = DateTime.now().difference(seguir.cuando).inMinutes;
+    final cuando = minutos < 1 ? 'recién' : (minutos < 60 ? 'hace $minutos min' : 'hace ${minutos ~/ 60} h');
+    void seguirAca() {
+      datos.biblioteca.descartarSeguir(seguir);
+      if (progreso == null) {
+        verCanalTv(context, canal);
+      } else if (serie != null && episodio != null) {
+        reproducirSerieTv(context, serie, episodio: episodio);
+      } else {
+        reproducirPeliculaTv(context, canal);
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(MargenTv.izquierda, 16, MargenTv.derecha, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(28, 18, 22, 18),
+        decoration: BoxDecoration(
+          color: Tono.capa,
+          borderRadius: BorderRadius.circular(Curva.panel),
+          border: Border.all(color: Tono.celeste.withValues(alpha: .4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.devices_rounded, color: Tono.celeste, size: 34),
+            const SizedBox(width: 22),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Estabas viendo en ${seguir.aparato}', style: LetraTv.ayuda.copyWith(color: Tono.celeste)),
+                  const SizedBox(height: 4),
+                  Text(titulo, maxLines: 1, overflow: TextOverflow.ellipsis, style: LetraTv.tarjeta),
+                  const SizedBox(height: 2),
+                  Text(
+                    progreso == null ? 'En vivo · $cuando' : 'Ibas por ${reloj(progreso.posicion)} · $cuando',
+                    style: LetraTv.ayuda,
+                  ),
+                ],
+              ),
+            ),
+            FocusTraversalGroup(
+              child: Row(
+                children: [
+                  BotonTv(
+                    texto: 'Seguir acá',
+                    icono: Icons.play_arrow_rounded,
+                    principal: true,
+                    autofocus: true,
+                    alOk: seguirAca,
+                  ),
+                  const SizedBox(width: 16),
+                  BotonTv(texto: 'No, gracias', alOk: () => datos.biblioteca.descartarSeguir(seguir)),
+                ],
               ),
             ),
           ],
