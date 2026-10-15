@@ -1,0 +1,25 @@
+/* Contenido → Mantenimiento del catálogo: "Qué revisar" y los resultados
+   (canales/inicio.html + js/mantenimiento.js) */
+
+.mantenimiento-filtros { display: flex; flex-wrap: wrap; gap: .5rem; }
+.mantenimiento-filtros .form-select { width: auto; max-width: 22rem; }
+
+.mantenimiento-resultado {
+    padding: .9rem 1rem; border-radius: 14px;
+    background: var(--celeste-fondo); border: 1px solid var(--celeste-borde);
+}
+.mantenimiento-resultado[hidden] { display: none; }
+.mantenimiento-resultado h3 { margin: 0 0 .4rem; font-size: 1rem; font-weight: 700; }
+.mantenimiento-resultado p { margin: 0 0 .5rem; font-size: .88rem; }
+.mantenimiento-resultado details { margin-bottom: .5rem; }
+.mantenimiento-resultado details[hidden] { display: none; }
+.mantenimiento-resultado summary { cursor: pointer; font-weight: 600; font-size: .88rem; }
+.mantenimiento-resultado ul {
+    margin: .4rem 0 0; padding-left: 1.2rem; max-height: 18rem; overflow-y: auto;
+    font-size: .82rem; color: var(--texto-suave);
+}
+.mantenimiento-resultado li { margin-bottom: .15rem; word-break: break-word; }
+
+@media (max-width: 575.98px) {
+    .mantenimiento-filtros, .mantenimiento-filtros .form-select { width: 100%; max-width: none; }
+}

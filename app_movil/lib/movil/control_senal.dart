@@ -3,8 +3,8 @@
 /// siguiente (failover) y le avisa al servidor que esa falló y por qué (ver
 /// [Falla]). Si ninguna anda, queda con [error]: el motivo de la última (con
 /// "Reintentar"). Sigue en la lista: un canal que no conecta suele volver
-/// enseguida. Solo si este aparato no puede mostrar su formato de video se
-/// anota en [NoAnda] (deja de mostrarse acá: eso no se arregla solo).
+/// enseguida. Solo si el decodificador de este aparato dice que no sabe
+/// mostrar el video se anota en [NoAnda] (deja de mostrarse acá unos días).
 ///
 /// Además:
 ///   - Sin imagen: si a los pocos segundos el video suena pero no tiene imagen
@@ -379,14 +379,15 @@ class ControlSenal extends ChangeNotifier {
   }
 
   /// Si no anduvo ninguna fuente, ¿deja de mostrarse en este aparato por un
-  /// tiempo ([NoAnda])? Solo si este aparato no puede mostrar su formato de
-  /// video (y nunca se llegó a ver): eso no cambia. Si no se pudo conectar,
-  /// tardó o el servidor de la señal lo rechazó, NO: suele ser un problema
-  /// pasajero del canal (pasó con Disney) y esconderlo dejaba al aparato sin
-  /// el canal aunque ya anduviera. Si de verdad está caído, lo saca el
-  /// servidor (cuando falla en varios aparatos) y lo devuelve solo al volver.
+  /// tiempo ([NoAnda])? Solo si el decodificador de este aparato dijo que no
+  /// sabe mostrar el video ([Falla.delAparato]) y nunca se llegó a ver. Si no
+  /// se pudo conectar, tardó, el servidor de la señal lo rechazó, mandó algo
+  /// que no es video o no apareció la imagen, NO: suele ser pasajero (pasó con
+  /// Disney y con Next) y esconderlo dejaba al aparato sin el canal aunque ya
+  /// anduviera. Si de verdad está caído, lo saca el servidor (cuando falla en
+  /// varios aparatos) y lo devuelve solo al volver.
   static bool esconderDespuesDe(Falla? falla, {required bool hayFuentes, required bool seVio}) =>
-      hayFuentes && falla?.motivo == Falla.formato.motivo && !seVio;
+      hayFuentes && (falla?.delAparato ?? false) && !seVio;
 
   /// Las radios (solo audio) no tienen imagen y está bien.
   bool _deberiaTenerImagen(FuenteCanal elegida) {
@@ -675,7 +676,7 @@ class ControlSenal extends ChangeNotifier {
 /// y lo que se le avisa al servidor ([motivo]: formato, rechazo, tiempo,
 /// conexion, error; ver canales/servicios.py -> MOTIVOS_DE_LOS_APARATOS).
 class Falla {
-  const Falla(this.motivo, this.mensaje, [this.detalle = '']);
+  const Falla(this.motivo, this.mensaje, [this.detalle = '', this.delAparato = false]);
 
   final String motivo;
   final String mensaje;
@@ -683,7 +684,11 @@ class Falla {
   /// Lo técnico (lo que dijo el reproductor), recortado. Para el panel.
   final String detalle;
 
-  static const formato = Falla('formato', 'Este aparato no puede reproducir el formato de este video.');
+  /// El decodificador de ESTE aparato no sabe mostrar el video (no es la
+  /// señal ni algo pasajero): lo único que lo esconde acá (ver [ControlSenal.esconderDespuesDe]).
+  final bool delAparato;
+
+  static const formato = Falla('formato', 'Este aparato no puede reproducir el formato de este video.', '', true);
   static const tiempo = Falla('tiempo', 'La señal tardó demasiado en arrancar. Probá de nuevo en un rato.');
   static const trabada = Falla('tiempo', 'La señal se quedó trabada cargando.');
   static const cortada = Falla('conexion', 'La señal se cortó.');
@@ -714,11 +719,12 @@ class Falla {
     if (codigo != null && codigo.startsWith('4')) {
       return Falla('rechazo', 'El servidor de la señal no deja verla (error $codigo).', corto);
     }
-    if (RegExp(
-      r'Decoder|MediaCodec|NO_UNSUPPORTED|format_supported=NO|UnrecognizedInputFormat|None of the available extractors',
-      caseSensitive: false,
-    ).hasMatch(texto)) {
-      return Falla(formato.motivo, formato.mensaje, corto);
+    if (RegExp(r'Decoder|MediaCodec|NO_UNSUPPORTED|format_supported=NO', caseSensitive: false).hasMatch(texto)) {
+      return Falla(formato.motivo, formato.mensaje, corto, true);
+    }
+    // Lo que llegó no es un video (suele ser una página de error de la señal, un momento): no es el aparato
+    if (RegExp(r'UnrecognizedInputFormat|None of the available extractors', caseSensitive: false).hasMatch(texto)) {
+      return Falla('error', 'La señal no está mandando video ahora. Probá de nuevo en un rato.', corto);
     }
     if (error is SenalNoDisponible) return Falla('error', error.toString(), corto);
     return Falla(conexion.motivo, conexion.mensaje, corto);

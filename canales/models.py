@@ -159,6 +159,32 @@ class Canal(ModeloBase):
         return _nombre_del_contenido(self.contenido)
 
 
+class LogoParejo(models.Model):
+    """
+    La copia "pareja" del logo de un canal en vivo (o una radio): sin el borde
+    vacío que traen muchos archivos, con un margen chico e igual para todos y
+    achicada (ver imagenes.emparejar). Así todos quedan centrados y del mismo
+    tamaño en su tarjeta. Una por DIRECCIÓN (muchos canales comparten logo).
+    `archivo` vacío = se usa el original (no hacía falta, o no se pudo: `error`).
+    `roto`: la dirección ya no tiene el logo (imgur lo borró y manda su cartel
+    "The image you are requesting does not exist", o da 404): no se manda
+    ninguno y la app muestra las iniciales.
+    """
+    clave = models.CharField(max_length=40, unique=True)   # sha1 de la dirección
+    url = models.TextField()
+    archivo = models.CharField(max_length=120, blank=True)
+    error = models.CharField(max_length=200, blank=True)
+    roto = models.BooleanField(default=False)
+    probado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'logo parejo'
+        verbose_name_plural = 'logos parejos'
+
+    def __str__(self):
+        return self.url
+
+
 class PortadaDeSerie(models.Model):
     """
     La portada de una serie, aparte de las imágenes de sus capítulos (cada

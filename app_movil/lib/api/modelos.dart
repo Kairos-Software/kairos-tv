@@ -164,9 +164,28 @@ class FuenteCanal {
   final String codec;
 
   /// ¿Este aparato sabe mostrar el video? Si no se sabe el códec o qué
-  /// códecs tiene el aparato, se supone que sí.
-  bool get aparatoLoMuestra => codec.isEmpty || Aparato.codecs.isEmpty || Aparato.codecs.contains(codec);
+  /// códecs tiene el aparato, se supone que sí. Con [probarTodo] (Mi cuenta en
+  /// la TV: "Probar igual lo que quizá no lea"), siempre.
+  bool get aparatoLoMuestra => probarTodo || codec.isEmpty || Aparato.codecs.isEmpty || Aparato.codecs.contains(codec);
+
+  /// No esconder nada por el códec (lo decide Biblioteca.probarTodo).
+  static bool probarTodo = false;
 }
+
+/// El nombre de un códec para mostrarle a la persona: 'h265_10' -> 'H.265 de 10 bits'.
+String nombreDeCodec(String codec) =>
+    const {
+      'h264': 'H.264',
+      'h265': 'H.265',
+      'h264_10': 'H.264 de 10 bits',
+      'h265_10': 'H.265 de 10 bits',
+      'mpeg2': 'MPEG-2',
+      'mpeg4': 'MPEG-4',
+      'vc1': 'VC-1',
+      'av1': 'AV1',
+      'vp9': 'VP9',
+    }[codec] ??
+    codec.toUpperCase();
 
 /// Un canal de TV en vivo (GET /canales/).
 class Canal {

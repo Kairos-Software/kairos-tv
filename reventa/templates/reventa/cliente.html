@@ -63,7 +63,7 @@
                 {% if meses_pagos %}Le alcanza para {{ meses_pagos }} mes{{ meses_pagos|pluralize:"es" }} más después del {{ cliente.vence|date:"j/m/Y" }}.{% else %}<strong>No tiene meses pagos después del {{ cliente.vence|date:"j/m/Y" }}.</strong>{% endif %}
                 {% include "reventa/_origen_creditos.html" %}
             </p>
-            <form method="post" action="{% url 'reventa:cliente_cargar' cliente.pk %}" class="row g-2 align-items-end" novalidate>
+            <form method="post" action="{% url 'reventa:cliente_cargar' cliente.pk %}" class="row g-2 align-items-start" novalidate>
                 {% csrf_token %}
                 {% include "parciales/_campo.html" with campo=form_cargar.meses ancho="col-sm-4" %}
                 {% include "parciales/_campo.html" with campo=form_cargar.monto_cobrado ancho="col-sm-8" %}
@@ -76,7 +76,7 @@
                 <summary><span><i class="bi bi-display" aria-hidden="true"></i> Agregar una pantalla ahora</span><i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
                 <div class="reventa-accion-plegable-cuerpo">
                 <p class="texto-suave small">Cuesta 1 crédito y dura hasta el {{ cliente.vence|date:"j/m/Y" }}; desde ahí se paga con las demás.</p>
-                <form method="post" action="{% url 'reventa:cliente_agregar_pantalla' cliente.pk %}" class="row g-2 align-items-end" novalidate>
+                <form method="post" action="{% url 'reventa:cliente_agregar_pantalla' cliente.pk %}" class="row g-2 align-items-start" novalidate>
                     {% csrf_token %}
                     {% include "parciales/_campo.html" with campo=form_agregar.monto_cobrado ancho="col-sm-8" %}
                     {% include "parciales/_campo.html" with campo=form_agregar.cortesia ancho="col-12" %}
@@ -91,7 +91,7 @@
                 Cada pantalla es un aparato a la vez y usa 1 crédito por mes. Se cargan pantallas × meses créditos y se descuentan solos, uno por mes.
                 {% include "reventa/_origen_creditos.html" %}
             </p>
-            <form method="post" action="{% url 'reventa:cliente_activar' cliente.pk %}" class="row g-2 align-items-end" novalidate>
+            <form method="post" action="{% url 'reventa:cliente_activar' cliente.pk %}" class="row g-2 align-items-start" novalidate>
                 {% csrf_token %}
                 {% include "parciales/_campo.html" with campo=form_activar.dispositivos ancho="col-sm-6" %}
                 {% include "parciales/_campo.html" with campo=form_activar.meses ancho="col-sm-6" %}

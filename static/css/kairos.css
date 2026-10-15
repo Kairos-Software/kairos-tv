@@ -586,6 +586,10 @@ input[type="date"].form-control { color-scheme: dark; }
 .form-check-input:checked[type="checkbox"] {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23002022' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
 }
+.form-check-input:indeterminate[type="checkbox"] {
+    background-color: var(--celeste); border-color: var(--celeste);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23002022' stroke-linecap='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e");
+}
 .form-check-input:focus { border-color: var(--celeste); box-shadow: var(--brillo-celeste); }
 .form-switch { padding-left: 0; }
 .form-switch .form-check-input {
@@ -642,6 +646,7 @@ fieldset { min-width: 0; }
 .filtros > .form-check .form-check-input { margin-top: 0; }
 .filtros > .form-check .form-check-label { white-space: nowrap; font-size: .875rem; }
 .filtros .form-select { white-space: nowrap; text-overflow: ellipsis; }
+.filtros-buscar { position: relative; }
 .filtros-buscar > i {
     position: absolute; left: .95rem; top: 50%; transform: translateY(-50%);
     color: var(--texto-apagado); pointer-events: none;
@@ -945,6 +950,9 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .resumen-contenido-datos > div { display: flex; justify-content: space-between; gap: .75rem; font-size: .76rem; }
 .resumen-contenido-datos dt { font-weight: 500; color: var(--texto-suave); }
 .resumen-contenido-datos dd { margin: 0; }
+/* Los números de "Tu catálogo" abren Organizar ya filtrado */
+.resumen-enlace { color: inherit; text-decoration: underline dotted rgba(255, 255, 255, .3); text-underline-offset: 3px; }
+.resumen-enlace:hover { color: var(--celeste-claro); text-decoration-color: currentColor; }
 
 /* Herramientas de uso ocasional: ocupan una sola fila hasta que se abren. */
 .contenido-herramientas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
@@ -1144,6 +1152,8 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 
 /* Catálogo: los canales como en la app */
 .vista-app { display: grid; gap: 2rem; }
+/* Editar canal: la vista previa, compacta y a la vista mientras se baja por el formulario */
+.vista-app-editar { gap: 0; align-content: start; position: sticky; top: calc(var(--barra-alto) + 1rem); }
 .vista-app-categoria h2 {
     display: flex; align-items: center; gap: .6rem;
     margin: 0 0 .85rem; font-size: 1.1rem; font-weight: 700;
@@ -1247,6 +1257,10 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     transition: border-color .14s, box-shadow .14s;
 }
 .espejo-imagen img { width: 100%; height: 100%; object-fit: contain; padding: 12px; }
+/* La imagen ocupa EXACTO la caja: con aspect-ratio, el "100 % de alto" no se aplicaba y
+   cada logo tomaba el alto de su forma (los cuadrados y altos se salían y se cortaban) */
+.espejo-imagen, .canal-logo { position: relative; }
+.espejo-imagen img, .canal-logo img { position: absolute; inset: 0; }
 .con-poster .espejo-imagen { aspect-ratio: 2 / 3; }
 .con-poster .espejo-imagen img { object-fit: cover; padding: 0; }
 .espejo-tarjeta:hover .espejo-imagen { border-color: var(--celeste-borde); }
@@ -1270,12 +1284,12 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .pagina-organizar .espejo-categorias { top: calc(var(--barra-alto) + 4.65rem); }
 .organizar-filtros {
     position: sticky; top: calc(var(--barra-alto) + 4.65rem); z-index: 25;
-    flex-wrap: nowrap; padding: .55rem;
+    flex-wrap: wrap; padding: .55rem;
     background: rgba(27, 27, 32, .94); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
     box-shadow: 0 10px 22px rgba(0, 0, 0, .18);
 }
-.organizar-filtros > div { flex: 0 1 240px; }
-.organizar-filtros > .filtros-buscar { flex: 1 1 280px; }
+.organizar-filtros > div { flex: 1 1 200px; max-width: 280px; }
+.organizar-filtros > .filtros-buscar { flex: 2 1 240px; max-width: none; }
 .filtros-mas { position: relative; flex: 0 0 auto; }
 .filtros-mas > summary { position: relative; list-style: none; white-space: nowrap; }
 .filtros-mas > summary::-webkit-details-marker { display: none; }
@@ -1476,7 +1490,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .pagina-organizar:has(.espejo-barra.tiene-seleccion) .pagina { padding-bottom: 9rem; }
 
 @media (max-width: 991.98px) {
-    .espejo { grid-template-columns: minmax(0, 1fr); }
+    .espejo, .pagina-organizar .espejo { grid-template-columns: minmax(0, 1fr); }
     .espejo-categorias { position: static; max-height: 18rem; }
     .pagina-organizar .contenido-pestanias { top: calc(var(--barra-alto) + .35rem); }
     .pagina-organizar .espejo-categorias { position: static; max-height: 14rem; }
@@ -1488,7 +1502,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     .espejo-grilla.con-poster { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; }
     .espejo-renombrar, .espejo-renombrar .form-control { width: 100%; }
     .pagina-organizar .contenido-pestanias { margin-inline: -1rem; width: calc(100% + 2rem); border-inline: 0; border-radius: 0; }
-    .organizar-filtros > div, .organizar-filtros > .filtros-buscar { flex-basis: 100%; }
+    .organizar-filtros > div, .organizar-filtros > .filtros-buscar { flex-basis: 100%; max-width: none; }
     .filtros-mas { flex: 1 1 auto; }
     .filtros-mas > summary { width: 100%; }
     .filtros-mas-panel { position: static; width: 100%; margin-top: .5rem; box-shadow: none; }
@@ -1507,7 +1521,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .detalle-canal::backdrop { background: rgba(5, 5, 8, .72); backdrop-filter: blur(4px); }
 .detalle-canal-cuerpo { padding: 1.5rem; }
 .dialogo-acciones {
-    position: sticky; bottom: -1.5rem; z-index: 5;
+    position: sticky; bottom: 0; z-index: 5;
     margin-inline: -1.5rem; margin-bottom: -1.5rem; padding: .8rem 1.5rem;
     background: rgba(27, 27, 32, .96); border-top: 1px solid var(--borde);
     backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
@@ -1785,7 +1799,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     .acciones-pagina .btn { flex: 1 1 auto; }
     .importar-opciones > summary small { width: 100%; padding-left: 1.55rem; }
     .importacion-flujo { grid-template-columns: minmax(0, 1fr); }
-    .dialogo-acciones { bottom: -1rem; margin-inline: -1rem; margin-bottom: -1rem; padding: .75rem 1rem; }
+    .dialogo-acciones { bottom: 0; margin-inline: -1rem; margin-bottom: -1rem; padding: .75rem 1rem; }
     .tarjeta-plegable { padding: 0; }
     .contenido-acciones-principales { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
     .contenido-acciones-principales .btn { min-width: 0; padding-inline: .6rem; }

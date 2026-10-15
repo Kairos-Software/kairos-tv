@@ -235,6 +235,30 @@ class Catalogo extends ChangeNotifier {
   bool cargado = false;
   Object? error;
 
+  /// Todo lo que mandó el servidor, antes de sacar lo que este aparato no ve.
+  List<Canal> _recibidos = [];
+
+  /// Lo que el servidor manda (en el panel "se ve") pero ESTE aparato no
+  /// muestra, y por qué. Lo muestra Mi cuenta en la TV ("Lo que no se ve en esta TV").
+  List<(Canal, String)> get escondidos => [
+    for (final canal in _recibidos)
+      if (!_seVe(canal)) (canal, porQueNoSeVe(canal)),
+  ];
+
+  /// Por qué este aparato no muestra [canal].
+  static String porQueNoSeVe(Canal canal) {
+    final hasta = NoAnda.hasta(canal.id);
+    if (hasta != null) {
+      return 'Falló acá: este aparato no lo pudo mostrar. Se vuelve a probar el ${hasta.day}/${hasta.month}.';
+    }
+    final codecs = {
+      for (final f in canal.fuentes)
+        if (f.esReproducible && !f.aparatoLoMuestra) f.codec,
+    };
+    if (codecs.isNotEmpty) return 'Este aparato no lee ${codecs.map(nombreDeCodec).join(' ni ')}.';
+    return 'No tiene una señal que la app pueda abrir.';
+  }
+
   List<Canal> get canales => [for (final c in categoriasEnVivo) ...c.canales];
 
   /// El número de cada canal en vivo: el que trae la lista, o si no tiene, su
@@ -351,6 +375,11 @@ class Catalogo extends ChangeNotifier {
         CalidadYoutube.cargar(),
       ]);
       final vivo = resultados[0] as List<CategoriaCanales>;
+      _recibidos = [
+        for (final r in [vivo, resultados[1], resultados[2]])
+          for (final c in r as List<CategoriaCanales>) ...c.canales,
+        for (final seccion in resultados[4] as List<SeccionNueva>) ...seccion.canales,
+      ];
       for (final categoria in vivo) {
         categoria.canales.retainWhere(_seVe);
       }
@@ -416,17 +445,22 @@ class Catalogo extends ChangeNotifier {
 
 // ── Lo que no anda en este aparato ─────────────────────────────────
 
-/// Lo que en ESTE aparato no se puede ver nunca, y se deja de mostrar un
-/// tiempo sin esperar al servidor:
-///   - formato (el aparato no sabe mostrar ese video, con ninguna de sus
-///     fuentes): 30 días; no va a cambiar. Ver ControlSenal.esconderDespuesDe.
+/// Lo que en ESTE aparato no se puede ver, y se deja de mostrar un tiempo
+/// sin esperar al servidor:
+///   - el decodificador del aparato no sabe mostrar ese video (con ninguna de
+///     sus fuentes): 7 días. Ver ControlSenal.esconderDespuesDe.
 ///   - un video de YouTube que ya no existe o que su dueño no deja ver fuera
 ///     de YouTube: 3 días.
-/// Lo que no conecta o tarda NO se anota: suele ser pasajero (el canal sigue
-/// en la lista); si de verdad está caído, lo saca el servidor.
-/// Se guarda en el aparato.
+/// Lo que no conecta, tarda, manda basura o no muestra imagen un momento NO
+/// se anota: suele ser pasajero (el canal sigue en la lista); si de verdad
+/// está caído, lo saca el servidor. Mi cuenta en la TV lo muestra ("Lo que no
+/// se ve en esta TV") y lo deja volver a mostrar ([volverAMostrarTodo]).
+/// Se guarda en el aparato. La clave cambió en la 1.2.20: lo que habían
+/// escondido las versiones anteriores (hasta 30 días, a veces por un error
+/// pasajero) se olvida al actualizar.
 class NoAnda {
-  static const _clave = 'kairos.no_anda';
+  static const _clave = 'kairos.no_anda.2';
+  static const _claveVieja = 'kairos.no_anda';
   static const _maximo = 500;
 
   static final Map<int, DateTime> _hasta = {};
@@ -440,9 +474,23 @@ class NoAnda {
     return hasta != null && hasta.isAfter(DateTime.now());
   }
 
+  /// Hasta cuándo está escondido (null = no lo está).
+  static DateTime? hasta(int id) => oculto(id) ? _hasta[id] : null;
+
+  /// Cuántos están escondidos ahora.
+  static int get cuantos => _hasta.values.where((h) => h.isAfter(DateTime.now())).length;
+
   static Duration cuantoTiempo({required bool enVivo, required bool deFormato}) {
-    if (deFormato) return const Duration(days: 30);
+    if (deFormato) return const Duration(days: 7);
     return enVivo ? const Duration(hours: 1) : const Duration(days: 3);
+  }
+
+  /// Vuelve a mostrar todo lo escondido en este aparato (Mi cuenta en la TV).
+  /// Para que reaparezca hay que volver a cargar el catálogo.
+  static Future<void> volverAMostrarTodo() async {
+    _hasta.clear();
+    cambios.value++;
+    await _guardar();
   }
 
   static Future<void> cargar() async {
@@ -450,6 +498,7 @@ class NoAnda {
     _cargado = true;
     try {
       final preferencias = await SharedPreferences.getInstance();
+      if (preferencias.containsKey(_claveVieja)) await preferencias.remove(_claveVieja);
       final guardados = jsonDecode(preferencias.getString(_clave) ?? '{}') as Map<String, dynamic>;
       for (final MapEntry(:key, :value) in guardados.entries) {
         final id = int.tryParse(key);
@@ -602,12 +651,16 @@ class Biblioteca extends ChangeNotifier {
   bool _volverAlUltimo = false;
   static const _claveVideoEnSuperficie = 'kairos.video_superficie';
   bool? _videoEnSuperficie;
+  static const _claveProbarTodo = 'kairos.probar_todo';
+  bool _probarTodo = false;
 
   Future<void> cargar() async {
     ControlSenal.enSuperficie = videoEnSuperficie;
     try {
       final preferencias = await SharedPreferences.getInstance();
       _preferencias = preferencias;
+      _probarTodo = preferencias.getBool(_claveProbarTodo) ?? false;
+      FuenteCanal.probarTodo = _probarTodo;
       _miLista.addAll(preferencias.getStringList(_claveLista) ?? []);
       _recientes.addAll((preferencias.getStringList(_claveRecientes) ?? []).map(int.tryParse).nonNulls);
       _volverAlUltimo = preferencias.getBool(_claveVolverAlUltimo) ?? false;
@@ -673,6 +726,18 @@ class Biblioteca extends ChangeNotifier {
     _videoEnSuperficie = valor;
     ControlSenal.enSuperficie = valor;
     _preferencias?.setBool(_claveVideoEnSuperficie, valor);
+    notifyListeners();
+  }
+
+  /// "Probar igual lo que quizá no lea" (Mi cuenta en la TV): mostrar también
+  /// lo que tiene un códec que este aparato dice no leer (por si lo lee igual).
+  /// Hay que volver a cargar el catálogo para que aparezca.
+  bool get probarTodo => _probarTodo;
+
+  set probarTodo(bool valor) {
+    _probarTodo = valor;
+    FuenteCanal.probarTodo = valor;
+    _preferencias?.setBool(_claveProbarTodo, valor);
     notifyListeners();
   }
 

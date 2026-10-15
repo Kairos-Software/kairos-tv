@@ -65,7 +65,10 @@ class Medidor {
     }.take(_maximoPorAviso).toList();
     if (_enviando || (ids.isEmpty && _favoritos.isEmpty)) return;
     final segundos = {for (final id in ids) id: (_milisegundos[id] ?? 0) ~/ 1000};
-    final vistas = {for (final id in ids) if (_vistas.contains(id)) id};
+    final vistas = {
+      for (final id in ids)
+        if (_vistas.contains(id)) id,
+    };
     final favoritos = List.of(_favoritos);
     // Se sacan ahora (lo que se mire mientras viaja el aviso se junta aparte);
     // queda lo que no llega a un segundo

@@ -24,6 +24,7 @@ urlpatterns = [
     path('series/detalle/', views.serie_detalle, name='serie_detalle'),
     path('series/ordenar/', views.serie_ordenar, name='serie_ordenar'),
     path('canal/<int:pk>/editar/', views.canal_editar, name='canal_editar'),
+    path('fuentes/<int:pk>/borrar/', views.fuente_borrar, name='fuente_borrar'),
     path('probar/', views.probar, name='probar'),
     path('youtube/', views.traer_de_youtube, name='youtube'),
     path('lo-mas-visto/', views.lo_mas_visto, name='lo_mas_visto'),

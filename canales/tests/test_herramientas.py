@@ -92,5 +92,7 @@ class LimpiarNombresTests(TestCase):
         self.client.force_login(Usuario.objects.create_user(
             'admin', None, 'x', rol=Rol.objects.create(nombre='Canales', permisos=['ver_canales', 'importar_canales'])))
         respuesta = self.client.post(reverse('canales:limpiar_nombres'), follow=True)
-        self.assertContains(respuesta, '1 canal(es) renombrado(s)')
+        # El resultado queda en la página: cuántos y qué cambió
+        self.assertContains(respuesta, 'Resultado de limpiar nombres')
+        self.assertContains(respuesta, '«ES: (HD) Canal» → «Canal»')
         self.assertEqual(Canal.objects.get().nombre, 'Canal')

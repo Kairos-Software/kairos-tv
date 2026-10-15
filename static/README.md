@@ -30,6 +30,8 @@ se genera sola y no va al repo.
 | `js/sistema.js` | Comportamiento general: menú en celulares, mostrar/ocultar contraseña, el "momento" (hora en vivo, saludo y línea del día) y las iniciales cuando el logo de un canal no carga. |
 | `js/tandas.js` | Corre una tarea larga de a tandas (llama al servidor una y otra vez y pinta el avance). Lo usan las pantallas de canales para verificar listas grandes sin saturar el servidor. |
 | `js/trabajos.js` + `css/trabajos.css` | El aviso de trabajos pesados en curso, arriba de todas las pantallas (`templates/parciales/_trabajos.html`, `core/trabajos.py`). Aparte de `kairos.css` para no pisar su diseño. |
+| `js/mantenimiento.js` + `css/mantenimiento.css` | Contenido → Mantenimiento del catálogo: "Qué revisar" (una sección o una lista importada), verificar de a tandas y el resultado (qué se cayó y qué volvió). Solo los carga `canales/inicio.html` (con `tandas.js`). |
+| `js/organizar_detalle.js` + `css/organizar_detalle.css` | Organizar contenido: el **panel de detalles** que se abre al costado al elegir una tarjeta (todos sus datos y cada señal con su link, de qué lista salió, cómo anda, y "Borrar esta señal"). `KairosSenales.pintar` dibuja las señales también en el cuadro Editar. El CSS además acomoda los cuadros Editar y Exportar en el celular. Solo los carga `canales/organizar.html`. |
 | `js/ordenar_capitulos.js` + `css/ordenar_capitulos.css` | La lista de capítulos de la página de una serie y cómo se ordena: arrastrar (mouse o dedo) o flechas, barra "Guardar orden / Deshacer", y el aviso de desordenados con su botón. Solo los carga `canales/serie_detalle.html`. |
 
 Librerías externas (se cargan desde CDN en `templates/base_html.html`):

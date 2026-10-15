@@ -13,6 +13,10 @@ que llega cada una): así la app arranca por la mejor de cada canal. No hay
 que hacer nada a mano: tanda a tanda quedan todas medidas y se renuevan solas.
 --medir lo hace a cualquier hora.
 
+También prepara los logos parejos que falten (imagenes.emparejar_logos: sin
+el borde vacío que traen, para que todos queden centrados igual en su
+tarjeta), hasta 4 minutos por pasada.
+
 Mientras corre, el panel lo muestra arriba ("Verificación automática...") y
 los trabajos pesados del panel (probar o cargar una lista) esperan a que
 termine (ver core/trabajos.py).
@@ -23,6 +27,7 @@ from functools import partial
 
 from django.core.management.base import BaseCommand
 
+from canales import imagenes
 from canales.servicios import SEGUNDOS_PARA_MEDIR, es_hora_de_medir, medir_fuentes, verificar_fuentes_guardadas
 from canales.verificacion import verificar_varias
 from core import trabajos
@@ -45,6 +50,13 @@ class Command(BaseCommand):
             trabajos.anotar(CLAVE, 'Verificación automática de las fuentes', margen=MARGEN)
             resultado = verificar_fuentes_guardadas(verificar_varias, al_avanzar=self._avance)
             self.stdout.write(self.style.SUCCESS(f'Listo: {resultado}'))
+            self.stdout.write('Preparando los logos que faltan (sin borde de más, para que se vean parejos)...')
+            trabajos.anotar(CLAVE, 'Preparando los logos de los canales',
+                            margen=timedelta(seconds=imagenes.SEGUNDOS_PARA_LOGOS + 5 * 60))
+            try:
+                self.stdout.write(self.style.SUCCESS(f'Logos: {imagenes.emparejar_logos()}'))
+            except Exception as error:   # que un problema con los logos no frene la medición
+                self.stderr.write(f'No se pudieron preparar los logos: {error}')
             if options['medir'] or es_hora_de_medir():
                 self.stdout.write('Midiendo una tanda de fuentes de los canales con varias...')
                 trabajos.anotar(CLAVE, 'Midiendo las fuentes (cuál es la mejor de cada canal)',

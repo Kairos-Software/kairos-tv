@@ -120,10 +120,22 @@ class CanalSerializer(serializers.ModelSerializer):
     """
     Un canal con sus fuentes activas, en orden de prioridad (la app prueba la
     primera y sigue). `destacado`: el modo reposo de la TV lo muestra más seguido.
+    `logo`: si en el contexto vienen `logos` (imagenes.logos_parejos), la copia
+    pareja del logo (sin borde de más: todos quedan centrados igual), o '' si
+    el original está roto (la app muestra las iniciales).
     """
     fuentes = FuenteSerializer(source='fuentes_activas', many=True)
+    logo = serializers.SerializerMethodField()
 
     class Meta:
         model = Canal
         fields = ['id', 'nombre', 'numero', 'logo', 'destacado', 'fuentes']
+
+    def get_logo(self, canal):
+        parejos = self.context.get('logos') or {}
+        if canal.logo not in parejos:
+            return canal.logo
+        mostrar = parejos[canal.logo]
+        pedido = self.context.get('request')
+        return pedido.build_absolute_uri(mostrar) if mostrar and pedido else mostrar
 

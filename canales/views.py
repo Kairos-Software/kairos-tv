@@ -9,6 +9,7 @@ Pantallas de canales del panel:
   /canales/catalogo/ y /series/     las pantallas viejas: llevan a Organizar contenido con los mismos filtros
   /canales/series/detalle/          temporadas, capítulos, disponibilidad y fuentes de una serie
   /canales/canal/<id>/editar/       nombre, logo, categoría... de un canal, y sus fuentes
+  /canales/fuentes/<id>/borrar/     borra UNA fuente (POST), desde Organizar o la página del canal
   /canales/youtube/                 traer las películas de un canal oficial de YouTube (se prueban y cargan como una lista)
   /canales/probar/                  probar una dirección suelta y, si anda, agregarla como canal
   /canales/lo-mas-visto/            lo más visto (canales, películas y series), sin datos de clientes
@@ -25,6 +26,7 @@ from functools import partial
 from urllib.parse import quote, urlencode
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -48,8 +50,9 @@ from . import consultas, estadisticas, exportar, imagenes, organizar, secciones,
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
 from .forms import (CanalForm, CanalNuevoForm, EditarDesdeOrganizarForm, FuentesFormSet, ImportarListaForm,
                     ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
-from .models import Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion, Seccion
-from .verificacion import Resultado, verificar_url, verificar_varias
+from .models import (PROPORCION_PANTALLA_COMPLETA, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
+                     Seccion)
+from .verificacion import NOMBRES_DE_CODECS, Resultado, verificar_url, verificar_varias
 
 ENTRADAS_POR_PAGINA = 100
 
@@ -79,6 +82,10 @@ def inicio(request):
         'resumen': consultas.resumen(),
         'importaciones': consultas.ultimas_importaciones(),
         'puede_importar': chequear_permiso(request.user, 'importar_canales'),
+        # Mantenimiento: "Qué revisar" (una sección o una lista) y lo que dio "Limpiar nombres"
+        'secciones_para_revisar': secciones.todas(),
+        'origenes_para_revisar': consultas.origenes(),
+        'resultado_limpieza': request.session.pop('resultado_limpieza', None),
     })
 
 
@@ -293,13 +300,16 @@ def verificar_lote(request):
         desde = int(request.POST.get('desde', 0))
     except ValueError:
         desde = 0
+    seccion, origen = _que_revisar(request.POST)
     clave = 'verificacion'
-    otro = trabajos.turno(clave, 'Verificando todas las fuentes', request.user, reverse('canales:inicio'))
+    titulo = f'Verificando {servicios.que_se_revisa(seccion, origen)}'[:150]
+    otro = trabajos.turno(clave, titulo, request.user, reverse('canales:inicio'))
     if otro:
         # La pantalla espera y vuelve a pedir (la misma tanda: "siguiente" no avanza)
-        return JsonResponse({**servicios.avance_de_la_verificacion(desde), 'ocupada': True,
+        return JsonResponse({**servicios.avance_de_la_verificacion(desde, seccion, origen), 'ocupada': True,
                              'esperando': otro.titulo})
-    avance = servicios.verificar_lote_de_fuentes(verificar_varias, desde, usuario=request.user)
+    avance = servicios.verificar_lote_de_fuentes(verificar_varias, desde, usuario=request.user, seccion=seccion,
+                                                 origen=origen)
     if avance['terminado']:
         trabajos.terminar(clave)
     else:
@@ -352,21 +362,87 @@ def como_en_la_app(request):
     return redirect(f"{reverse('canales:organizar')}?{request.GET.urlencode()}")
 
 
-def _origenes_de(fuentes, importaciones):
+def _fecha(momento):
+    return date_format(localtime(momento), 'j/m/Y H:i') if momento else ''
+
+
+def _en_los_aparatos(fuente):
+    """Cómo anda en los celulares y TV: 'se vio 3,5 h · se corta 2 veces por hora · imagen cuadrada (4:3)'."""
+    partes = []
+    if fuente.segundos_en_aparatos >= 60:
+        horas = fuente.segundos_en_aparatos / 3600
+        partes.append(f'se vio {horas:.1f} h'.replace('.', ',') if horas >= 1
+                      else f'se vio {fuente.segundos_en_aparatos // 60} min')
+        cortes = fuente.cortes_por_hora
+        if cortes is not None:
+            partes.append('no se corta' if not cortes else f'se corta {cortes:g} veces por hora'.replace('.', ','))
+    if fuente.proporcion:
+        partes.append('imagen cuadrada (4:3, con franjas negras)' if fuente.proporcion < PROPORCION_PANTALLA_COMPLETA
+                      else 'imagen panorámica')
+    return ' · '.join(partes)
+
+
+def _aviso_de_codec(codec):
     """
-    Para la edición rápida: cada señal en el orden en que la prueba la app, de
-    dónde salió (lista, canal de YouTube, a mano) y sus datos técnicos: cómo
-    está, el códec, el error y cuándo se probó.
+    Si el video viene en un códec que no todos los aparatos leen: los que no
+    lo leen no muestran esa señal (y si es la única, el canal no les aparece,
+    aunque acá diga "se ve en la app").
     """
-    return [{'origen': f.origen or 'No se sabe', 'url': f.url, 'tipo': f.get_tipo_display(),
-             'estado': f.get_estado_display(), 'caida': f.estado == Fuente.Estado.CAIDA,
-             'codec': f.codec, 'error': f.error, 'activa': f.activa,
-             'probada': date_format(localtime(f.verificada), 'j/m/Y H:i') if f.verificada else '',
-             'importacion': importaciones.get(f.origen, '')} for f in fuentes]
+    if not codec or codec == 'h264':
+        return ''
+    return (f'Video {NOMBRES_DE_CODECS.get(codec, codec)}: los aparatos que no lo leen (muchas TV y TV box) no usan '
+            f'esta señal. Si es la única, en esos aparatos el canal no aparece.')
+
+
+def _origenes_de(fuentes, importaciones, borrables=True):
+    """
+    Para el detalle y la edición rápida: cada señal en el orden en que la
+    prueba la app (`orden`), de dónde salió (lista, canal de YouTube, a mano),
+    el link completo y sus datos técnicos: cómo está, calidad, códec, el
+    error, cuándo se probó, cómo anda en los aparatos y si está oculta.
+    `borrables`: se puede borrar de a una (en una serie no: cada origen junta
+    las de muchos capítulos).
+    """
+    return [{'id': f.pk, 'orden': orden, 'origen': f.origen or 'No se sabe', 'url': f.url,
+             'tipo': f.get_tipo_display(), 'estado': f.get_estado_display(), 'caida': f.estado == Fuente.Estado.CAIDA,
+             'codec': f.codec, 'calidad': f.calidad, 'error': f.error, 'activa': f.activa,
+             'probada': _fecha(f.verificada), 'aparatos': _en_los_aparatos(f),
+             'oculta': (f'Oculta hasta el {_fecha(f.oculta_hasta)} (después vuelve sola): {f.falla_en_aparatos}'
+                        if f.oculta_por_aparatos else ''),
+             'aviso_codec': _aviso_de_codec(f.codec),
+             'borrable': borrables,
+             'importacion': importaciones.get(f.origen, '')} for orden, f in enumerate(fuentes, start=1)]
+
+
+def _nombres_de_usuarios(pagina):
+    """{pk: 'Nombre Apellido'} de quienes cargaron o cambiaron lo de la página (de una sola consulta)."""
+    ids = {pk for canal in pagina for pk in (canal.creado_por_id, canal.modificado_por_id) if pk}
+    return {u.pk: u.get_full_name() or u.username for u in get_user_model().objects.filter(pk__in=ids)}
+
+
+def _datos_del_canal(canal, usuarios):
+    """Todo lo que se sabe de un canal, película o capítulo, para el panel de detalles: [(qué, valor), ...]."""
+    def con_quien(momento, pk):
+        return f'{_fecha(momento)}' + (f' por {usuarios[pk]}' if pk in usuarios else '')
+    filas = [
+        ('Sección', secciones.nombre(canal.contenido)),
+        ('Categoría', canal.categoria.nombre if canal.categoria else 'Sin categoría («Otros»)'),
+        ('Número', canal.numero),
+        ('Idioma', canal.get_idioma_display() if canal.idioma else 'No se sabe'),
+        ('País', canal.pais),
+        ('ID de guía (tvg-id)', canal.tvg_id),
+        ('Cargado', con_quien(canal.creado, canal.creado_por_id)),
+        ('Último cambio', con_quien(canal.modificado, canal.modificado_por_id)),
+        ('Por qué se quitó', '' if canal.activo else canal.motivo_quitado or 'Quitado a mano.'),
+    ]
+    return [fila for fila in filas if fila[1]]
 
 
 def _preparar_para_editar(pagina, contenido):
-    """Le pone a cada cosa de la página sus datos (JSON) para el cuadro de edición rápida."""
+    """
+    Le pone a cada cosa de la página sus datos (JSON) para el panel de
+    detalles (organizar_detalle.js) y el cuadro de edición rápida.
+    """
     importaciones = {archivo: reverse('canales:importacion', args=[pk])
                      for archivo, pk in Importacion.objects.order_by('creada').values_list('archivo', 'pk')}
     if contenido == Contenido.SERIE:
@@ -375,6 +451,7 @@ def _preparar_para_editar(pagina, contenido):
         for fuente in Fuente.objects.filter(canal_id__in=capitulos).order_by('prioridad', 'pk'):
             por_capitulo.setdefault(fuente.canal_id, []).append(fuente)
         for serie in pagina:
+            serie.logo_ver = serie.logo
             fuentes, vistos = [], set()
             for capitulo in serie.capitulos:
                 for fuente in por_capitulo.get(capitulo.canal.pk, []):
@@ -383,22 +460,40 @@ def _preparar_para_editar(pagina, contenido):
                         fuentes.append(fuente)
             serie.activo = any(c.canal.activo for c in serie.capitulos)
             serie.destacado = any(c.canal.destacado for c in serie.capitulos)
+            temporadas = sorted(serie.temporadas)
             serie.datos = json.dumps({
                 'tipo': 'serie', 'nombre': serie.nombre, 'logo': serie.logo, 'portada': bool(serie.portada),
                 'activo': serie.activo, 'destacado': serie.destacado,
                 'categoria': serie.categoria_id or 'ninguna', 'capitulos': serie.cantidad,
                 'en_app': serie.completa, 'motivo': serie.por_que_no_se_ve,
-                'fuentes': _origenes_de(fuentes, importaciones),
+                'datos': [
+                    ('Sección', 'Series'),
+                    ('Categoría', serie.categoria or 'Sin categoría («Otros»)'),
+                    ('Temporadas', ', '.join(str(t) for t in temporadas)),
+                    ('Capítulos', f'{serie.cantidad} ({serie.en_la_app} se ven en la app)'),
+                    ('Portada', 'propia de la serie' if serie.portada else 'la del primer capítulo'),
+                ],
+                'fuentes': _origenes_de(fuentes, importaciones, borrables=False),
                 'mas': f"{reverse('canales:serie_detalle')}?nombre={quote(serie.nombre)}",
             })
         return
+    usuarios = _nombres_de_usuarios(pagina)
+    # Lo que ve la app: la copia pareja del logo (imagenes.logos_parejos), o nada si está roto
+    logos = [canal.logo for canal in pagina]
+    parejos, rotos = imagenes.logos_parejos(logos), imagenes.logos_rotos(logos)
     for canal in pagina:
         canal.no_se_ve = consultas.por_que_no_se_ve(canal)
+        canal.logo_ver = imagenes.logo_para_mostrar(canal.logo, parejos)
+        datos = _datos_del_canal(canal, usuarios)
+        if canal.logo in rotos:
+            datos.append(('Logo', f'Roto: {rotos[canal.logo]} En la app van las iniciales: poné otro con Editar.'))
         canal.datos = json.dumps({
-            'tipo': 'canal', 'pk': canal.pk, 'nombre': canal.nombre, 'logo': canal.logo, 'numero': canal.numero,
+            'tipo': 'canal', 'pk': canal.pk, 'nombre': canal.nombre, 'logo': canal.logo, 'logo_ver': canal.logo_ver,
+            'numero': canal.numero,
             'categoria': canal.categoria_id or 'ninguna', 'contenido': canal.contenido, 'activo': canal.activo,
             'destacado': canal.destacado,
             'en_app': not canal.no_se_ve, 'motivo': canal.no_se_ve,
+            'datos': datos,
             'fuentes': _origenes_de(canal.fuentes.all(), importaciones),
             'mas': reverse('canales:canal_editar', args=[canal.pk]),
         })
@@ -535,6 +630,8 @@ def organizar_editar(request):
             cambios = organizar.editar_canal(canal, request.user, nombre=datos['nombre'], logo=datos['logo'],
                                              categoria=categoria, activo=datos['activo'],
                                              numero=datos['numero'].strip(), destacado=datos['destacado'], **extra)
+            if 'logo' in cambios or 'contenido' in cambios:
+                imagenes.emparejar_logo_al_guardar(canal)
             titulo = canal.nombre
     except organizar.NoSePuede as error:
         messages.error(request, str(error))
@@ -981,6 +1078,7 @@ def canal_editar(request, pk):
         canal, nueva = servicios.guardar_canal(form, fuentes, request.user, verificar_url)
         if canal.logo != logo_viejo:
             imagenes.soltar(logo_viejo)   # si era una subida y nadie más la usa, se borra
+        imagenes.emparejar_logo_al_guardar(canal)   # si ya la tiene, no hace nada
         messages.success(request, f'Se guardó "{canal.nombre}".')
         volver = _volver(request, canal.contenido)
         if nueva is not None:
@@ -992,10 +1090,34 @@ def canal_editar(request, pk):
         return redirect(volver)
     return render(request, 'canales/editar.html', {
         'canal': canal,
+        'logo_ver': imagenes.logo_para_mostrar(canal.logo, imagenes.logos_parejos([canal.logo])),
         'form': form,
         'fuentes': fuentes,
         'volver': _volver(request, canal.contenido),
     })
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def fuente_borrar(request, pk):
+    """
+    Borra UNA fuente (la que no anda) desde Organizar o la página del canal, y
+    vuelve a donde se estaba. En Organizar se vuelve con el panel de detalles
+    de ese canal abierto (#ver-<id>).
+    """
+    fuente = get_object_or_404(Fuente.objects.select_related('canal'), pk=pk)
+    canal = fuente.canal
+    quedan = servicios.borrar_fuente(fuente, request.user)
+    if quedan:
+        messages.success(request, f'Se borró la señal de «{canal.nombre}». Le quedan {quedan}.')
+    else:
+        messages.warning(request, f'Se borró la señal de «{canal.nombre}». Era la única: no se va a ver en la app '
+                                  f'hasta que le agregues otra.')
+    # "despues": la página del canal (vuelve a ella); si no, Organizar con su detalle abierto
+    despues = request.POST.get('despues', '')
+    if despues and url_has_allowed_host_and_scheme(despues, allowed_hosts={request.get_host()}):
+        return redirect(despues)
+    return redirect(f'{_volver(request, canal.contenido).split("#")[0]}#ver-{canal.pk}')
 
 
 def _subir_logo(request, form):
@@ -1064,13 +1186,30 @@ def probar(request):
 @require_POST
 @requiere_permiso('importar_canales')
 def limpiar_nombres(request):
-    renombrados, juntados = servicios.limpiar_nombres(request.user)
-    if renombrados or juntados:
-        messages.success(request, f'Listo: {renombrados} canal(es) renombrado(s) y {juntados} repetido(s) '
-                                  f'juntado(s) con su canal (sus fuentes quedaron como alternativas).')
-    else:
-        messages.info(request, 'Los nombres ya estaban limpios.')
-    return redirect('canales:inicio')
+    """
+    Limpia los nombres (todos, o los de una sección o una lista: "Qué revisar"
+    en Mantenimiento). El detalle de lo que cambió queda en la sesión y la
+    página lo muestra al volver (`resultado_limpieza`).
+    """
+    seccion, origen = _que_revisar(request.POST)
+    cambios = []
+    renombrados, juntados = servicios.limpiar_nombres(request.user, seccion, origen, cambios)
+    request.session['resultado_limpieza'] = {
+        'que': servicios.que_se_revisa(seccion, origen, 'canales'),
+        'renombrados': renombrados, 'juntados': juntados,
+        'cambios': cambios[:MAXIMO_CAMBIOS_A_LA_VISTA], 'mas': max(0, len(cambios) - MAXIMO_CAMBIOS_A_LA_VISTA),
+    }
+    return redirect(f"{reverse('canales:inicio')}#mantenimiento-contenido")
+
+
+# Cuántos cambios de "Limpiar nombres" se muestran (el resto: "y N más")
+MAXIMO_CAMBIOS_A_LA_VISTA = 200
+
+
+def _que_revisar(datos):
+    """La sección y la lista de origen elegidas en "Qué revisar" ('' = todas)."""
+    seccion = datos.get('seccion', '')
+    return (seccion if secciones.es_valida(seccion) else ''), datos.get('origen', '').strip()[:150]
 
 
 # ── Lo más visto ─────────────────────────────────────────────────────

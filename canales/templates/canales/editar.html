@@ -45,11 +45,11 @@
             </section>
         </div>
         <div class="col-lg-4">
-            <section class="vista-app h-100">
+            <section class="vista-app vista-app-editar">
                 <h2 class="h6 mb-3" style="color:#9AA7A8">Así se ve en la app</h2>
                 <div class="grilla-canales" style="grid-template-columns: minmax(0, 220px)">
                     <article class="canal-tarjeta">
-                        <div class="canal-logo" id="vista-logo" data-iniciales="{{ canal.nombre|iniciales }}">{% if canal.logo %}<img src="{{ canal.logo }}" alt="" referrerpolicy="no-referrer">{% else %}{{ canal.nombre|iniciales }}{% endif %}</div>
+                        <div class="canal-logo" id="vista-logo" data-iniciales="{{ canal.nombre|iniciales }}">{% if logo_ver %}<img src="{{ logo_ver }}" alt="" referrerpolicy="no-referrer">{% else %}{{ canal.nombre|iniciales }}{% endif %}</div>
                         <div class="canal-nombre" id="vista-nombre">{{ canal.nombre }}</div>
                         <div class="canal-meta"><span id="vista-numero" {% if not canal.numero %}hidden{% endif %}>{{ canal.numero }}</span></div>
                     </article>
@@ -61,7 +61,7 @@
 
     <section class="tarjeta p-0 mb-4">
         <h2 class="tarjeta-titulo px-4 pt-4">Fuentes</h2>
-        <p class="texto-suave small px-4">La app prueba primero la de número más chico y, si falla, pasa a la siguiente. "Activa" sin marcar = la app no la usa aunque funcione.</p>
+        <p class="texto-suave small px-4">La app prueba primero la de número más chico y, si falla, pasa a la siguiente. "Activa" sin marcar = la app no la usa aunque funcione. "Borrar" borra esa señal en el momento (las otras quedan).</p>
         {% if fuentes.forms %}
         <div class="table-responsive">
             <table class="table tabla mb-0">
@@ -78,7 +78,9 @@
                             {% if fuente.error %}<div class="texto-suave mt-1">{{ fuente.error }}</div>{% endif %}
                         </td>
                         <td class="small">{{ fuente.origen|default:"—" }}<div class="direccion">{{ fuente.url }}</div></td>
-                        <td>{{ f.DELETE }}</td>
+                        <td>{% if fuente.pk %}<button type="submit" class="btn btn-sm btn-outline-secondary text-danger" formaction="{% url 'canales:fuente_borrar' fuente.pk %}" formnovalidate
+                                    name="despues" value="{{ request.get_full_path }}"
+                                    data-confirmar="¿Borrar esta señal ({{ fuente.origen|default:'sin origen' }})? {% if fuentes.forms|length == 1 %}Es su ÚNICA señal: no se va a ver en la app hasta que le agregues otra.{% else %}Las otras quedan como están.{% endif %}"><i class="bi bi-trash" aria-hidden="true"></i> Borrar</button>{% endif %}</td>
                     </tr>
                     {% endwith %}
                 {% endfor %}
@@ -136,6 +138,12 @@
 
     // Probar la fuente nueva tarda unos segundos
     document.querySelector('form').addEventListener('submit', function (evento) {
+        // "Borrar" una señal: se pregunta antes (no se deshace)
+        var boton = evento.submitter;
+        if (boton && boton.dataset.confirmar) {
+            if (!window.confirm(boton.dataset.confirmar)) evento.preventDefault();
+            return;
+        }
         var nueva = document.getElementById('{{ form.nueva_fuente.id_for_label }}');
         if (nueva.value.trim()) {
             var boton = evento.target.querySelector('button[type=submit]');

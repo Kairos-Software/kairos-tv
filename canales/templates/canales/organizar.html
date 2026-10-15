@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load canales_extras %}
+{% load static canales_extras %}
 {% comment %}
     Organizar contenido: TODO en un lugar, sección por sección (En vivo,
     Películas, Series y las nuevas que se crean acá: Música, Radio...). Cada
@@ -16,6 +16,8 @@
 
 {% block titulo %}Organizar contenido{% endblock %}
 {% block clase_body %}pagina-organizar{% endblock %}
+
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}">{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -54,7 +56,7 @@
 </nav>
 
 {% if puede_editar %}
-<details class="tarjeta mb-4" id="nueva-seccion">
+<details class="tarjeta mb-4" id="nueva-seccion" hidden>
     <summary class="tarjeta-titulo mb-0"><i class="bi bi-plus-lg" aria-hidden="true"></i> Crear una sección nueva en la app (Música, Radio, Deportes…)</summary>
     <form method="post" action="{% url 'canales:secciones' %}" class="row g-3 align-items-end mt-1">
         {% csrf_token %}
@@ -355,6 +357,7 @@
                     <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
                     <input type="hidden" name="origen" value="{{ filtros.origen }}">
                     <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
+            {% if puede_editar %}<p class="espejo-ayuda mx-0"><i class="bi bi-hand-index" aria-hidden="true"></i> Tocá una tarjeta: al costado ves todo lo suyo (de qué lista o link salió, cada señal y cómo anda) y abajo, qué hacer con ella.</p>{% endif %}
             {% for categoria, items in datos.grupos %}
             {% if datos.elegida == 'todas' %}
             <h3 class="espejo-seccion">{% if categoria %}{{ categoria.nombre }}{% else %}Sin categoría (en la app: «Otros»){% endif %}</h3>
@@ -370,7 +373,7 @@
                     {% endif %}
                     {% endif %}
                     {% if puede_editar %}<label class="espejo-seleccionar" for="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}">{% else %}<div class="espejo-seleccionar">{% endif %}
-                    <span class="espejo-imagen" data-iniciales="{{ item.nombre|iniciales }}">{% if item.logo %}<img src="{{ item.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ item.nombre|iniciales }}{% endif %}</span>
+                    <span class="espejo-imagen" data-iniciales="{{ item.nombre|iniciales }}">{% if item.logo_ver %}<img src="{{ item.logo_ver }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ item.nombre|iniciales }}{% endif %}</span>
                     <span class="espejo-nombre" title="{{ item.nombre }}">{% if item.destacado %}<span title="Destacado en la TV" aria-label="Destacado en la TV">★</span> {% endif %}{{ item.nombre }}</span>
                     <span class="espejo-detalle">
                         {% if contenido == 'serie' %}
@@ -397,7 +400,7 @@
                     </div>
                     <strong class="small" id="cantidad-elegidos" aria-live="polite">Ninguno elegido</strong>
                     <span class="texto-suave small">Elegí una acción:</span>
-                    <select id="accion" class="form-select form-select-sm w-auto">
+                    <select id="accion" class="form-select form-select-sm w-auto" aria-label="Qué hacer con lo elegido">
                         <option value="">—</option>
                         <option value="mover">Mover a otra categoría</option>
                         {% if contenido == 'serie' %}
@@ -552,7 +555,7 @@
             </div>
         </div>
         <h3 class="h6 mt-4">Señales (la app las prueba en este orden)</h3>
-        <ul class="espejo-origenes" id="editar-origenes"></ul>
+        <ul class="lista-senales" id="editar-origenes"></ul>
         <div class="dialogo-acciones d-flex flex-wrap align-items-center gap-2 mt-3">
             {% if puede_editar %}<button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>{% endif %}
             <button type="button" class="btn btn-link" data-cerrar>Cerrar</button>
@@ -565,6 +568,35 @@
     {% csrf_token %}
     <input type="hidden" name="volver" value="{{ request.get_full_path }}">
 </form>
+
+{# ── Detalles: al elegir una tarjeta, todo lo que se sabe de ella (static/js/organizar_detalle.js) ── #}
+<aside class="detalle-lateral" id="detalle-lateral" data-forma="{{ forma }}" aria-labelledby="detalle-nombre" hidden>
+    <div class="detalle-lateral-cabeza">
+        <div class="espejo-imagen" data-detalle-imagen></div>
+        <div class="detalle-lateral-titulo">
+            <h2 id="detalle-nombre" data-detalle-nombre></h2>
+            <p data-detalle-estado></p>
+        </div>
+        <button type="button" class="btn-close" data-detalle-cerrar aria-label="Cerrar los detalles"></button>
+    </div>
+    <div class="detalle-lateral-cuerpo">
+        <p class="detalle-varios" data-detalle-varios hidden></p>
+        <dl class="detalle-datos" data-detalle-datos></dl>
+        <h3 class="detalle-subtitulo">Señales (<span data-detalle-cuantas></span>)</h3>
+        <p class="espejo-ayuda mx-0" data-detalle-ayuda></p>
+        <ul class="lista-senales" data-detalle-senales></ul>
+    </div>
+    <div class="detalle-lateral-pie">
+        <button type="button" class="btn btn-sm btn-primary" data-detalle-editar>{% if puede_editar %}Editar{% else %}Ver todo{% endif %}</button>
+        <a href="#" class="btn btn-sm btn-link" data-detalle-mas>Más opciones</a>
+    </div>
+</aside>
+{% if puede_editar %}
+<form method="post" id="form-borrar-senal" data-url="{% url 'canales:fuente_borrar' 0 %}" hidden>
+    {% csrf_token %}
+    <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+</form>
+{% endif %}
 
 {% if puede_editar %}
 {# ── Exportar: qué (secciones y categorías, o las tarjetas elegidas), en qué formato y con qué opciones ── #}
@@ -666,6 +698,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'js/organizar_detalle.js' %}"></script>
 <script>
 (function () {
     // Confirmar lo que no se puede deshacer (en cualquier formulario de la página)
@@ -718,16 +751,21 @@
         });
     }
 
-    // "Nueva sección" en las pestañas abre el formulario de crear
-    document.querySelectorAll('[data-abrir-seccion]').forEach(function (enlace) {
-        enlace.addEventListener('click', function (evento) {
-            evento.preventDefault();
-            var crear = document.getElementById('nueva-seccion');
-            crear.open = true;
-            crear.scrollIntoView({behavior: 'smooth', block: 'start'});
+    // "Nueva sección" en las pestañas muestra el formulario de crear (se usa poco: no ocupa lugar si no se pide)
+    var crearSeccion = document.getElementById('nueva-seccion');
+    if (crearSeccion) {
+        var mostrarCrear = function () {
+            crearSeccion.hidden = false;
+            crearSeccion.open = true;
+            crearSeccion.scrollIntoView({behavior: 'smooth', block: 'start'});
             document.getElementById('seccion-nombre').focus();
+        };
+        document.querySelectorAll('[data-abrir-seccion]').forEach(function (enlace) {
+            enlace.addEventListener('click', function (evento) { evento.preventDefault(); mostrarCrear(); });
         });
-    });
+        crearSeccion.addEventListener('toggle', function () { if (!crearSeccion.open) crearSeccion.hidden = true; });
+        if (location.hash === '#nueva-seccion') mostrarCrear();
+    }
 
     // ── Elegir tarjetas y la barra de abajo ──
     var form = document.getElementById('form-organizar');
@@ -846,39 +884,8 @@
         vista.classList.toggle('poster', esSerie || '{{ forma }}' !== 'vivo');
         document.getElementById('editar-mas').href = datos.mas;
         document.getElementById('editar-mas').textContent = esSerie ? 'Ver y ordenar capítulos' : 'Más opciones (señales, idioma…)';
-        var lista = document.getElementById('editar-origenes');
-        lista.textContent = '';
-        (datos.fuentes.length ? datos.fuentes : [{origen: 'No tiene señales cargadas', url: '', tipo: '', estado: ''}]).forEach(function (f) {
-            var li = document.createElement('li');
-            var origen = document.createElement(f.importacion ? 'a' : 'strong');
-            origen.textContent = f.origen;
-            if (f.importacion) { origen.href = f.importacion; origen.title = 'Ver esa importación'; }
-            li.appendChild(origen);
-            if (f.tipo) {
-                li.appendChild(document.createTextNode(' · ' + f.tipo + ' · '));
-                var estado = document.createElement('span');
-                estado.className = f.caida ? 'estado-mal' : '';
-                estado.textContent = f.estado + (f.activa ? '' : ' (apagada)');
-                li.appendChild(estado);
-                if (f.codec) li.appendChild(document.createTextNode(' · códec ' + f.codec));
-            }
-            if (f.error || f.probada) {
-                var tecnico = document.createElement('div');
-                tecnico.className = 'texto-suave small';
-                tecnico.textContent = [f.error, f.probada ? 'Probada el ' + f.probada : ''].filter(Boolean).join(' · ');
-                li.appendChild(tecnico);
-            }
-            if (f.url) {
-                var enlace = document.createElement('a');
-                enlace.href = f.url;
-                enlace.target = '_blank';
-                enlace.rel = 'noopener noreferrer';
-                enlace.className = 'direccion';
-                enlace.textContent = f.url;
-                li.appendChild(enlace);
-            }
-            lista.appendChild(li);
-        });
+        // Las señales, con su link, datos y "Borrar esta señal" (static/js/organizar_detalle.js)
+        window.KairosSenales.pintar(document.getElementById('editar-origenes'), datos);
         pintarImagen();
         dialogo.showModal();
     }

@@ -227,6 +227,11 @@ class CodecTests(TestCase):
         self.assertEqual(verificacion.codec_de_hls(maestra.format('avc1.6E0028,mp4a.40.2')), 'h264_10')
         self.assertEqual(verificacion.codec_de_hls(maestra.format('hvc1.2.4.L120.B0')), 'h265_10')
         self.assertEqual(verificacion.codec_de_hls(maestra.format('avc1.64001f')), 'h264')
+        # Con varias calidades, la más compatible (el reproductor del aparato elige una que sabe mostrar)
+        varias = ('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=9,CODECS="hvc1.2.4.L150.B0,mp4a.40.2"\nhd.m3u8\n'
+                  '#EXT-X-STREAM-INF:BANDWIDTH=3,CODECS="avc1.64001f,mp4a.40.2"\nsd.m3u8\n')
+        self.assertEqual(verificacion.codec_de_hls(varias), 'h264')
+        self.assertEqual(verificacion.codec_de_hls(varias.replace('avc1.64001f', 'hvc1.1.6.L93')), 'h265')
 
     def test_la_verificacion_lo_guarda(self):
         lista = '#EXTM3U\n#EXTINF:6,\nseg1.ts\n'

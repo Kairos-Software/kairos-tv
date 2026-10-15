@@ -766,20 +766,37 @@ CAMPOS_DE_VERIFICACION = ['estado', 'error', 'verificada', 'tipo', 'codec', 'use
                           'velocidad', 'medida']
 
 
-def _fuentes_vigentes():
-    return Fuente.objects.filter(canal__eliminado_en__isnull=True)
+def _fuentes_vigentes(seccion='', origen=''):
+    """
+    Las fuentes de lo que no se eliminó. Para revisar solo una parte (panel →
+    Mantenimiento): `seccion` (vivo, pelicula, serie o una nueva) y `origen`
+    (la lista o el link de donde vinieron, como lo guarda Fuente.origen).
+    """
+    fuentes = Fuente.objects.filter(canal__eliminado_en__isnull=True)
+    if seccion:
+        fuentes = fuentes.filter(canal__contenido=seccion)
+    if origen:
+        fuentes = fuentes.filter(origen=origen)
+    return fuentes
 
 
-def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos=SEGUNDOS_POR_LOTE, usuario=None):
+# Cuántos nombres de "se cayeron" / "volvieron" manda cada tanda (la pantalla los junta)
+NOMBRES_POR_TANDA = 100
+
+
+def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos=SEGUNDOS_POR_LOTE, usuario=None,
+                              seccion='', origen=''):
     """
     Vuelve a probar las próximas `tamanio` fuentes (en orden de id, a partir
     de `desde`) y actualiza su estado. Las caídas que volvieron pasan a
     "funciona" (y la app las vuelve a usar); las que se cayeron dejan de
-    usarse. No toca `activa`. Devuelve el avance y `siguiente`: el `desde`
-    para la próxima tanda.
+    usarse. No toca `activa`. Con `seccion` u `origen`, solo esas (ver
+    _fuentes_vigentes). Devuelve el avance, `siguiente` (el `desde` para la
+    próxima tanda) y los nombres de lo que se cayó y lo que volvió en esta tanda
+    (`se_cayeron`, `volvieron`: [{'canal', 'pk', 'error'}]).
     """
-    vigentes = _fuentes_vigentes()
-    fuentes = list(vigentes.filter(pk__gt=desde).order_by('pk')[:tamanio])
+    vigentes = _fuentes_vigentes(seccion, origen)
+    fuentes = list(vigentes.filter(pk__gt=desde).select_related('canal').order_by('pk')[:tamanio])
     hasta = time.monotonic() + segundos if segundos else None
     estados = verificar({f.url: f.tipo for f in fuentes},
                         cabeceras={f.url: (f.user_agent, f.referer) for f in fuentes if f.user_agent or f.referer},
@@ -788,6 +805,7 @@ def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos
 
     resultado = ResultadoVerificacion()
     verificadas = []
+    se_cayeron, volvieron = [], []
     siguiente = desde
     corte = False
     for fuente in fuentes:
@@ -799,8 +817,10 @@ def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos
             siguiente = fuente.pk
         if fuente.estado == Fuente.Estado.CAIDA and nuevo.estado == Fuente.Estado.FUNCIONA:
             resultado.revividas += 1
+            volvieron.append({'canal': fuente.canal.nombre, 'pk': fuente.canal_id, 'error': ''})
         elif fuente.estado != Fuente.Estado.CAIDA and nuevo.estado == Fuente.Estado.CAIDA:
             resultado.nuevas_caidas += 1
+            se_cayeron.append({'canal': fuente.canal.nombre, 'pk': fuente.canal_id, 'error': nuevo.error[:120]})
         aplicar_resultado(fuente, nuevo, ahora)
         _contar(resultado, nuevo.estado)
         verificadas.append(fuente)
@@ -809,25 +829,41 @@ def verificar_lote_de_fuentes(verificar, desde=0, tamanio=TAMANIO_LOTE, segundos
     total = vigentes.count()
     terminado = not vigentes.filter(pk__gt=siguiente).exists()
     if terminado:
-        registrar(usuario, Accion.EDITAR, 'Volvió a verificar todas las fuentes de los canales.', modulo='canales')
+        registrar(usuario, Accion.EDITAR, f'Volvió a verificar {que_se_revisa(seccion, origen)}.', modulo='canales')
     hechas = vigentes.filter(pk__lte=siguiente).count()
     return {
         'siguiente': siguiente, 'total': total, 'verificadas': hechas, 'terminado': terminado,
         'porcentaje': 100 if not total else round(100 * hechas / total),
         'funcionan': resultado.funcionan, 'caidas': resultado.caidas, 'sin_verificar': resultado.sin_verificar,
         'revividas': resultado.revividas, 'nuevas_caidas': resultado.nuevas_caidas,
+        'se_cayeron': se_cayeron[:NOMBRES_POR_TANDA], 'volvieron': volvieron[:NOMBRES_POR_TANDA],
     }
 
 
-def avance_de_la_verificacion(desde):
+def que_se_revisa(seccion='', origen='', cosas='fuentes'):
+    """
+    'las fuentes de Series que vinieron de «lista.m3u»', 'todos los canales'
+    (para la actividad y la pantalla). `cosas`: 'fuentes' o 'canales'.
+    """
+    articulo = 'los' if cosas == 'canales' else 'las'
+    texto = f'{articulo} {cosas}' if seccion or origen else f'{"todos" if articulo == "los" else "todas"} {articulo} {cosas}'
+    if seccion:
+        texto += f' de {secciones.nombre(seccion)}'
+    if origen:
+        texto += f' que vinieron de «{origen}»'
+    return texto
+
+
+def avance_de_la_verificacion(desde, seccion='', origen=''):
     """Cómo va "verificar todas" sin verificar nada (mientras espera su turno, ver core/trabajos.py)."""
-    vigentes = _fuentes_vigentes()
+    vigentes = _fuentes_vigentes(seccion, origen)
     total = vigentes.count()
     hechas = vigentes.filter(pk__lte=desde).count()
     return {
         'siguiente': desde, 'total': total, 'verificadas': hechas, 'terminado': False,
         'porcentaje': 100 if not total else round(100 * hechas / total),
         'funcionan': 0, 'caidas': 0, 'sin_verificar': 0, 'revividas': 0, 'nuevas_caidas': 0,
+        'se_cayeron': [], 'volvieron': [],
     }
 
 
@@ -960,6 +996,25 @@ def agregar_fuente(canal, url, verificar_url=None, usuario=None):
     return fuente
 
 
+def borrar_fuente(fuente, usuario=None):
+    """
+    Borra UNA fuente de un canal (la que no anda), sin tocar las otras. El
+    canal queda; si era su única fuente, deja de verse en la app ("No tiene
+    fuentes") hasta que se le agregue otra. La dirección queda anotada en la
+    actividad, por si hay que volver a ponerla. Devuelve cuántas le quedan.
+    """
+    canal = fuente.canal
+    url, origen = fuente.url, fuente.origen or 'no se sabe de dónde'
+    fuente.delete()
+    quedan = canal.fuentes.count()
+    canal.marcar_autor(usuario)
+    canal.save(update_fields=['modificado', 'modificado_por'])
+    registrar(usuario, Accion.ELIMINAR, f'Borró una fuente de "{canal.nombre}" (le quedan {quedan}; de {origen}): '
+                                        f'{url[:150]}', objeto=canal, cambios={'url': url, 'origen': origen},
+              modulo='canales')
+    return quedan
+
+
 def crear_canal_a_mano(form, url, resultado, user_agent='', referer='', usuario=None):
     """
     Crea un canal con una dirección ya probada en "Probar un link": los
@@ -980,26 +1035,37 @@ def crear_canal_a_mano(form, url, resultado, user_agent='', referer='', usuario=
 
 # ── Limpiar los nombres de los canales que ya estaban ────────────────
 
-def limpiar_nombres(usuario=None):
+def limpiar_nombres(usuario=None, seccion='', origen='', cambios=None):
     """
     Pasa los nombres viejos al formato limpio ("ES: (FHD) DAZN 1" -> "DAZN 1"),
     como se hace al importar. Si al limpiarlo queda igual a otro canal (mismo
     contenido y país compatible), se juntan: las fuentes pasan al que ya
     estaba (quedan como alternativas) y el repetido se da de baja.
+    Con `seccion` u `origen` (la lista o el link de donde vinieron), solo esos.
+    En `cambios` (una lista) anota qué pasó con cada uno, para mostrarlo:
+    ('renombrado' | 'juntado', nombre de antes, nombre de ahora).
     Devuelve (renombrados, juntados).
     """
+    canales = Canal.objects.order_by('pk')
+    if seccion:
+        canales = canales.filter(contenido=seccion)
+    if origen:
+        canales = canales.filter(pk__in=Fuente.objects.filter(origen=origen).values('canal'))
     renombrados = juntados = 0
+    cambios = cambios if cambios is not None else []
     with transaction.atomic():
         indice = _IndiceDeCanales()
         indice.por_nombre = {}
-        for canal in Canal.objects.order_by('pk'):
+        for canal in canales:
             limpio = clasificar.limpiar_nombre(canal.nombre)[:120]
             igual = indice.buscar(limpio, canal.pais, canal.contenido)
             if igual is not None and igual.pk != canal.pk:
+                cambios.append(('juntado', canal.nombre, igual.nombre))
                 _juntar(canal, igual, usuario)
                 juntados += 1
                 continue
             if limpio != canal.nombre:
+                cambios.append(('renombrado', canal.nombre, limpio))
                 canal.nombre = limpio
                 canal.marcar_autor(usuario)
                 canal.save()
@@ -1007,8 +1073,8 @@ def limpiar_nombres(usuario=None):
             indice.agregar(canal)
     if renombrados or juntados:
         registrar(usuario, Accion.EDITAR,
-                  f'Limpió los nombres de los canales: {renombrados} renombrado(s), {juntados} juntado(s).',
-                  modulo='canales')
+                  f'Limpió los nombres ({que_se_revisa(seccion, origen, "canales")}): '
+                  f'{renombrados} renombrado(s), {juntados} juntado(s).', modulo='canales')
     return renombrados, juntados
 
 

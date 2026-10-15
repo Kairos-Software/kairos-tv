@@ -12,7 +12,8 @@ void main() {
     expect(Falla.de(exo('Source error: InvalidResponseCodeException: Response code: 403')).motivo, 'rechazo');
     expect(Falla.de(exo('Source error: InvalidResponseCodeException: Response code: 403')).mensaje, contains('403'));
     expect(Falla.de(exo('MediaCodecVideoRenderer error, format_supported=NO_UNSUPPORTED_TYPE')).motivo, 'formato');
-    expect(Falla.de(exo('UnrecognizedInputFormatException: None of the available extractors')).motivo, 'formato');
+    // Lo que llegó no es video (una página de error de la señal): es la señal, no el aparato
+    expect(Falla.de(exo('UnrecognizedInputFormatException: None of the available extractors')).motivo, 'error');
     expect(Falla.de(exo('java.net.UnknownHostException: Unable to resolve host "x"')).motivo, 'sin_internet');
     expect(Falla.de(exo('Source error')).motivo, 'conexion');
   });

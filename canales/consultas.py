@@ -132,12 +132,15 @@ def resumen_de(contenido, nombre=''):
     """
     fuentes = Fuente.objects.filter(canal__eliminado_en__isnull=True, canal__contenido=contenido).order_by()
     por_estado = dict(fuentes.values_list('estado').annotate(cantidad=Count('pk')))
+    cargados = Canal.objects.filter(contenido=contenido).count()
+    en_la_app = canales_disponibles(contenido=contenido).count()
     return {
         'contenido': contenido,
         'nombre': nombre or NOMBRES_EN_PLURAL[contenido],
         'unidad': 'capítulos' if contenido == Contenido.SERIE else 'cargados',
-        'cargados': Canal.objects.filter(contenido=contenido).count(),
-        'en_la_app': canales_disponibles(contenido=contenido).count(),
+        'cargados': cargados,
+        'en_la_app': en_la_app,
+        'no_se_ven': max(cargados - en_la_app, 0),   # caídos o quitados: lo que hay que mirar
         'quitados': Canal.objects.filter(contenido=contenido, activo=False).count(),
         'funcionan': por_estado.get(Fuente.Estado.FUNCIONA, 0),
         'caidas': por_estado.get(Fuente.Estado.CAIDA, 0),

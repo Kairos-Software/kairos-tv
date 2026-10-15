@@ -82,7 +82,7 @@
                     <summary>Fuentes ({{ capitulo.canal.fuentes.all|length }})</summary>
                     <div class="table-responsive">
                         <table class="table tabla mb-0">
-                            <thead><tr><th scope="col">Fuente</th><th scope="col">Formato</th><th scope="col">Códec</th><th scope="col">Estado</th><th scope="col">Error</th></tr></thead>
+                            <thead><tr><th scope="col">Fuente</th><th scope="col">Formato</th><th scope="col">Códec</th><th scope="col">Estado</th><th scope="col">Error</th>{% if puede_editar %}<th scope="col"><span class="visually-hidden">Borrar</span></th>{% endif %}</tr></thead>
                             <tbody>
                             {% for fuente in capitulo.canal.fuentes.all %}
                                 <tr>
@@ -94,6 +94,11 @@
                                         {% if not fuente.activa %}<span class="chip">Apagada</span>{% endif %}
                                     </td>
                                     <td class="small">{{ fuente.error|default:"Sin errores registrados." }}</td>
+                                    {% if puede_editar %}
+                                    <td><button type="submit" class="btn btn-sm btn-outline-secondary text-danger" formaction="{% url 'canales:fuente_borrar' fuente.pk %}"
+                                                name="despues" value="{{ request.get_full_path }}#capitulo-{{ capitulo.canal.pk }}"
+                                                data-confirmar="¿Borrar la señal {{ forloop.counter }} de este capítulo? {% if capitulo.canal.fuentes.all|length == 1 %}Es su ÚNICA señal: el capítulo no se va a ver en la app hasta que le agregues otra.{% else %}Las otras quedan como están.{% endif %}"><i class="bi bi-trash" aria-hidden="true"></i> Borrar</button></td>
+                                    {% endif %}
                                 </tr>
                             {% empty %}
                                 <tr><td colspan="5" class="texto-suave">Este capítulo no tiene fuentes.</td></tr>
@@ -120,6 +125,15 @@
 </div>
 {% if puede_editar %}
 <script src="{% static 'js/ordenar_capitulos.js' %}"></script>
+<script>
+// "Borrar" una señal de un capítulo: se pregunta antes (no se deshace)
+document.querySelectorAll('form[data-orden]').forEach(function (form) {
+    form.addEventListener('submit', function (evento) {
+        var boton = evento.submitter;
+        if (boton && boton.dataset.confirmar && !window.confirm(boton.dataset.confirmar)) evento.preventDefault();
+    });
+});
+</script>
 {% endif %}
 <link rel="stylesheet" href="{% static 'css/ordenar_capitulos.css' %}">
 {% endblock %}

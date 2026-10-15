@@ -10,6 +10,8 @@
 {% block titulo %}Contenido{% endblock %}
 {% block clase_body %}pagina-contenido{% endblock %}
 
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/mantenimiento.css' %}">{% endblock %}
+
 {% block encabezado %}
 <div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
     <div>
@@ -58,10 +60,11 @@
                     {% elif bloque.contenido == 'serie' %}<i class="bi bi-collection-play"></i>
                     {% else %}<i class="bi bi-stars"></i>{% endif %}
                 </span>
-                <div><h3>{{ bloque.nombre }}</h3><strong class="dato">{{ bloque.cargados }}</strong> {{ bloque.unidad }}</div>
+                <div><h3><a href="{% url 'canales:organizar' %}?contenido={{ bloque.contenido }}" class="resumen-enlace" title="Abrir en Organizar">{{ bloque.nombre }}</a></h3><strong class="dato">{{ bloque.cargados }}</strong> {{ bloque.unidad }}</div>
             </div>
             <dl class="resumen-contenido-datos">
-                <div><dt>Los ve la app</dt><dd class="dato">{{ bloque.en_la_app }}</dd></div>
+                <div><dt><a href="{% url 'canales:organizar' %}?contenido={{ bloque.contenido }}&amp;mostrar=app" class="resumen-enlace">Los ve la app</a></dt><dd class="dato">{{ bloque.en_la_app }}</dd></div>
+                <div><dt>{% if bloque.no_se_ven %}<a href="{% url 'canales:organizar' %}?contenido={{ bloque.contenido }}&amp;mostrar=fuera" class="resumen-enlace" title="Caídos o quitados: ver cuáles y por qué">No se ven</a>{% else %}No se ven{% endif %}</dt><dd class="dato{% if bloque.no_se_ven %} estado-mal{% endif %}">{{ bloque.no_se_ven }}</dd></div>
                 <div><dt>Fuentes funcionan</dt><dd class="dato estado-bien">{{ bloque.funcionan }}</dd></div>
                 <div><dt>Fuentes caídas</dt><dd class="dato estado-mal">{{ bloque.caidas }}</dd></div>
                 <div><dt>Sin verificar</dt><dd class="dato">{{ bloque.sin_verificar }}</dd></div>
@@ -119,35 +122,55 @@
         </div>
     </details>
 
-    <details class="tarjeta tarjeta-plegable" id="mantenimiento-contenido">
+    <details class="tarjeta tarjeta-plegable" id="mantenimiento-contenido" {% if resultado_limpieza %}open{% endif %}>
         <summary>
             <span class="tarjeta-plegable-icono"><i class="bi bi-wrench-adjustable" aria-hidden="true"></i></span>
             <span><strong>Mantenimiento del catálogo</strong><small>Revisá señales o normalizá nombres cuando haga falta.</small></span>
             <i class="bi bi-chevron-down tarjeta-plegable-flecha" aria-hidden="true"></i>
         </summary>
         <div class="tarjeta-plegable-cuerpo d-grid gap-3" id="verificar-todas">
+            {# Qué revisar: vale para los dos botones de abajo (static/js/mantenimiento.js) #}
+            <div class="contenido-tarea mantenimiento-que">
+                <div>
+                    <strong>Qué revisar</strong>
+                    <span>Sin elegir nada, todo. O solo una sección, o solo lo que vino de una lista o link importado.</span>
+                </div>
+                <div class="mantenimiento-filtros">
+                    <select class="form-select form-select-sm" id="revisar-seccion" aria-label="Sección a revisar">
+                        <option value="">Todas las secciones</option>
+                        {% for clave, nombre in secciones_para_revisar %}<option value="{{ clave }}">Solo {{ nombre }}</option>{% endfor %}
+                    </select>
+                    <select class="form-select form-select-sm" id="revisar-origen" aria-label="Lista o link a revisar">
+                        <option value="">De cualquier lista o link</option>
+                        {% for origen in origenes_para_revisar %}<option value="{{ origen }}">Solo de «{{ origen|truncatechars:60 }}»</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
             <div class="contenido-tarea">
                 <div>
-                    <strong>Comprobar todas las señales</strong>
-                    <span>Las caídas que volvieron se reactivan solas.</span>
+                    <strong>Comprobar las señales</strong>
+                    <span>Prueba cada señal: las caídas que volvieron se reactivan solas. Al terminar ves qué se cayó y qué volvió.</span>
                 </div>
                 <div>
                     {% csrf_token %}
                     <button type="button" class="btn btn-outline-secondary" data-accion="verificar">
-                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span>Verificar todas</span>
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> <span>Verificar</span>
                     </button>
                 </div>
             </div>
-            <form method="post" action="{% url 'canales:limpiar_nombres' %}" class="contenido-tarea"
-                  onsubmit="return confirm('¿Limpiar los nombres de todos los canales? Ej: «ES: (FHD) DAZN 1» pasa a «DAZN 1». Si dos quedan iguales, se juntan en uno (con las fuentes de los dos).');">
-                {% csrf_token %}
+            <form method="post" action="{% url 'canales:limpiar_nombres' %}" class="contenido-tarea" id="form-limpiar-nombres">
                 <div>
                     <strong>Ordenar nombres antiguos</strong>
-                    <span>Saca país, calidad y palabras como «REPUESTO»; también une duplicados.</span>
+                    <span>Saca país, calidad y palabras como «REPUESTO»; también une duplicados. Al terminar ves qué cambió.</span>
                 </div>
-                <button type="submit" class="btn btn-outline-secondary">
-                    <i class="bi bi-magic" aria-hidden="true"></i> Limpiar nombres
-                </button>
+                <div>
+                    {% csrf_token %}
+                    <input type="hidden" name="seccion">
+                    <input type="hidden" name="origen">
+                    <button type="submit" class="btn btn-outline-secondary">
+                        <i class="bi bi-magic" aria-hidden="true"></i> Limpiar nombres
+                    </button>
+                </div>
             </form>
             <div class="avance" hidden>
                 <div class="avance-barra" role="progressbar" aria-label="Avance de la verificación" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
@@ -155,6 +178,38 @@
                 </div>
                 <div class="avance-texto"><strong data-texto="porcentaje">0 %</strong><span data-texto="detalle"></span></div>
             </div>
+
+            {# El resultado de "Verificar" (lo arma static/js/mantenimiento.js al terminar) #}
+            <section class="mantenimiento-resultado" id="resultado-verificacion" hidden aria-live="polite">
+                <h3><i class="bi bi-clipboard-check" aria-hidden="true"></i> Resultado de la verificación</h3>
+                <p data-resultado-resumen></p>
+                <details data-resultado="se_cayeron"><summary></summary><ul></ul></details>
+                <details data-resultado="volvieron"><summary></summary><ul></ul></details>
+                <p class="mb-0"><a href="{% url 'canales:organizar' %}?mostrar=caidos" data-resultado-organizar>Ver en Organizar lo que no se ve por señales caídas</a> · <a href="{% url 'canales:inicio' %}">Actualizar los números de arriba</a></p>
+            </section>
+
+            {% if resultado_limpieza %}
+            {# El resultado de "Limpiar nombres" (views.limpiar_nombres lo deja en la sesión) #}
+            <section class="mantenimiento-resultado" aria-live="polite">
+                <h3><i class="bi bi-clipboard-check" aria-hidden="true"></i> Resultado de limpiar nombres</h3>
+                {% with r=resultado_limpieza %}
+                {% if r.renombrados or r.juntados %}
+                <p>Se revisaron {{ r.que }}: <strong>{{ r.renombrados }}</strong> cambiaron de nombre y <strong>{{ r.juntados }}</strong> repetidos se juntaron con su canal (sus señales quedaron como alternativas).</p>
+                <details open>
+                    <summary>Qué cambió</summary>
+                    <ul>
+                        {% for tipo, antes, ahora in r.cambios %}
+                        <li>{% if tipo == 'juntado' %}<span class="chip">Juntado</span> «{{ antes }}» se juntó con «{{ ahora }}»{% else %}«{{ antes }}» → «{{ ahora }}»{% endif %}</li>
+                        {% endfor %}
+                        {% if r.mas %}<li class="texto-suave">Y {{ r.mas }} más (están en Actividad).</li>{% endif %}
+                    </ul>
+                </details>
+                {% else %}
+                <p class="mb-0">Se revisaron {{ r.que }}: los nombres ya estaban limpios, no cambió nada.</p>
+                {% endif %}
+                {% endwith %}
+            </section>
+            {% endif %}
         </div>
     </details>
 </div>
@@ -211,41 +266,8 @@
         });
     }
 
-    // Volver a verificar todas, de a tandas
-    var caja = document.getElementById('verificar-todas');
-    if (!caja) return;
-    var boton = caja.querySelector('[data-accion=verificar]');
-    var avance = caja.querySelector('.avance');
-    var barra = caja.querySelector('.avance-barra');
-    var relleno = caja.querySelector('.avance-relleno');
-    var porcentaje = caja.querySelector('[data-texto=porcentaje]');
-    var detalle = caja.querySelector('[data-texto=detalle]');
-    var desde = 0;
-    var suma = {funcionan: 0, caidas: 0, revividas: 0, nuevas_caidas: 0};
-
-    var tarea = Tandas({
-        url: '{% url "canales:verificar_lote" %}',
-        datos: function () { return {desde: desde}; },
-        termino: function (r) { return r.terminado; },
-        alAvanzar: function (r) {
-            desde = r.siguiente;
-            Object.keys(suma).forEach(function (clave) { suma[clave] += r[clave]; });
-            relleno.style.width = r.porcentaje + '%';
-            barra.setAttribute('aria-valuenow', r.porcentaje);
-            porcentaje.textContent = r.porcentaje + ' % completado';
-            detalle.textContent = Tandas.numero(r.verificadas) + ' de ' + Tandas.numero(r.total) + ' fuentes · funcionan '
-                + Tandas.numero(suma.funcionan) + ' · caídas ' + Tandas.numero(suma.caidas)
-                + ' · volvieron ' + Tandas.numero(suma.revividas);
-        },
-        alTerminar: function () { window.location.reload(); },
-        alCambiar: function (corriendo) {
-            avance.hidden = false;
-            avance.classList.toggle('trabajando', corriendo);
-            boton.querySelector('span').textContent = corriendo ? 'Pausar' : (desde ? 'Continuar' : 'Volver a verificar todas');
-        },
-        alError: function (mensaje) { detalle.textContent = mensaje; },
-    });
-    boton.addEventListener('click', function () { tarea.corriendo() ? tarea.pausar() : tarea.empezar(); });
 })();
 </script>
+<script src="{% static 'js/mantenimiento.js' %}" data-url-lote="{% url 'canales:verificar_lote' %}"
+        data-url-canal="{% url 'canales:canal_editar' 0 %}"></script>
 {% endblock %}

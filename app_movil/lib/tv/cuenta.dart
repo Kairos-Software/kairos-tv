@@ -1,12 +1,14 @@
 /// Mi cuenta en la TV (diseno_kairos_tv: tv-16): a la izquierda los datos
 /// (código, hasta cuándo, pantallas, vendedor); a la derecha las
-/// preferencias: volver al último canal al abrir, favoritos, buscar
-/// actualizaciones y cerrar sesión.
+/// preferencias: volver al último canal al abrir, modo de video, "Lo que no
+/// se ve en esta TV" (qué esconde este aparato y por qué, con volver a
+/// mostrarlo o probarlo igual), favoritos, buscar actualizaciones y cerrar sesión.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../actualizacion.dart';
+import '../api/modelos.dart';
 import '../aparato.dart';
 import '../movil/componentes.dart';
 import '../movil/datos.dart';
@@ -44,6 +46,38 @@ class CuentaTv extends StatelessWidget {
           : 'No se pudo consultar. Probá en un rato.',
       icono: hay == false ? Icons.check_circle_rounded : Icons.wifi_off_rounded,
     );
+  }
+
+  /// Lo que el panel manda pero esta TV no muestra, y por qué: falló acá, o
+  /// tiene un códec que la TV dice no leer. Se puede volver a mostrar lo que
+  /// falló y "probar igual" lo de los códecs (por si la TV los lee igual).
+  Future<void> _loQueNoSeVe(BuildContext context) async {
+    final datos = DatosScope.of(context);
+    final catalogo = datos.catalogo;
+    final biblioteca = datos.biblioteca;
+    final accion = await showDialog<String>(
+      context: context,
+      builder: (contexto) => CuadroLoQueNoSeVe(
+        escondidos: catalogo.escondidos,
+        codecs: Aparato.codecs,
+        hayFallados: NoAnda.cuantos > 0,
+        probarTodo: biblioteca.probarTodo,
+      ),
+    );
+    if (!context.mounted || accion == null) return;
+    if (accion == 'mostrar') {
+      await NoAnda.volverAMostrarTodo();
+      if (context.mounted) avisoTv(context, 'Listo: vuelve a aparecer y se prueba de nuevo');
+    } else {
+      biblioteca.probarTodo = !biblioteca.probarTodo;
+      avisoTv(
+        context,
+        biblioteca.probarTodo
+            ? 'Se muestra todo: si algo no se ve bien, volvé a ponerlo en No'
+            : 'Listo: lo que esta TV no lee vuelve a esconderse',
+      );
+    }
+    await catalogo.cargar();
   }
 
   Future<void> _salir(BuildContext context) async {
@@ -191,6 +225,14 @@ class CuentaTv extends StatelessWidget {
                             style: LetraTv.ayuda,
                           ),
                           const SizedBox(height: 14),
+                          // ¿Un canal está en el celular y no en la TV? Acá se ve por qué
+                          BotonTv(
+                            texto: 'Lo que no se ve en esta TV',
+                            icono: Icons.visibility_off_rounded,
+                            ancho: double.infinity,
+                            alOk: () => _loQueNoSeVe(context),
+                          ),
+                          const SizedBox(height: 14),
                           BotonTv(
                             texto: 'Administrar favoritos',
                             icono: Icons.favorite_rounded,
@@ -222,6 +264,83 @@ class CuentaTv extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// El cuadro "Lo que no se ve en esta TV" (Mi cuenta): qué códecs lee la TV,
+/// lo escondido con su motivo y los botones. Devuelve 'mostrar' (volver a
+/// mostrar lo que falló acá), 'probar' (cambiar "Probar igual") o null.
+class CuadroLoQueNoSeVe extends StatelessWidget {
+  const CuadroLoQueNoSeVe({
+    super.key,
+    required this.escondidos,
+    required this.codecs,
+    required this.hayFallados,
+    required this.probarTodo,
+  });
+
+  final List<(Canal, String)> escondidos;
+  final Set<String> codecs;
+  final bool hayFallados;
+  final bool probarTodo;
+
+  /// Cuántos de lo escondido se nombran (el resto: "y N más").
+  static const aLaVista = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final lee = codecs.map(nombreDeCodec).toList()..sort();
+    return DialogoTv(
+      icono: Icons.visibility_off_rounded,
+      titulo: escondidos.isEmpty
+          ? 'Esta TV muestra todo lo que manda el panel'
+          : 'No se ${escondidos.length == 1 ? 've 1' : 'ven ${escondidos.length}'} en esta TV',
+      texto: lee.isEmpty ? null : 'Esta TV lee videos ${lee.join(', ')}.',
+      hijo: escondidos.isEmpty
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final (canal, motivo) in escondidos.take(aLaVista))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${canal.nombre}: ',
+                              style: const TextStyle(fontWeight: FontWeight.w700, color: Tono.texto),
+                            ),
+                            TextSpan(text: motivo),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: LetraTv.ayuda.copyWith(fontSize: 17),
+                      ),
+                    ),
+                  if (escondidos.length > aLaVista)
+                    Text('Y ${escondidos.length - aLaVista} más.', style: LetraTv.ayuda),
+                ],
+              ),
+            ),
+      botones: [
+        BotonTv(texto: 'Cerrar', principal: true, autofocus: true, alOk: () => Navigator.pop(context)),
+        if (hayFallados)
+          BotonTv(
+            texto: 'Volver a mostrar lo que falló acá',
+            icono: Icons.restart_alt_rounded,
+            alOk: () => Navigator.pop(context, 'mostrar'),
+          ),
+        BotonTv(
+          texto: probarTodo ? 'Probar igual lo que quizá no lea: Sí' : 'Probar igual lo que quizá no lea: No',
+          icono: probarTodo ? Icons.toggle_on_rounded : Icons.toggle_off_rounded,
+          alOk: () => Navigator.pop(context, 'probar'),
+        ),
+      ],
     );
   }
 }

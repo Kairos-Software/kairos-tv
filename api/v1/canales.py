@@ -81,7 +81,7 @@ def lista(request):
     contenido = request.query_params.get('contenido')
     canales = list(canales_disponibles(tipos_pedidos(request.query_params.get('formatos')),
                                        contenido if secciones.es_valida(contenido or '') else Contenido.VIVO))
-    contexto = {'request': request}
+    contexto = {'request': request, 'logos': imagenes.logos_parejos(c.logo for c in canales)}
     respuesta = {
         'cantidad': len(canales),
         'categorias': [

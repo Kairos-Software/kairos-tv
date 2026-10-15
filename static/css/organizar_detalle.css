@@ -1,0 +1,80 @@
+/* Organizar contenido: el panel de detalles de al lado y la lista de señales
+   (canales/organizar.html + js/organizar_detalle.js) */
+
+.detalle-lateral {
+    --detalle-ancho: 400px;
+    position: fixed; z-index: 1060;
+    top: calc(var(--barra-alto, 4rem) + .75rem); right: 1rem; bottom: 1rem;
+    width: var(--detalle-ancho);
+    display: flex; flex-direction: column;
+    background: var(--capa-maxima); border: 1px solid var(--celeste-borde); border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+}
+.detalle-lateral[hidden] { display: none; }
+.detalle-lateral-cabeza {
+    display: flex; align-items: flex-start; gap: .75rem;
+    padding: .9rem 1rem .75rem; border-bottom: 1px solid var(--borde);
+}
+.detalle-lateral-cabeza .espejo-imagen { width: 96px; flex: none; }
+.detalle-lateral-cabeza .espejo-imagen.poster { width: 64px; aspect-ratio: 2 / 3; }
+.detalle-lateral-cabeza .espejo-imagen img { width: 100%; height: 100%; object-fit: contain; }
+.detalle-lateral-titulo { flex: 1; min-width: 0; }
+.detalle-lateral-titulo h2 { margin: 0 0 .2rem; font-size: 1.05rem; font-weight: 700; word-break: break-word; }
+.detalle-lateral-cuerpo { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: .75rem 1rem 1rem; }
+.detalle-lateral-pie {
+    display: flex; flex-wrap: wrap; gap: .5rem; padding: .75rem 1rem; border-top: 1px solid var(--borde);
+}
+.detalle-varios {
+    margin-bottom: .75rem; padding: .45rem .65rem; border-radius: 10px;
+    background: var(--celeste-fondo); font-size: .78rem;
+}
+.detalle-varios[hidden] { display: none; }
+
+.detalle-datos { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .75rem; margin: 0 0 1rem; font-size: .82rem; }
+.detalle-datos dt { font-weight: 600; color: var(--texto-suave); }
+.detalle-datos dd { margin: 0; word-break: break-word; }
+.detalle-subtitulo { margin: 0 0 .25rem; font-size: .9rem; font-weight: 700; }
+
+/* La tarjeta que se está mostrando en el panel */
+.espejo-tarjeta.detalle-actual .espejo-imagen { border-color: var(--celeste); }
+
+/* Las señales (en el panel y en el cuadro de edición) */
+.lista-senales { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .55rem; }
+.senal {
+    padding: .6rem .7rem; border-radius: 12px;
+    background: var(--capa-baja); border: 1px solid var(--borde); font-size: .82rem;
+}
+.senal-mal { border-color: rgba(255, 90, 110, .35); }
+.senal-cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .55rem; }
+.senal-numero {
+    display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; flex: none;
+    border-radius: 50%; background: var(--celeste-fondo); color: var(--celeste); font-weight: 800; font-size: .8rem;
+}
+.senal-origen { font-weight: 700; }
+.senal-estado { margin-left: auto; font-size: .75rem; color: var(--texto-suave); }
+.senal-dato { margin-top: .2rem; color: var(--texto-suave); font-size: .76rem; word-break: break-word; }
+.senal-aviso { color: var(--dorado-claro, #FFD27A); }
+.senal .direccion { display: block; margin-top: .3rem; }
+.senal-botones { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+
+/* Pantalla grande: el contenido se corre para que el panel no lo tape */
+@media (min-width: 1200px) {
+    .pagina-organizar:has(.detalle-lateral:not([hidden])) .pagina { padding-right: calc(400px + 1.5rem); }
+    .pagina-organizar:has(.detalle-lateral:not([hidden])) .espejo-barra { right: calc(400px + 2rem); }
+}
+/* Más chica: el panel va por encima, a lo ancho (se cierra con la X) */
+@media (max-width: 1199.98px) {
+    .detalle-lateral { width: min(var(--detalle-ancho), calc(100vw - 2rem)); }
+}
+@media (max-width: 575.98px) {
+    .detalle-lateral { top: .5rem; right: .5rem; bottom: .5rem; left: .5rem; width: auto; }
+}
+/* Cuadro Exportar: la ayuda de una opción va debajo de ella, no apretada al costado */
+.form-check:has(> .espejo-ayuda) { flex-wrap: wrap; }
+.form-check > .espejo-ayuda { flex-basis: 100%; padding-left: 1.75rem; }
+
+/* Cuadro Editar en celular: la imagen chica (no media pantalla) */
+@media (max-width: 767.98px) {
+    #editar-vista { max-width: 160px; }
+    #editar-vista.poster { max-width: 110px; }
+}

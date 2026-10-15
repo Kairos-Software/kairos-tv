@@ -341,8 +341,8 @@ class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
 FuentesFormSet = forms.modelformset_factory(
     Fuente, fields=['prioridad', 'activa'], extra=0, can_delete=True,
     widgets={'prioridad': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'style': 'width:5rem',
-                                                   'min': 0}),
-             'activa': forms.CheckboxInput(attrs={'class': 'form-check-input'})},
+                                                   'min': 0, 'aria-label': 'Orden'}),
+             'activa': forms.CheckboxInput(attrs={'class': 'form-check-input', 'aria-label': 'Activa'})},
 )
 
 

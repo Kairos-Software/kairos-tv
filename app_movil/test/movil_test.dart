@@ -138,7 +138,7 @@ void main() {
   test('cuánto tiempo se oculta lo que no anduvo', () {
     expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: false), const Duration(hours: 1));
     expect(NoAnda.cuantoTiempo(enVivo: false, deFormato: false), const Duration(days: 3));
-    expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: true), const Duration(days: 30));
+    expect(NoAnda.cuantoTiempo(enVivo: true, deFormato: true), const Duration(days: 7));
   });
 
   test('un canal que no conecta NO se esconde (suele volver): solo lo que el aparato no sabe mostrar', () {
@@ -146,9 +146,10 @@ void main() {
     for (final falla in [Falla.conexion, Falla.tiempo, Falla.trabada, Falla.de('Response code: 403')]) {
       expect(ControlSenal.esconderDespuesDe(falla, hayFuentes: true, seVio: false), isFalse, reason: falla.motivo);
     }
-    // El aparato no puede mostrar ese video: no va a cambiar, se esconde acá
+    // El decodificador del aparato no puede mostrar ese video: se esconde acá unos días
     expect(ControlSenal.esconderDespuesDe(Falla.formato, hayFuentes: true, seVio: false), isTrue);
-    expect(ControlSenal.esconderDespuesDe(Falla.sinImagen, hayFuentes: true, seVio: false), isTrue);
+    // Sin imagen un momento: puede ser la TV trabada o la señal; no se esconde
+    expect(ControlSenal.esconderDespuesDe(Falla.sinImagen, hayFuentes: true, seVio: false), isFalse);
     // ...salvo que se haya llegado a ver bien
     expect(ControlSenal.esconderDespuesDe(Falla.formato, hayFuentes: true, seVio: true), isFalse);
     // Sin internet en el aparato: la señal no tiene la culpa

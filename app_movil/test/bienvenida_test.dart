@@ -29,19 +29,14 @@ class _VideoDeMentira extends VideoPlayerPlatform {
     final eventos = _eventos[playerId]!;
     scheduleMicrotask(
       () => eventos.add(
-        VideoEvent(
-          eventType: VideoEventType.initialized,
-          duration: Bienvenida.duracion,
-          size: const Size(1080, 1920),
-        ),
+        VideoEvent(eventType: VideoEventType.initialized, duration: Bienvenida.duracion, size: const Size(1080, 1920)),
       ),
     );
     return eventos.stream;
   }
 
   @override
-  Future<void> dispose(int playerId) async =>
-      _eventos.remove(playerId)?.close();
+  Future<void> dispose(int playerId) async => _eventos.remove(playerId)?.close();
 
   @override
   Future<void> play(int playerId) async {}
@@ -68,8 +63,7 @@ class _VideoDeMentira extends VideoPlayerPlatform {
   Future<void> setMixWithOthers(bool mixWithOthers) async {}
 
   @override
-  Widget buildViewWithOptions(VideoViewOptions options) =>
-      const SizedBox.expand();
+  Widget buildViewWithOptions(VideoViewOptions options) => const SizedBox.expand();
 }
 
 void main() {
@@ -87,19 +81,12 @@ void main() {
     Aparato.esTv = false;
   });
 
-  testWidgets('reproduce el video vertical encima de la app y se desvanece', (
-    tester,
-  ) async {
+  testWidgets('reproduce el video vertical encima de la app y se desvanece', (tester) async {
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      const Bienvenida(
-        esperarElVideo: false,
-        child: MaterialApp(home: Text('la app')),
-      ),
-    );
+    await tester.pumpWidget(const Bienvenida(esperarElVideo: false, child: MaterialApp(home: Text('la app'))));
     await tester.pump();
 
     expect(video.ultimoAsset, Bienvenida.videoCelular);
@@ -127,12 +114,7 @@ void main() {
     addTearDown(tester.view.reset);
     Aparato.esTv = true;
 
-    await tester.pumpWidget(
-      const Bienvenida(
-        esperarElVideo: false,
-        child: MaterialApp(home: Text('la app')),
-      ),
-    );
+    await tester.pumpWidget(const Bienvenida(esperarElVideo: false, child: MaterialApp(home: Text('la app'))));
     await tester.pump();
 
     expect(video.ultimoAsset, Bienvenida.videoTv);

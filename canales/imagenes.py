@@ -17,12 +17,21 @@ video (el video nunca pasa por el servidor).
     imagenes.mover_portada('Pocoyo', 'Pocoyó')         -> al renombrar o unir series
 """
 
+import hashlib
+import time
+import urllib.error
+import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from io import BytesIO
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 from PIL import Image, ImageChops, ImageDraw, ImageOps, UnidentifiedImageError
 
 from . import clasificar
@@ -164,6 +173,248 @@ def soltar(url):
     if Canal.todos.filter(logo=url).exists() or PortadaDeSerie.objects.filter(imagen=url).exists():
         return
     default_storage.delete(nombre)
+
+
+# ── Logos parejos ────────────────────────────────────────────────────
+# Los logos de los canales vienen de cualquier lado: unos con mucho borde
+# vacío (transparente o de color), otros justo al borde, de 100 px o de
+# 3840. Centrados "tal cual", unos se ven chiquitos y corridos y otros
+# enormes. Para cada dirección se guarda una copia pareja (LogoParejo):
+#   - se recorta lo que sobra alrededor: lo transparente, o el fondo de un
+#     solo color (en ese caso queda un margen de ese color: si se lo sacara,
+#     un logo oscuro sobre blanco no se vería en la tarjeta oscura);
+#   - queda un margen chico e igual para todos;
+#   - se achica a LADO_PAREJO como mucho (a un TV box le pesa uno de 3840).
+# La API y el panel mandan la copia en vez del original (la app no cambia).
+# Lo hace el cron (verificar_fuentes) y, al cambiar un logo en el panel, en
+# el momento. Si no hace falta tocarlo, o no se puede (SVG, no existe...),
+# queda el original.
+
+CARPETA_PAREJOS = 'canales/logos/'
+LADO_PAREJO = 512
+PESO_MAXIMO_LOGO = 5 * 1024 * 1024
+MARGEN_TRANSPARENTE = 0.03   # de lo que mide el logo (lado más largo)
+MARGEN_DE_COLOR = 0.08       # el recuadro de color queda con este margen alrededor del logo
+DIFERENCIA_DE_FONDO = 32     # cuánto puede variar el "fondo de un color" (compresión JPG)
+REINTENTAR_FALLADOS = timedelta(days=7)
+SEGUNDOS_PARA_LOGOS = 4 * 60   # en cada pasada del cron
+A_LA_VEZ = 8
+
+
+class LogoNoSirve(Exception):
+    """No se pudo bajar o abrir el logo (queda el original)."""
+
+
+class LogoRoto(LogoNoSirve):
+    """La dirección ya no tiene el logo (borrado o 404): mejor las iniciales."""
+
+
+def _clave_de(url):
+    return hashlib.sha1(url.encode('utf-8')).hexdigest()
+
+
+def tiene_logo_parejo(contenido):
+    """Los canales en vivo y las secciones "en vivo" (radios) muestran logos; películas y series, pósters."""
+    from .models import Contenido
+    from . import secciones
+    return contenido == Contenido.VIVO or secciones.forma(contenido) == 'vivo'
+
+
+def _caja_del_logo(imagen):
+    """
+    (caja, color_de_fondo): lo que ocupa el logo de verdad. color_de_fondo es
+    None si el fondo es transparente (o si no hay un fondo parejo: caja = todo).
+    """
+    alfa = imagen.getchannel('A')
+    if alfa.getextrema()[0] < 250:
+        return alfa.point(lambda a: 255 if a > 24 else 0).getbbox(), None
+    rgb = imagen.convert('RGB')
+    ancho, alto = rgb.size
+    esquinas = [rgb.getpixel(p) for p in ((0, 0), (ancho - 1, 0), (0, alto - 1), (ancho - 1, alto - 1))]
+    fondo = esquinas[0]
+    if any(max(abs(a - b) for a, b in zip(esquina, fondo)) > DIFERENCIA_DE_FONDO for esquina in esquinas):
+        return (0, 0, ancho, alto), None   # no tiene un fondo de un color (una foto): se deja entera
+    rojo, verde, azul = ImageChops.difference(rgb, Image.new('RGB', rgb.size, fondo)).split()
+    distinto = ImageChops.lighter(ImageChops.lighter(rojo, verde), azul)
+    caja = distinto.point(lambda v: 255 if v > DIFERENCIA_DE_FONDO else 0).getbbox()
+    if caja is None:   # todo de un color (el logo llega a las cuatro esquinas): se deja entera
+        return (0, 0, ancho, alto), None
+    return caja, fondo
+
+
+def emparejar(imagen, formato=''):
+    """
+    La copia pareja del logo (una imagen RGBA), o None si no hace falta
+    (ya está justa, no es enorme y es un formato que todos leen).
+    """
+    imagen = ImageOps.exif_transpose(imagen.convert('RGBA'))
+    imagen = sacar_cuadritos(imagen).convert('RGBA')
+    ancho, alto = imagen.size
+    caja, fondo = _caja_del_logo(imagen)
+    if not caja:
+        raise LogoNoSirve('La imagen está vacía.')
+    izquierda, arriba, derecha, abajo = caja
+    sobra = max(izquierda / ancho, arriba / alto, (ancho - derecha) / ancho, (alto - abajo) / alto)
+    if sobra < .015 and max(ancho, alto) <= LADO_PAREJO * 1.25 and formato in ('PNG', 'JPEG', 'WEBP'):
+        return None
+    logo = imagen.crop(caja)
+    if fondo is None:
+        margen = round(max(logo.size) * MARGEN_TRANSPARENTE)
+        color = (0, 0, 0, 0)
+    else:
+        margen = round(min(logo.size) * MARGEN_DE_COLOR)
+        color = (*fondo, 255)
+    con_margen = Image.new('RGBA', (logo.width + 2 * margen, logo.height + 2 * margen), color)
+    con_margen.paste(logo, (margen, margen))
+    con_margen.thumbnail((LADO_PAREJO, LADO_PAREJO), Image.LANCZOS)
+    return con_margen
+
+
+def _bajar(url):
+    """Los bytes del logo (si es uno subido acá, del disco)."""
+    subido = _archivo_subido(url)
+    if subido:
+        with default_storage.open(subido) as archivo:
+            return archivo.read(PESO_MAXIMO_LOGO + 1)
+    if not url.lower().startswith(('http://', 'https://')):
+        raise LogoNoSirve('No es una dirección web.')
+    pedido = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Kairos TV)', 'Accept': 'image/*'})
+    try:
+        with urllib.request.urlopen(pedido, timeout=8) as respuesta:
+            if respuesta.geturl().split('?')[0].endswith('imgur.com/removed.png'):
+                raise LogoRoto('imgur lo borró (manda su cartel "The image you are requesting does not exist").')
+            return respuesta.read(PESO_MAXIMO_LOGO + 1)
+    except urllib.error.HTTPError as error:
+        if error.code in (404, 410):
+            raise LogoRoto(f'Ya no existe (error {error.code}).') from None
+        raise LogoNoSirve(f'No se pudo bajar: error {error.code}.') from None
+    except (OSError, ValueError) as error:   # urllib.error.URLError y los timeouts son OSError
+        raise LogoNoSirve(f'No se pudo bajar: {error}'[:200]) from None
+
+
+def _preparar(url):
+    """
+    (url, bytes WEBP o None si queda el original, error, roto). Sin tocar la
+    base: corre en paralelo.
+    """
+    try:
+        datos = _bajar(url)
+        if len(datos) > PESO_MAXIMO_LOGO:
+            raise LogoNoSirve('Pesa más de 5 MB.')
+        if b'<svg' in datos[:1000].lower():
+            raise LogoNoSirve('Es un SVG: queda el original.')
+        try:
+            imagen = Image.open(BytesIO(datos))
+            formato = imagen.format
+            imagen.load()
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError, ValueError):
+            raise LogoNoSirve('No es una imagen.') from None
+        parejo = emparejar(imagen, formato)
+        if parejo is None:
+            return url, None, '', False
+        salida = BytesIO()
+        parejo.save(salida, 'WEBP', quality=90, method=4)
+        return url, salida.getvalue(), '', False
+    except LogoRoto as error:
+        return url, None, str(error), True
+    except LogoNoSirve as error:
+        return url, None, str(error), False
+    except Exception as error:   # una imagen rara no puede cortar la tanda entera
+        return url, None, f'Error al prepararlo: {error}'[:200], False
+
+
+def _guardar(url, webp, error, roto):
+    from .models import LogoParejo
+    clave = _clave_de(url)
+    archivo = ''
+    if webp:
+        archivo = f'{CARPETA_PAREJOS}{clave}.webp'
+        default_storage.delete(archivo)   # si se rehace, el mismo nombre (si no, Django le agrega letras)
+        archivo = default_storage.save(archivo, ContentFile(webp))
+    LogoParejo.objects.update_or_create(clave=clave, defaults={'url': url, 'archivo': archivo, 'error': error,
+                                                               'roto': roto})
+
+
+def _por_hacer():
+    """Las direcciones de logos que todavía no tienen copia (o fallaron hace más de REINTENTAR_FALLADOS)."""
+    from .models import LogoParejo
+    from . import secciones
+    contenidos = ['vivo', *(s.clave for s in secciones.nuevas() if s.forma == 'vivo')]
+    urls = set(Canal.todos.filter(contenido__in=contenidos).exclude(logo='').values_list('logo', flat=True))
+    hechas = {fila.url for fila in LogoParejo.objects.only('url', 'archivo', 'error', 'probado')
+              if not fila.error or fila.probado > timezone.now() - REINTENTAR_FALLADOS}
+    return urls, sorted(urls - hechas)
+
+
+def emparejar_logos(segundos=SEGUNDOS_PARA_LOGOS, preparar=None):
+    """
+    Lo que hace el cron: prepara las copias que faltan (de a A_LA_VEZ, hasta
+    `segundos`) y borra las que ya no usa ningún canal. Devuelve cuántas.
+    """
+    from .models import LogoParejo
+    preparar = preparar or _preparar
+    en_uso, pendientes = _por_hacer()
+    hasta = time.monotonic() + segundos
+    resultado = {'parejos': 0, 'iguales': 0, 'rotos': 0, 'fallados': 0, 'faltan': 0, 'borrados': 0}
+    with ThreadPoolExecutor(A_LA_VEZ) as ejecutor:
+        for desde in range(0, len(pendientes), A_LA_VEZ * 2):
+            if time.monotonic() > hasta:
+                resultado['faltan'] = len(pendientes) - desde
+                break
+            for url, webp, error, roto in ejecutor.map(preparar, pendientes[desde:desde + A_LA_VEZ * 2]):
+                _guardar(url, webp, error, roto)
+                resultado['parejos' if webp else 'rotos' if roto else 'fallados' if error else 'iguales'] += 1
+    for fila in LogoParejo.objects.exclude(url__in=en_uso):
+        if fila.archivo:
+            default_storage.delete(fila.archivo)
+        fila.delete()
+        resultado['borrados'] += 1
+    return resultado
+
+
+def emparejar_logo_al_guardar(canal):
+    """
+    Lo que llaman las pantallas del panel al guardar un canal: su copia
+    pareja apenas se confirma lo guardado (en los tests no corre: no sale a
+    internet).
+    """
+    transaction.on_commit(lambda: emparejar_logo(canal))
+
+
+def emparejar_logo(canal):
+    """Al cambiar el logo en el panel: su copia pareja en el momento (si todavía no la tiene)."""
+    from .models import LogoParejo
+    if not canal.logo or not tiene_logo_parejo(canal.contenido):
+        return
+    if LogoParejo.objects.filter(clave=_clave_de(canal.logo)).exists():
+        return
+    _guardar(*_preparar(canal.logo))
+
+
+def logos_parejos(urls):
+    """
+    {dirección original: la que hay que mostrar}: la de la copia pareja
+    (relativa: /media/...), o '' si el logo está roto (van las iniciales).
+    Las que no están, se muestran como vinieron.
+    """
+    from .models import LogoParejo
+    por_clave = {_clave_de(url): url for url in set(urls) if url}
+    return {por_clave[clave]: '' if roto else default_storage.url(archivo)
+            for clave, archivo, roto in LogoParejo.objects.filter(clave__in=por_clave)
+            .filter(Q(roto=True) | ~Q(archivo='')).values_list('clave', 'archivo', 'roto')}
+
+
+def logos_rotos(urls):
+    """{dirección: por qué está roto} de las que ya no tienen el logo (para avisarlo en el panel)."""
+    from .models import LogoParejo
+    por_clave = {_clave_de(url): url for url in set(urls) if url}
+    return {por_clave[clave]: error for clave, error in LogoParejo.objects.filter(clave__in=por_clave, roto=True)
+            .values_list('clave', 'error')}
+
+
+def logo_para_mostrar(url, parejos):
+    """La dirección del logo que se muestra (`parejos`: de logos_parejos)."""
+    return parejos.get(url, url)
 
 
 # ── Portadas de series ───────────────────────────────────────────────

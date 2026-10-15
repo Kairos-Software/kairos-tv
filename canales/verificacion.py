@@ -331,20 +331,39 @@ def _perfil_hls(parte, codec):
         return None
 
 
+# Del que más aparatos leen al que menos (para elegir entre las calidades de una lista HLS)
+CODECS_DEL_MAS_COMPATIBLE = ['h264', 'h265', 'mpeg4', 'h265_10', 'h264_10', 'vp9', 'av1', 'mpeg2', 'vc1']
+
+
+def _codec_de_la_calidad(codecs):
+    """'avc1.64001f,mp4a.40.2' -> 'h264' (el del video; '' si no lo dice)."""
+    for parte in codecs.split(','):
+        parte = parte.strip()
+        for prefijo, codec in _PREFIJOS_HLS:
+            if parte.lower().startswith(prefijo):
+                if _perfil_hls(parte, codec) in _PERFILES_10_BITS.get(codec, ()):
+                    return f'{codec}_10'
+                return codec
+    return ''
+
+
 def codec_de_hls(texto):
-    """El códec de la primera calidad de una lista maestra (CODECS="avc1.64001f,mp4a.40.2")."""
+    """
+    El códec de una lista maestra (CODECS="avc1.64001f,mp4a.40.2"). Si ofrece
+    varias calidades con distinto códec, el MÁS COMPATIBLE
+    (CODECS_DEL_MAS_COMPATIBLE): el reproductor del aparato elige solo una
+    calidad que sabe mostrar, así que con que haya una en H.264 alcanza (antes
+    se anotaba la primera, y una TV que no lee H.265 de 10 bits escondía el
+    canal aunque tuviera también calidades en H.264).
+    """
+    encontrados = []
     for linea in texto.splitlines():
         codecs = re.search(r'CODECS="([^"]*)"', linea) if linea.startswith('#EXT-X-STREAM-INF') else None
-        if codecs:
-            for parte in codecs.group(1).split(','):
-                parte = parte.strip()
-                for prefijo, codec in _PREFIJOS_HLS:
-                    if parte.lower().startswith(prefijo):
-                        if _perfil_hls(parte, codec) in _PERFILES_10_BITS.get(codec, ()):
-                            return f'{codec}_10'
-                        return codec
-            return ''
-    return ''
+        codec = _codec_de_la_calidad(codecs.group(1)) if codecs else ''
+        if codec:
+            encontrados.append(codec)
+    orden = {codec: posicion for posicion, codec in enumerate(CODECS_DEL_MAS_COMPATIBLE)}
+    return min(encontrados, key=lambda c: orden.get(c, len(orden)), default='')
 
 
 def _duracion_del_ultimo(texto):
