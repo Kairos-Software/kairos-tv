@@ -40,6 +40,14 @@ Todo pasa por `abrirPantalla` (`movil/componentes.dart`), por donde el celular a
 - La tele pide su propio catálogo. Favoritos y "Continuar viendo" son los de la cuenta, en el servidor. La tele guarda su copia aparte en el aparato (`<cuenta>~tele`) para no pisar la del celular. Lo que se mira en la tele aparece en el celular unos segundos después.
 - **El video no pasa por el servidor.** Lo baja y lo decodifica el celular, y Android se lo manda a la tele. Sin cable, la calidad depende del WiFi: puede haber un poco de demora o pixelado, y el celular gasta más batería.
 
+## Para que ande mejor (PantallaTele.kt)
+
+- **Calidad:** el celular baja el canal y a la vez manda la imagen a la tele por el mismo WiFi. Por eso, mientras hay tele, el video no pasa de **720p** y después de un corte junta 8 s antes de seguir (`KairosTele`, ver `paquetes/README.md`). Lo que más ayuda además: un router en **5 GHz** y el celular cerca de la tele. Con un cable USB-C a HDMI no hay ese problema.
+- **Volumen:** con la tele, el sonido sale solo por la tele y depende del volumen del celular. Al conectarse lo sube al máximo, y al desconectarse lo devuelve como estaba. El volumen se maneja con el control de la tele.
+- **Privacidad:** con el permiso **"Mostrar sobre otras apps"**, que se da una vez desde el ícono de la tele, la ventana de la app queda **fija en la tele**. La tele no muestra el celular ni mientras se elige la tele en los ajustes, ni al salir de la app (WhatsApp, fotos), y lo que se ve en la tele sigue andando. Sin el permiso anda igual, pero Android vuelve a mostrar el celular en la tele cuando la app no está adelante. Si el permiso se da con la tele ya conectada, la ventana pasa a ser fija al volver a la app (`alVolver`).
+- **Atrás** en el Inicio del celular no cierra la app mientras hay tele: la manda al fondo (`MainActivity.popSystemNavigator`). Si se cerrara, la tele volvería a mostrar el celular.
+- Lo que **no** se puede desde la app: conectarse sin abrir la función de la tele (en la Kanji, Screencast), porque la tele solo escucha mientras está abierta, y elegir la tele sin pasar por la lista de Android, porque Android no deja que una app se conecte sola.
+
 ## Archivos
 
 | Archivo | Qué es |
@@ -56,5 +64,6 @@ Tests: `test/tele_test.dart`. Simula el canal de Android, así que corre sin una
 
 - Si la tele **cambia de canal o de capítulo sola** (con su guía o con "siguiente capítulo"), el celular sigue mostrando el nombre anterior.
 - Si se conecta la tele **mientras una película se está viendo en el celular**, sigue en el celular. Los canales en vivo sí pasan solos a la tele.
-- Al **salir de la app** (ir a WhatsApp), Android puede volver a mostrar el celular en la tele. Depende de cada marca.
+- Sin el permiso "Mostrar sobre otras apps", al **salir de la app** Android vuelve a mostrar el celular en la tele.
+- Con la pantalla del celular **apagada o bloqueada**, la tele muestra lo que decida Android (suele ser un reloj).
 - YouTube oficial en la tele usa el WebView de Android en la segunda pantalla. Si en algún celular no anda, se sabe recién probándolo.

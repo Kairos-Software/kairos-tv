@@ -19,20 +19,24 @@ import '../movil/estilo.dart';
 import 'enlace.dart';
 
 /// El ícono de la tele en la barra de arriba: celeste si está conectada.
-/// Sin tele, tocarlo abre directo la lista de teles de Android (si este
-/// celular no deja abrirla desde una app, explica cómo); conectada, con cuál
-/// está y "Desconectar".
+///
+/// Sin tele, tocarlo abre directo la lista de teles de Android. Antes, la
+/// primera vez, pide el permiso para que la tele muestre SOLO la app (nunca el
+/// celular). Si este celular no deja abrir la lista desde una app, explica
+/// cómo abrirla. Con la tele conectada, muestra con cuál está y "Desconectar".
 class BotonTele extends StatelessWidget {
   const BotonTele({super.key});
 
   Future<void> _alTocar(BuildContext context) async {
-    if (!Tele.instancia.conectada && await Tele.instancia.conectar()) return;
+    final tele = Tele.instancia;
+    if (!tele.conectada && await tele.puedeQuedarFija() && await tele.conectar()) return;
     if (!context.mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Tono.capaBaja,
       showDragHandle: true,
-      builder: (_) => _HojaTele(sinAjustes: !Tele.instancia.conectada),
+      isScrollControlled: true,
+      builder: (_) => const _HojaTele(),
     );
   }
 
@@ -56,23 +60,47 @@ class BotonTele extends StatelessWidget {
   }
 }
 
-/// Cómo conectar la tele (o con cuál está conectado).
+/// Cómo conectar la tele (o con cuál está conectado), y el permiso para que
+/// la tele muestre solo la app.
 class _HojaTele extends StatefulWidget {
-  const _HojaTele({this.sinAjustes = false});
-
-  /// Ya se probó abrir la lista de teles de Android y este celular no deja.
-  final bool sinAjustes;
+  const _HojaTele();
 
   @override
   State<_HojaTele> createState() => _HojaTeleState();
 }
 
 class _HojaTeleState extends State<_HojaTele> {
-  late bool _sinAjustes = widget.sinAjustes;
+  /// null = todavía no se sabe (se pregunta al abrir y al volver de los ajustes de Android).
+  bool? _fija;
+  bool _sinAjustes = false;
+  AppLifecycleListener? _ciclo;
 
-  Future<void> _abrirAjustes() async {
+  @override
+  void initState() {
+    super.initState();
+    _mirarPermiso();
+    _ciclo = AppLifecycleListener(onResume: _mirarPermiso);
+  }
+
+  @override
+  void dispose() {
+    _ciclo?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _mirarPermiso() async {
+    final fija = await Tele.instancia.puedeQuedarFija();
+    if (mounted) setState(() => _fija = fija);
+  }
+
+  Future<void> _elegirTele() async {
     final pudo = await Tele.instancia.conectar();
-    if (mounted) setState(() => _sinAjustes = !pudo);
+    if (!mounted) return;
+    if (pudo) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _sinAjustes = true);
+    }
   }
 
   @override
@@ -81,8 +109,9 @@ class _HojaTeleState extends State<_HojaTele> {
       listenable: Tele.instancia,
       builder: (context, _) {
         final tele = Tele.instancia;
+        final sinPermiso = _fija == false;
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(Espacio.lg, 0, Espacio.lg, Espacio.lg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -107,6 +136,7 @@ class _HojaTeleState extends State<_HojaTele> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                if (sinPermiso) ...[const _Permiso(), const SizedBox(height: Espacio.lg)],
                 if (tele.conectada) ...[
                   const Text(
                     'Lo que elijas acá se ve en la tele, con su diseño de TV. Lo que reproduzcas también: '
@@ -115,32 +145,39 @@ class _HojaTeleState extends State<_HojaTele> {
                   ),
                   const SizedBox(height: Espacio.lg),
                   OutlinedButton.icon(
-                    onPressed: _abrirAjustes,
+                    onPressed: Tele.instancia.conectar,
                     icon: const Icon(Icons.cancel_presentation_rounded),
                     label: const Text('Desconectar'),
                   ),
                 ] else ...[
-                  const Text(
-                    'La app se ve en la tele con su diseño de TV y la manejás desde el celular. '
-                    'En la tele no aparece nada más del teléfono.',
-                    style: Letra.cuerpo,
+                  const _Paso(
+                    numero: '1',
+                    texto:
+                        'En la tele, abrí la función para recibir la pantalla del celular (en una Kanji: '
+                        'Screencast; en otras: Screen Mirroring o Duplicar pantalla).',
                   ),
-                  const SizedBox(height: 16),
-                  const _Paso(numero: '1', texto: 'El celular y la tele en el mismo WiFi (o un cable USB-C a HDMI).'),
                   const _Paso(
                     numero: '2',
                     texto:
-                        'Tocá "Elegir la tele" y elegí la tuya. En tu celular puede llamarse '
-                        'Transmitir, Smart View o Duplicar pantalla.',
+                        'Tocá "Elegir la tele" y elegí la tuya. Si no aparece, en el menú ⋮ tildá '
+                        '"Habilitar pantalla inalámbrica".',
                   ),
                   const _Paso(numero: '3', texto: 'Volvé a Kairos TV: cuando la tele muestra el logo, ya está.'),
                   const SizedBox(height: Espacio.lg),
-                  BotonPrincipal(texto: 'Elegir la tele', icono: Icons.cast_rounded, alTocar: _abrirAjustes),
+                  if (sinPermiso)
+                    // Se puede igual, pero la tele va a mostrar el celular cuando no estés en la app
+                    OutlinedButton.icon(
+                      onPressed: _elegirTele,
+                      icon: const Icon(Icons.cast_rounded),
+                      label: const Text('Elegir la tele sin el permiso'),
+                    )
+                  else
+                    BotonPrincipal(texto: 'Elegir la tele', icono: Icons.cast_rounded, alTocar: _elegirTele),
                   if (_sinAjustes) ...[
                     const SizedBox(height: 12),
                     const Text(
-                      'Este celular no deja abrirlo desde acá: deslizá desde arriba de la pantalla y '
-                      'tocá Transmitir o Smart View.',
+                      'Este celular no deja abrir la lista desde acá: deslizá desde arriba de la pantalla y '
+                      'tocá Transmitir, Smart View o Duplicar pantalla.',
                       style: Letra.cuerpo,
                     ),
                   ],
@@ -150,6 +187,51 @@ class _HojaTeleState extends State<_HojaTele> {
           ),
         );
       },
+    );
+  }
+}
+
+/// "Que la tele muestre solo la app": el permiso "Mostrar sobre otras apps",
+/// una sola vez. Sin él, Android vuelve a mostrar el celular en la tele
+/// mientras no se está en la app (al elegir la tele, al abrir WhatsApp).
+class _Permiso extends StatelessWidget {
+  const _Permiso();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(Espacio.margen),
+      decoration: BoxDecoration(
+        color: Tono.capa,
+        borderRadius: BorderRadius.circular(Curva.tarjeta),
+        border: Border.all(color: Tono.celeste.withValues(alpha: .35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.lock_rounded, color: Tono.celeste, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Que la tele muestre solo la app',
+                  style: Letra.cuerpoGrande.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Así la tele nunca muestra tu celular: ni mientras elegís la tele, ni si salís de la app (WhatsApp, '
+            'fotos). Android pide un permiso una sola vez: en la pantalla que se abre, activá '
+            '"Permitir mostrar sobre otras apps" y volvé.',
+            style: Letra.cuerpo,
+          ),
+          const SizedBox(height: 14),
+          BotonPrincipal(texto: 'Dar el permiso', icono: Icons.lock_rounded, alTocar: Tele.instancia.pedirQuedarFija),
+        ],
+      ),
     );
   }
 }

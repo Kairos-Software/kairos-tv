@@ -5,6 +5,10 @@
          versión nueva", ver lib/actualizacion.dart). La primera vez Android
          le pide a la persona que autorice "instalar apps de este origen". -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- "Ver en la tele" (lib/tele/, PantallaTele.kt): con este permiso ("Mostrar
+         sobre otras apps", lo da la persona una vez) la app queda fija en la tele
+         aunque se salga de ella, así la tele nunca muestra el celular. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
     <!-- Android TV: la app también se instala en televisores. "required=false"
          = sirve en TV pero NO es obligatorio (sigue andando en celulares).

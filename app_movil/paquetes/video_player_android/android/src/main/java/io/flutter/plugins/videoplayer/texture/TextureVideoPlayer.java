@@ -15,6 +15,7 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import io.flutter.plugins.videoplayer.ExoPlayerEventListener;
+import io.flutter.plugins.videoplayer.KairosTele;
 import io.flutter.plugins.videoplayer.VideoAsset;
 import io.flutter.plugins.videoplayer.VideoPlayer;
 import io.flutter.plugins.videoplayer.VideoPlayerCallbacks;
@@ -60,14 +61,9 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
           ExoPlayer.Builder builder = new ExoPlayer.Builder(context);
           // Kairos TV: junta 5 segundos de video antes de arrancar (y antes de
           // seguir después de un corte), en vez de los 2,5 s de fábrica. Así un
-          // microcorte de la señal no se nota. Ver ../../README.md.
-          DefaultLoadControl.Builder kairosBuffer =
-              new DefaultLoadControl.Builder()
-                  .setBufferDurationsMs(
-                      DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
-                      DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
-                      /* bufferForPlaybackMs= */ 5000,
-                      /* bufferForPlaybackAfterRebufferMs= */ 5000);
+          // microcorte de la señal no se nota. Con una tele conectada, más
+          // después de un corte (KairosTele). Ver ../../README.md.
+          DefaultLoadControl.Builder kairosBuffer = KairosTele.buffer();
           builder.setLoadControl(kairosBuffer.build());
           if (options.backBufferDurationMs != null) {
             if (options.backBufferDurationMs < 0) {
@@ -90,8 +86,11 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
           // Kairos TV: si el video trae varios audios, arranca con el español
           // (de fábrica usa el que el archivo marca como principal, que suele
           // ser el idioma original). Si no trae español, sigue igual. Ver ../../README.md.
-          trackSelector.setParameters(
-              trackSelector.buildUponParameters().setPreferredAudioLanguages("es").build());
+          // Con una tele conectada, el video no pasa de 720p (KairosTele).
+          androidx.media3.exoplayer.trackselection.DefaultTrackSelector.Parameters.Builder
+              kairosParametros = trackSelector.buildUponParameters().setPreferredAudioLanguages("es");
+          KairosTele.aplicarTope(kairosParametros);
+          trackSelector.setParameters(kairosParametros.build());
           builder
               .setTrackSelector(trackSelector)
               .setMediaSourceFactory(asset.getMediaSourceFactory(context));

@@ -69,6 +69,20 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         preferirEspanol()   // Android lo vuelve al del sistema si cambió la configuración
         super.onResume()
+        pantallaTele?.alVolver()
+    }
+
+    /**
+     * "Atrás" en el Inicio del celular cierra la app. Con una tele conectada,
+     * en cambio, la manda al fondo: si se cerrara, la tele dejaría de mostrar
+     * la app y volvería a mostrar el celular.
+     */
+    override fun popSystemNavigator(): Boolean {
+        if (pantallaTele?.conectada == true) {
+            moveTaskToBack(true)
+            return true
+        }
+        return super.popSystemNavigator()
     }
 
     private fun esTv(): Boolean =

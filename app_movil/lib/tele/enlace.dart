@@ -134,6 +134,28 @@ class Tele extends ChangeNotifier {
     }
   }
 
+  /// ¿Está dado el permiso para que la tele muestre solo la app, siempre? ("Mostrar sobre otras apps", PantallaTele.kt)
+  Future<bool> puedeQuedarFija() async {
+    try {
+      return await _canal.invokeMethod<bool>('puedeQuedarFija') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Abre la pantalla de Android para dar ese permiso (vuelve sola a la app con "Atrás").
+  Future<void> pedirQuedarFija() async {
+    try {
+      await _canal.invokeMethod<bool>('pedirQuedarFija');
+    } on MissingPluginException {
+      // Fuera de Android
+    } on PlatformException {
+      // Idem
+    }
+  }
+
   /// Un botón del control remoto ('ok', 'pausa', 'izquierda', 'canalMas'...: ver PantallaTele.kt).
   void tecla(String tecla) => _invocar('tecla', {'tecla': tecla});
 
