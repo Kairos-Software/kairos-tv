@@ -147,6 +147,12 @@ class TraerDeYoutubeForm(EstiloBootstrapMixin, forms.Form):
                   'temporada es una lista aparte, traé cada una con su link eligiendo la misma serie. La app '
                   'muestra la serie cuando tiene la temporada 1.',
     )
+    segun_titulo = forms.BooleanField(
+        label='Cada video va a la temporada y al capítulo que dice su título', required=False,
+        help_text='Para canales con todas las temporadas mezcladas (Casi Ángeles: «Temporada 3 Capitulo 33» va a la '
+                  'temporada 3, capítulo 33). La temporada de arriba queda para los que no dicen la suya; los que no '
+                  'dicen su número van al final. Sin marcar, se numeran del más viejo al más nuevo.',
+    )
     seccion_destino = forms.ChoiceField(
         label='Sección', required=False,
         help_text='Películas, o una sección que creaste (Música...).',

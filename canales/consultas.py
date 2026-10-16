@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from django.db.models import Case, Count, Exists, F, OuterRef, Prefetch, Q, Value, When
 from django.utils import timezone
 
-from . import clasificar, imagenes, secciones
+from . import clasificar, imagenes, secciones, youtube
 from .models import (CORTES_POR_HORA_TOLERABLES, MINIMO_VISTO_PARA_JUZGAR, PROPORCION_PANTALLA_COMPLETA,
                      VELOCIDAD_SOBRADA, Canal, Categoria, Contenido, Fuente, Importacion)
 
@@ -474,6 +474,22 @@ def ultimas_importaciones(limite=10):
 
 # ── Catálogo: todos los canales, como los ve la app ──────────────────
 
+def _buscar(texto):
+    """
+    Lo que encuentra el buscador: el nombre o el ID de guía. Pegando el link
+    de un video de YouTube (o su ID), lo que lo tenga como señal; pegando
+    cualquier otro link, lo que tenga esa señal. Así se encuentra dónde quedó
+    algo que una importación dice que "ya estaba".
+    """
+    texto = texto.strip()
+    video = youtube.id_de_video(texto)
+    if video:
+        return Q(tvg_id=video) | Q(pk__in=Fuente.objects.filter(url__contains=video).values('canal'))
+    if '://' in texto:
+        return Q(pk__in=Fuente.objects.filter(url=texto).values('canal'))
+    return Q(nombre__icontains=texto) | Q(tvg_id__icontains=texto)
+
+
 def catalogo(texto='', categoria='', idioma='', estado='', sin_logo=False, origen='', contenido=''):
     """
     Todos los canales con sus números (cuántas fuentes, cuántas andan) y si
@@ -496,7 +512,7 @@ def catalogo(texto='', categoria='', idioma='', estado='', sin_logo=False, orige
         .order_by(*ORDEN_DE_CATEGORIAS, 'orden', 'nombre')
     )
     if texto:
-        canales = canales.filter(Q(nombre__icontains=texto) | Q(tvg_id__icontains=texto))
+        canales = canales.filter(_buscar(texto))
     if categoria == 'ninguna':
         canales = canales.filter(categoria__isnull=True)
     elif categoria:

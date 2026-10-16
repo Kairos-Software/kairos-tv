@@ -55,7 +55,8 @@
     </div>
     <div class="ds-paso">
         <p class="ds-paso-titulo"><span>3</span> Temporadas</p>
-        <small class="texto-suave">Abajo, en cada temporada: tildá capítulos y «pasarlos a» otra temporada (o a una nueva).</small>
+        <a href="{% url 'canales:serie_por_titulos' %}?nombre={{ serie.nombre|urlencode }}" class="btn btn-sm btn-outline-secondary align-self-start"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i> Ordenar todo según los títulos</a>
+        <small class="texto-suave">Si los títulos dicen «Temporada 3 Capítulo 33», reparte todos de una vez (primero ves cómo quedaría). A mano: en cada temporada, tildá capítulos y «pasarlos a» otra.</small>
         <a href="{{ agregar_de_youtube }}&amp;temporada={{ temporada_nueva }}" class="small"><i class="bi bi-youtube" aria-hidden="true"></i> Traer la temporada {{ temporada_nueva }} desde YouTube</a>
     </div>
     <div class="serie-datos-acciones">
@@ -65,7 +66,7 @@
 {% endif %}
 <div class="temporadas-lista">
     {% for numero, capitulos, orden in serie.temporadas_ordenadas %}
-    <details class="temporada" id="temporada-{{ numero }}" {% if forloop.first or orden.desordenada %}open{% endif %}>
+    <details class="temporada" id="temporada-{{ numero }}" {% if forloop.first or orden.desordenada or orden.de_otra_temporada %}open{% endif %}>
         <summary>
             <span><i class="bi bi-chevron-right" aria-hidden="true"></i> Temporada {{ numero }}</span>
             <span class="texto-suave">{{ capitulos|length }} capítulo{{ capitulos|length|pluralize }}</span>
@@ -75,7 +76,13 @@
             {% csrf_token %}
             <input type="hidden" name="nombre" value="{{ serie.nombre }}">
             <input type="hidden" name="temporada" value="{{ numero }}">
-            {% if orden.desordenada %}
+            {% if orden.de_otra_temporada %}
+            <div class="orden-aviso" role="status">
+                <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                <span><strong>{{ orden.de_otra_temporada }}</strong> capítulo{{ orden.de_otra_temporada|pluralize }} de acá {{ orden.de_otra_temporada|pluralize:"dice,dicen" }} en el título que {{ orden.de_otra_temporada|pluralize:"es,son" }} de otra temporada (pasa con lo que vino mezclado de YouTube).</span>
+                <a href="{% url 'canales:serie_por_titulos' %}?nombre={{ serie.nombre|urlencode }}" class="btn btn-primary btn-sm">Ordenar todo según los títulos</a>
+            </div>
+            {% elif orden.desordenada %}
             <div class="orden-aviso" role="status">
                 <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
                 <span>Parece que están <strong>desordenados</strong>: el número que dice cada título no va en orden.</span>
@@ -84,7 +91,7 @@
             {% endif %}
             <p class="orden-ayuda">
                 {% if capitulos|length > 1 %}<i class="bi bi-grip-vertical" aria-hidden="true"></i> Para cambiar el orden, <strong>arrastrá</strong> un capítulo de los puntitos o usá las <strong>flechas</strong>. Después tocá <strong>Guardar orden</strong>.{% endif %}
-                Para pasar capítulos a otra temporada, <strong>tildalos</strong> (con Shift elegís varios seguidos).
+                Para pasar capítulos a otra temporada o eliminarlos, <strong>tildalos</strong> (con Shift elegís varios seguidos).
                 <a href="{{ agregar_de_youtube }}&amp;temporada={{ numero }}" class="temporada-agregar"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar capítulos a la temporada {{ numero }} desde YouTube</a>
             </p>
             <div class="temporada-mover" data-mover-barra hidden>
@@ -95,6 +102,9 @@
                     <option value="{{ temporada_nueva }}">＋ una temporada nueva: la {{ temporada_nueva }}</option>
                 </select>
                 <button type="submit" class="btn btn-sm btn-primary" formaction="{% url 'canales:serie_temporada' %}">Pasar</button>
+                <span class="texto-suave small">o</span>
+                <button type="submit" class="btn btn-sm btn-outline-danger" formaction="{% url 'canales:serie_eliminar_capitulos' %}"
+                        data-confirmar="¿Eliminar los capítulos elegidos? Desaparecen del panel y de la app (se recuperan en «Eliminados»). Los que quedan en la temporada {{ numero }} se renumeran sin huecos."><i class="bi bi-trash" aria-hidden="true"></i> Eliminarlos</button>
                 <span class="texto-suave small">Los que quedan en la {{ numero }} se renumeran sin huecos.</span>
             </div>
         {% endif %}
@@ -182,6 +192,10 @@ document.querySelectorAll('form[data-orden]').forEach(function (form) {
         var elegidos = casillas().filter(function (c) { return c.checked; }).length;
         barra.hidden = !elegidos;
         cuenta.textContent = elegidos === 1 ? '1 capítulo elegido:' : elegidos + ' capítulos elegidos:';
+        barra.querySelectorAll('[data-confirmar]').forEach(function (boton) {
+            boton.dataset.confirmar = boton.dataset.confirmar.replace(/^¿Eliminar [^?]*\?/,
+                elegidos === 1 ? '¿Eliminar el capítulo elegido?' : '¿Eliminar los ' + elegidos + ' capítulos elegidos?');
+        });
     }
     form.addEventListener('click', function (evento) {
         var casilla = evento.target.closest('.cap-elegir');

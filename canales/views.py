@@ -22,7 +22,6 @@ vez a las direcciones ".../lote/" (responden JSON) y va mostrando el avance.
 """
 
 import json
-import re
 from functools import partial
 from urllib.parse import quote, urlencode
 
@@ -116,6 +115,7 @@ def traer_de_youtube(request):
             importacion = servicios.crear_importacion_de_youtube(
                 listado, request.user, categoria=form.categoria(), serie=form.serie(),
                 temporada=datos.get('temporada') or 1, seccion=form.seccion(),
+                segun_titulo=bool(form.serie() and datos.get('segun_titulo')),
                 minimo_minutos=datos['minimo_minutos'], maximo_minutos=datos.get('maximo_minutos'),
                 solo_espanol=datos['solo_espanol'])
             return redirect(f'{importacion_url(importacion)}?empezar=1')
@@ -772,7 +772,7 @@ def serie_detalle(request):
         for capitulo in capitulos:
             capitulo.no_se_ve = consultas.por_que_no_se_ve(capitulo.canal)
             capitulo.numero_en_el_titulo = _numero_en_el_titulo(capitulo.titulo)
-        serie.temporadas_ordenadas.append((numero, capitulos, _como_esta_el_orden(capitulos)))
+        serie.temporadas_ordenadas.append((numero, capitulos, _como_esta_el_orden(capitulos, numero)))
 
     numeros = serie.numeros_de_temporada
     return render(request, 'canales/serie_detalle.html', {
@@ -811,6 +811,58 @@ def serie_editar(request):
     return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}")
 
 
+@requiere_permiso('importar_canales')
+def serie_por_titulos(request):
+    """
+    Ordenar TODA la serie según lo que dice cada título ("Temporada 3 Capítulo 33" -> T3 E33): primero se ve
+    cómo quedaría (temporadas, qué cambia, los que no dicen su número o lo repiten) y después se aplica.
+    """
+    datos = request.POST if request.method == 'POST' else request.GET
+    nombre = datos.get('nombre', '').strip()
+    de_corrido = datos.get('de_corrido') == '1'
+    pagina = f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}"
+    if request.method == 'POST':
+        cantidad = organizar.ordenar_por_titulos(nombre, de_corrido, request.user)
+        messages.success(request, f'Listo: {cantidad} capítulo(s) cambiaron de temporada o de número.' if cantidad
+                         else 'Ya estaba así: no cambió nada.')
+        if not organizar.ultimo_capitulo(nombre, 1) or organizar.plan_por_titulos(nombre).falta_el_1:
+            messages.warning(request, 'Ojo: la temporada 1 no arranca en el capítulo 1 y la app no muestra la serie '
+                                      'así. Volvé a «Ordenar según los títulos» y marcá «Numerar de corrido».')
+        return redirect(pagina)
+    plan = organizar.plan_por_titulos(nombre, de_corrido)
+    if not plan.capitulos:
+        raise Http404('No se encontró la serie.')
+    cambian = plan.cambian
+    return render(request, 'canales/serie_titulos.html', {
+        'nombre': nombre, 'plan': plan, 'cambian': cambian, 'mostrados': cambian[:400],
+        'de_corrido': de_corrido, 'pagina_de_la_serie': pagina,
+    })
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def serie_eliminar_capitulos(request):
+    """Elimina los capítulos elegidos de una serie (la temporada se renumera sin huecos)."""
+    nombre = request.POST.get('nombre', '').strip()
+    pagina = f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}"
+    try:
+        cantidad = organizar.eliminar_capitulos(nombre, request.POST.getlist('elegido'), request.user)
+    except organizar.NoSePuede as error:
+        messages.error(request, str(error))
+        return redirect(pagina)
+    if not organizar.capitulos_de([nombre]).exists():
+        imagenes.poner_portada(nombre, '')   # se fue entera: la portada no queda suelta
+        messages.success(request, f'Se eliminaron {cantidad} capítulo(s): eran todos, la serie ya no está. Si fue '
+                                  f'un error, se recupera en «Eliminados».')
+        return redirect(f"{reverse('canales:organizar')}?contenido={Contenido.SERIE}")
+    messages.success(request, f'Se eliminaron {cantidad} capítulo(s) y los que quedan se renumeraron sin huecos. Si '
+                              f'fue un error, se recuperan en «Eliminados».')
+    if not organizar.ultimo_capitulo(nombre, 1):
+        messages.warning(request, 'Ojo: la temporada 1 quedó vacía. La app muestra la serie recién cuando tiene '
+                                  'su temporada 1.')
+    return redirect(pagina)
+
+
 @require_POST
 @requiere_permiso('importar_canales')
 def serie_temporada(request):
@@ -830,17 +882,19 @@ def serie_temporada(request):
     return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}#temporada-{destino}")
 
 
-def _como_esta_el_orden(capitulos):
+def _como_esta_el_orden(capitulos, temporada):
     """
     {'desordenada': True} si la mayoría de los títulos dicen su número
     ("Capítulo 12") y no van en orden: la página lo avisa y ofrece ordenarlos.
+    'de_otra_temporada': cuántos dicen en el título que son de OTRA temporada
+    ("Temporada 3 Capitulo 33" en la 1: vino mezclado de YouTube). Ahí ordenar
+    esta temporada no alcanza: la página ofrece "Ordenar todo según los títulos".
     """
     numeros = [c.numero_en_el_titulo for c in capitulos if c.numero_en_el_titulo is not None]
     alcanza = len(capitulos) > 1 and len(numeros) >= len(capitulos) / 2
-    return {'desordenada': alcanza and numeros != sorted(numeros)}
-
-
-_NUMERO_AL_PRINCIPIO = re.compile(r'^\s*#?(\d{1,4})\b')
+    de_otra = sum(1 for c in capitulos if (organizar.temporada_y_numero_del_titulo(c.titulo) or (0, 0))[0]
+                  not in (0, temporada))
+    return {'desordenada': alcanza and numeros != sorted(numeros), 'de_otra_temporada': de_otra}
 
 
 def _numero_en_el_titulo(titulo):
@@ -848,11 +902,8 @@ def _numero_en_el_titulo(titulo):
     El número de capítulo que dice el título ("Capítulo 12", "EP 12", "12 - El
     regreso"), para el botón "Por el número del título" (None si no dice).
     """
-    numero = youtube.numero_de_capitulo(titulo)
-    if numero:
-        return numero[1]
-    al_principio = _NUMERO_AL_PRINCIPIO.match(titulo or '')
-    return int(al_principio.group(1)) if al_principio else None
+    dice = organizar.temporada_y_numero_del_titulo(titulo)
+    return dice[1] if dice else None
 
 
 @require_POST

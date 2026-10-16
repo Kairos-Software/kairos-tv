@@ -4,7 +4,7 @@
     ranking de revendedores; el revendedor, solo lo suyo. Diseño provisorio
     (tablas): los gráficos vienen con el diseño nuevo del panel.
 {% endcomment %}
-{% load humanize %}
+{% load humanize static %}
 
 {% block titulo %}Estadísticas{% endblock %}
 {% block clase_body %}pagina-listado pagina-estadisticas-reventa{% endblock %}
@@ -126,3 +126,5 @@
 </section>
 {% endif %}
 {% endblock %}
+
+{% block scripts %}<script src="{% static 'js/tablas_anchas.js' %}"></script>{% endblock %}

@@ -384,6 +384,10 @@ class Importacion(models.Model):
     # Los números definitivos se ponen al terminar de probar (servicios._numerar_capitulos).
     serie = models.CharField('serie', max_length=90, blank=True)
     temporada = models.PositiveSmallIntegerField(default=1)
+    # Cada video va a la temporada y al capítulo que dice su título ("Temporada 3
+    # Capítulo 33"); `temporada` queda para los que no dicen la suya. Para canales
+    # con todas las temporadas mezcladas (ver servicios._numerar_capitulos).
+    segun_titulo = models.BooleanField('según el título', default=False)
     # Todo lo importado va a esta sección nueva (Música, Radio...; '' = cada
     # cosa a la fija que le toca: En vivo, Películas o Series)
     seccion = models.CharField('sección', max_length=10, blank=True)

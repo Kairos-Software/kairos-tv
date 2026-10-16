@@ -10,6 +10,7 @@ from django.urls import reverse
 from canales import consultas, organizar
 from canales.forms import TraerDeYoutubeForm
 from canales.models import Canal, Categoria, Contenido, Fuente
+from canales.servicios import importar_m3u
 from usuarios.models import Usuario
 
 
@@ -168,3 +169,123 @@ class PaginaDeLaSerieTests(TestCase):
             'canal': [otra.pk], 'contenido': 'serie', 'nombre_serie': 'Charlie', 'temporada': '1'}, follow=True)
         otra.refresh_from_db()
         self.assertEqual((otra.nombre, otra.categoria), ('Charlie S01 E04 Video suelto', self.disney))
+
+
+class EliminarCapitulosTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(Usuario.objects.create_superuser('admin', 'admin@test.com', 'x'))
+        # Importados de una lista: así, al recuperarlos, sus señales se rearman con el informe
+        importar_m3u('#EXTM3U\n' + ''.join(f'#EXTINF:-1 group-title="Disney",Charlie S01 E0{n} Cap {n}\n'
+                                           f'https://x/charlie{n}.m3u8\n' for n in range(1, 6)), 'lista.m3u')
+        Canal.objects.update(contenido=Contenido.SERIE)
+        self.caps = {n: Canal.objects.get(nombre=f'Charlie S01 E0{n} Cap {n}') for n in range(1, 6)}
+
+    def test_eliminar_renumera_sin_huecos(self):
+        # Sin el capítulo 1 la temporada arrancaba en el 2 y la app escondía la serie
+        organizar.eliminar_capitulos('Charlie', [self.caps[1].pk, self.caps[3].pk])
+        self.assertEqual(_nombres(), ['Charlie S01 E01 Cap 2', 'Charlie S01 E02 Cap 4', 'Charlie S01 E03 Cap 5'])
+        self.assertTrue(consultas.series()[0].completa)
+
+    def test_al_recuperarlos_vuelven_a_su_lugar(self):
+        organizar.eliminar_capitulos('Charlie', [self.caps[1].pk, self.caps[3].pk])
+        resultado = organizar.restaurar_eliminados(organizar.eliminados_recientes()[0].muestra)
+        self.assertEqual(resultado.restaurados, 2)
+        self.assertEqual(_nombres(), [f'Charlie S01 E0{n} Cap {n}' for n in range(1, 6)])
+
+    def test_solo_los_de_esa_serie(self):
+        otra = Canal.objects.create(nombre='Otra S01 E01', contenido=Contenido.SERIE)
+        with self.assertRaises(organizar.NoSePuede):
+            organizar.eliminar_capitulos('Charlie', [otra.pk])
+
+    def test_desde_la_pagina_de_la_serie(self):
+        pagina = self.client.get(reverse('canales:serie_detalle'), {'nombre': 'Charlie'})
+        self.assertContains(pagina, 'Eliminarlos')
+        respuesta = self.client.post(reverse('canales:serie_eliminar_capitulos'), {
+            'nombre': 'Charlie', 'elegido': [self.caps[5].pk]}, follow=True)
+        self.assertContains(respuesta, 'Se eliminaron 1 capítulo(s)')
+        self.assertEqual(len(_nombres()), 4)
+
+    def test_si_eran_todos_vuelve_a_series(self):
+        respuesta = self.client.post(reverse('canales:serie_eliminar_capitulos'), {
+            'nombre': 'Charlie', 'elegido': [c.pk for c in self.caps.values()]}, follow=True)
+        self.assertContains(respuesta, 'eran todos, la serie ya no está')
+        self.assertEqual(respuesta.request['PATH_INFO'], reverse('canales:organizar'))
+
+
+class OrdenarPorTitulosTests(TestCase):
+    """Lo que vino mezclado de YouTube (numerado por fecha, todo en la temporada 1) se reparte según los títulos."""
+
+    def setUp(self):
+        self.client.force_login(Usuario.objects.create_superuser('admin', 'admin@test.com', 'x'))
+        titulos = ['Temporada 2 Capitulo 1 La vuelta', 'Temporada 1 Capitulo 2 Segundo', 'Temporada 1 Capitulo 1 Inicio',
+                   'Temporada 2 Capitulo 2 Final', 'Especial de Navidad', 'Temporada 1 Capitulo 2 Segundo (otra subida)']
+        for numero, titulo in enumerate(titulos, start=1):
+            _capitulo(f'Casi Angeles S01 E{numero:02d} {titulo}')
+
+    def test_el_plan_reparte_y_avisa(self):
+        plan = organizar.plan_por_titulos('Casi Angeles')
+        self.assertEqual([(c.despues, c.titulo, c.problema) for c in plan.capitulos], [
+            ((1, 1), 'Temporada 1 Capitulo 1 Inicio', ''),
+            ((1, 2), 'Temporada 1 Capitulo 2 Segundo', ''),
+            ((1, 3), 'Temporada 1 Capitulo 2 Segundo (otra subida)', 'repetido'),   # al final, para revisar
+            ((1, 4), 'Especial de Navidad', 'sin_numero'),
+            ((2, 1), 'Temporada 2 Capitulo 1 La vuelta', ''),
+            ((2, 2), 'Temporada 2 Capitulo 2 Final', ''),
+        ])
+        self.assertEqual(plan.temporadas, [(1, 4, 1, 4), (2, 2, 1, 2)])
+        self.assertFalse(plan.falta_el_1)
+        self.assertEqual(_nombres()[0], 'Casi Angeles S01 E01 Temporada 2 Capitulo 1 La vuelta')   # todavía nada
+
+    def test_aplicar(self):
+        self.assertEqual(organizar.ordenar_por_titulos('Casi Angeles'), 5)   # el T1 C2 ya estaba en su lugar
+        self.assertIn('Casi Angeles S02 E01 Temporada 2 Capitulo 1 La vuelta', _nombres())
+        self.assertIn('Casi Angeles S01 E01 Temporada 1 Capitulo 1 Inicio', _nombres())
+        self.assertEqual(organizar.ordenar_por_titulos('Casi Angeles'), 0)   # ya quedó así
+
+    def test_con_huecos_y_de_corrido(self):
+        Canal.objects.filter(nombre__contains='Capitulo 1 Inicio').delete()
+        plan = organizar.plan_por_titulos('Casi Angeles')
+        self.assertTrue(plan.falta_el_1)   # la temporada 1 arrancaría en el 2: la app no la mostraría
+        corrido = organizar.plan_por_titulos('Casi Angeles', de_corrido=True)
+        self.assertFalse(corrido.falta_el_1)
+        self.assertEqual([c.despues for c in corrido.de_la_temporada(1)], [(1, 1), (1, 2), (1, 3)])
+
+    def test_la_pagina_muestra_y_despues_aplica(self):
+        url = reverse('canales:serie_por_titulos')
+        pagina = self.client.get(url, {'nombre': 'Casi Angeles'})
+        self.assertContains(pagina, 'Así quedaría')
+        self.assertContains(pagina, 'Aplicar: ordenar 5 capítulos')
+        self.assertContains(pagina, 'dicen un número que ya tiene otro')
+        self.assertEqual(_nombres()[0], 'Casi Angeles S01 E01 Temporada 2 Capitulo 1 La vuelta')   # mirar no cambia
+        respuesta = self.client.post(url, {'nombre': 'Casi Angeles'}, follow=True)
+        self.assertContains(respuesta, 'Listo: 5 capítulo(s) cambiaron')
+        self.assertIn('Casi Angeles S02 E02 Temporada 2 Capitulo 2 Final', _nombres())
+        serie = self.client.get(reverse('canales:serie_detalle'), {'nombre': 'Casi Angeles'})
+        self.assertContains(serie, 'Ordenar todo según los títulos')
+
+
+class TraerSegunElTituloTests(TestCase):
+
+    def setUp(self):
+        Categoria.objects.create(nombre='Juveniles', contenido=Contenido.SERIE)
+
+    def test_cada_video_a_su_temporada_y_capitulo(self):
+        from canales import servicios, youtube
+        from canales.verificacion import FUNCIONA, Resultado
+        _capitulo('Casi Angeles S03 E01 Temporada 3 Capitulo 1 Ya estaba')
+        titulos = ['Casi Angeles Temporada 3 Capitulo 33 UN LUGAR QUE SOLO NOSOTROS CONOCEMOS',
+                   'Casi Angeles Temporada 1 Capitulo 1 El comienzo', 'Casi Angeles Temporada 3 Capitulo 1 Repetido',
+                   'Casi Angeles Especial']
+        listado = youtube.Listado('Casi Angeles', [youtube.Video(f'casiangele{n}', titulo, 2867)
+                                                   for n, titulo in enumerate(titulos)])
+        importacion = servicios.crear_importacion_de_youtube(
+            listado, categoria='Juveniles', serie='Casi Angeles', temporada=2, minimo_minutos=40, segun_titulo=True)
+        servicios.procesar_lote(importacion, lambda fuentes, **_: {u: Resultado(FUNCIONA, tipo=t)
+                                                                   for u, t in fuentes.items()}, segundos=None)
+        servicios.cargar_lote(importacion)
+        nombres = _nombres()
+        self.assertIn('Casi Angeles S03 E33 Temporada 3 Capitulo 33 UN LUGAR QUE SOLO NOSOTROS CONOCEMOS', nombres)
+        self.assertIn('Casi Angeles S01 E01 Temporada 1 Capitulo 1 El comienzo', nombres)
+        self.assertIn('Casi Angeles S03 E34 Temporada 3 Capitulo 1 Repetido', nombres)   # el 1 ya estaba: al final
+        self.assertIn('Casi Angeles S02 E01 Especial', nombres)                          # no dice: la elegida

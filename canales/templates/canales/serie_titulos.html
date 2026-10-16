@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+    Ordenar TODA una serie según lo que dice cada título ("Temporada 3 Capítulo 33" -> T3 E33).
+    Primero se ve cómo quedaría y recién con "Aplicar" se cambia (views.serie_por_titulos ->
+    organizar.plan_por_titulos / ordenar_por_titulos).
+{% endcomment %}
+
+{% block titulo %}Ordenar según los títulos · {{ nombre }}{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado">
+    <a href="{{ pagina_de_la_serie }}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ nombre }}</a>
+    <h1 class="pagina-titulo">Ordenar según los títulos</h1>
+    <p class="pagina-bajada">Cada capítulo va a la temporada y al número que dice su título («Temporada 3 Capítulo 33» → temporada 3, capítulo 33). Primero mirá cómo quedaría; no cambia nada hasta que toques <strong>Aplicar</strong>.</p>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<div class="titulos-plan">
+    <section class="tarjeta titulos-resumen" aria-labelledby="titulos-quedaria">
+        <h2 class="tarjeta-titulo" id="titulos-quedaria">Así quedaría «{{ nombre }}»</h2>
+        {% if not plan.con_numero %}
+        <p class="estado-mal mb-0">Ningún título dice su número de capítulo («Capítulo 12», «T3 E5», «1x05»…): no hay de dónde sacar el orden. Ordenalos a mano en la página de la serie.</p>
+        {% else %}
+        <ul class="titulos-temporadas">
+            {% for temporada, cuantos, primero, ultimo in plan.temporadas %}
+            <li><strong>Temporada {{ temporada }}</strong> <span class="texto-suave">{{ cuantos }} capítulo{{ cuantos|pluralize }}{% if cuantos > 1 %} (del {{ primero }} al {{ ultimo }}){% endif %}</span></li>
+            {% endfor %}
+        </ul>
+        <p class="mb-0">{% if cambian %}Cambian <strong>{{ cambian|length }}</strong> de {{ plan.capitulos|length }} capítulos.{% else %}Ya está así: no cambiaría nada.{% endif %}</p>
+        {% endif %}
+    </section>
+
+    {% if plan.con_numero %}
+    {% if plan.falta_el_1 %}
+    <p class="titulos-aviso estado-mal" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+        La temporada 1 no arrancaría en el capítulo 1 (en YouTube falta, o el título dice otro número) y la app no muestra una serie así. Marcá <strong>Numerar de corrido</strong>.</p>
+    {% endif %}
+    {% if plan.repetidos %}
+    <details class="tarjeta titulos-problemas" open>
+        <summary><i class="bi bi-files" aria-hidden="true"></i> {{ plan.repetidos|length }} dicen un número que ya tiene otro: van al final de su temporada</summary>
+        <p class="texto-suave small">Suelen ser el mismo capítulo subido dos veces. Después, en la página de la serie, podés tildar el que sobra y eliminarlo.</p>
+        <ul>{% for c in plan.repetidos %}<li>T{{ c.despues.0 }} E{{ c.despues.1 }} · {{ c.titulo|default:c.canal.nombre }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+    {% if plan.sin_numero %}
+    <details class="tarjeta titulos-problemas">
+        <summary><i class="bi bi-question-circle" aria-hidden="true"></i> {{ plan.sin_numero|length }} no dicen su número: van al final de su temporada, en el orden de ahora</summary>
+        <ul>{% for c in plan.sin_numero|slice:":100" %}<li>T{{ c.despues.0 }} E{{ c.despues.1 }} · {{ c.titulo|default:c.canal.nombre }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+
+    <form method="get" class="tarjeta titulos-opciones">
+        <input type="hidden" name="nombre" value="{{ nombre }}">
+        <div class="form-check mb-0">
+            <input class="form-check-input" type="checkbox" name="de_corrido" value="1" id="de-corrido" {% if de_corrido %}checked{% endif %} onchange="this.form.submit()">
+            <label class="form-check-label" for="de-corrido"><strong>Numerar de corrido</strong> (1, 2, 3… sin huecos)</label>
+        </div>
+        <p class="texto-suave small mb-0">Sin marcar, cada uno lleva el número exacto de su título: si en YouTube falta el 12, después del 11 viene el 13 (y si más adelante traés el 12, entra en su lugar). Marcado, quedan seguidos en el mismo orden.</p>
+        <noscript><button type="submit" class="btn btn-sm btn-outline-secondary">Ver cómo quedaría</button></noscript>
+    </form>
+
+    {% if cambian %}
+    <form method="post" class="titulos-aplicar">
+        {% csrf_token %}
+        <input type="hidden" name="nombre" value="{{ nombre }}">
+        {% if de_corrido %}<input type="hidden" name="de_corrido" value="1">{% endif %}
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check2" aria-hidden="true"></i> Aplicar: ordenar {{ cambian|length }} capítulo{{ cambian|length|pluralize }}</button>
+        <a href="{{ pagina_de_la_serie }}" class="btn btn-link">Cancelar</a>
+    </form>
+
+    <section class="tarjeta" aria-labelledby="titulos-cambios">
+        <h2 class="tarjeta-titulo" id="titulos-cambios">Lo que cambia</h2>
+        <div class="table-responsive">
+            <table class="table tabla mb-0">
+                <thead><tr><th scope="col">Ahora</th><th scope="col">Quedaría</th><th scope="col">Título</th></tr></thead>
+                <tbody>
+                {% for c in mostrados %}
+                    <tr>
+                        <td class="dato texto-suave">T{{ c.antes.0 }} E{{ c.antes.1 }}</td>
+                        <td class="dato"><strong>T{{ c.despues.0 }} E{{ c.despues.1 }}</strong></td>
+                        <td>{{ c.titulo|default:c.canal.nombre }}{% if c.problema == 'repetido' %} <span class="chip chip-caida">repetido</span>{% elif c.problema == 'sin_numero' %} <span class="chip chip-pendiente">sin número</span>{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if cambian|length > mostrados|length %}<p class="texto-suave small mt-2 mb-0">Y {{ cambian|length|add:"-400" }} más (se ven los primeros 400).</p>{% endif %}
+    </section>
+    {% endif %}
+    {% endif %}
+</div>
+<link rel="stylesheet" href="{% static 'css/ordenar_capitulos.css' %}">
+{% endblock %}

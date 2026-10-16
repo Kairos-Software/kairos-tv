@@ -196,8 +196,18 @@ def crear_importacion(texto, archivo='', usuario=None, solo_espanol=False, desca
     return importacion
 
 
+def _donde_esta(video, nombre, contenido, activo):
+    """
+    'Ya está cargado (en Series; para verlo, buscá iUeAn7m2Il8 en Organizar) como «Casi Ángeles S01 E120 ...»'.
+    El ID va antes que el nombre: si el texto no entra en el motivo, se corta el nombre y no el ID.
+    """
+    quitado = ', quitado de la app' if not activo else ''
+    return (f'Ya está cargado (en {secciones.nombre(contenido)}{quitado}; para verlo, buscá {video.id} en Organizar) '
+            f'como «{nombre}».')[:200]
+
+
 def crear_importacion_de_youtube(listado, usuario=None, categoria='', minimo_minutos=40, solo_espanol=True,
-                                 serie='', temporada=1, maximo_minutos=None, seccion=''):
+                                 serie='', temporada=1, maximo_minutos=None, seccion='', segun_titulo=False):
     """
     Como crear_importacion, pero con los videos de un canal oficial de YouTube
     (youtube.videos_del_canal): cada video es una película, o un capítulo si
@@ -215,6 +225,9 @@ def crear_importacion_de_youtube(listado, usuario=None, categoria='', minimo_min
              que ya esté cargado. Los números definitivos se ponen al terminar
              de probar (_numerar_capitulos): así no quedan huecos por los que
              no pasan y siempre hay capítulo 1.
+      segun_titulo: (serie) cada video va a la temporada y al capítulo que
+             dice su título ("Temporada 3 Capítulo 33"); `temporada` es para
+             los que no dicen la suya. Para canales con todo mezclado.
     """
     if serie:
         serie = organizar.nombre_de_serie_valido(serie)
@@ -222,11 +235,13 @@ def crear_importacion_de_youtube(listado, usuario=None, categoria='', minimo_min
     archivo = f'YouTube: {listado.nombre}'[:150]
     importacion = Importacion.objects.create(
         archivo=archivo, usuario=usuario if getattr(usuario, 'pk', None) else None, solo_espanol=solo_espanol,
-        serie=serie, temporada=temporada, seccion='' if serie else seccion,
+        serie=serie, temporada=temporada, seccion='' if serie else seccion, segun_titulo=bool(serie and segun_titulo),
     )
     if serie:
         seccion = ''
-    ya_guardadas = set(Fuente.objects.values_list('url', flat=True))
+    # Lo que ya está cargado, y DÓNDE: "ya estaba" sin decir dónde parecía que el video no aparecía
+    ya_guardadas = {url: (nombre, contenido, activo) for url, nombre, contenido, activo in
+                    Fuente.objects.values_list('url', 'canal__nombre', 'canal__contenido', 'canal__activo')}
     vistas = set()
     # Una serie va en el orden de sus capítulos (posición 1 = el primero); películas, como vienen
     videos = youtube.en_orden_de_capitulos(listado) if serie else listado.videos
@@ -243,7 +258,7 @@ def crear_importacion_de_youtube(listado, usuario=None, categoria='', minimo_min
         if video.url in vistas:
             estado, motivo = Estado.REPETIDA, 'El mismo video aparece antes en este canal.'
         elif video.url in ya_guardadas:
-            estado, motivo = Estado.REPETIDA, 'Este video ya estaba cargado.'
+            estado, motivo = Estado.REPETIDA, _donde_esta(video, *ya_guardadas[video.url])
         elif not video.segundos:
             estado, motivo = Estado.DESCARTADA, 'No se sabe cuánto dura (puede ser un vivo o un estreno programado).'
         elif video.segundos < minimo_minutos * 60:
@@ -260,8 +275,14 @@ def crear_importacion_de_youtube(listado, usuario=None, categoria='', minimo_min
             estado, motivo = Estado.DESCARTADA, 'No tiene un nombre definido.'
         vistas.add(video.url)
         if serie and estado == Estado.PENDIENTE:
-            numero += 1   # provisorio: el definitivo, al terminar de probar
-            nombre = organizar.nombre_de_capitulo(serie, temporada, numero,
+            # provisorio: el definitivo, al terminar de probar
+            dice = organizar.temporada_y_numero_del_titulo(video.titulo) if importacion.segun_titulo else None
+            if dice:
+                de_temporada, de_numero = dice[0] or temporada, dice[1]
+            else:
+                numero += 1
+                de_temporada, de_numero = temporada, numero
+            nombre = organizar.nombre_de_capitulo(serie, de_temporada, de_numero,
                                                   organizar.titulo_del_capitulo(nombre, serie))
         if categoria:
             de_la_categoria = categoria
@@ -318,12 +339,43 @@ def _numerar_capitulos(importacion):
     if not importacion.serie:
         return
     aptas = list(importacion.entradas.filter(estado=Estado.APTA).order_by('posicion'))
+    if importacion.segun_titulo:
+        return _numerar_segun_el_titulo(importacion, aptas)
     numero = organizar.ultimo_capitulo(importacion.serie, importacion.temporada)
     for entrada in aptas:
         numero += 1
         entrada.nombre = organizar.nombre_de_capitulo(
             importacion.serie, importacion.temporada, numero,
             organizar.titulo_del_capitulo(entrada.nombre, importacion.serie))
+    EntradaImportada.objects.bulk_update(aptas, ['nombre'])
+
+
+def _numerar_segun_el_titulo(importacion, aptas):
+    """
+    Cada capítulo a la temporada y al número que dice su título. Los que no
+    dicen número (o repiten uno que ya está, en la serie o en esta tanda) van
+    al final de su temporada: así nunca quedan dos con el mismo número. Para
+    revisar después: la serie → "Ordenar todo según los títulos".
+    """
+    serie = importacion.serie
+    ocupados = set()
+    for canal in organizar.capitulos_de([serie]):
+        _, temporada, numero, _ = clasificar.episodio(canal.nombre)
+        ocupados.add((temporada, numero))
+    al_final = []
+    for entrada in aptas:
+        titulo = organizar.titulo_del_capitulo(entrada.nombre, serie)   # como en _numerar_capitulos
+        dice = organizar.temporada_y_numero_del_titulo(entrada.nombre_original)
+        lugar = (dice[0] or importacion.temporada, dice[1]) if dice and dice[1] > 0 else None
+        if lugar is None or lugar in ocupados:
+            al_final.append((entrada, lugar[0] if lugar else importacion.temporada, titulo))
+            continue
+        ocupados.add(lugar)
+        entrada.nombre = organizar.nombre_de_capitulo(serie, lugar[0], lugar[1], titulo)
+    for entrada, temporada, titulo in al_final:
+        numero = max((n or 0 for t, n in ocupados if t == temporada), default=0) + 1
+        ocupados.add((temporada, numero))
+        entrada.nombre = organizar.nombre_de_capitulo(serie, temporada, numero, titulo)
     EntradaImportada.objects.bulk_update(aptas, ['nombre'])
 
 

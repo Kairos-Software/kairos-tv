@@ -36,17 +36,17 @@
     <div class="table-responsive" tabindex="0" aria-label="Listado de revendedores">
         <table class="table tabla mb-0">
             <thead><tr>
-                <th scope="col">Revendedor</th><th scope="col">Usuario</th><th scope="col">Créditos</th>
-                <th scope="col">Clientes vigentes</th><th scope="col">Precio por dispositivo</th>
+                <th scope="col">Revendedor</th><th scope="col" class="d-none d-md-table-cell">Usuario</th><th scope="col">Créditos</th>
+                <th scope="col"><span class="d-none d-sm-inline">Clientes </span>vigentes</th><th scope="col" class="d-none d-lg-table-cell">Precio por dispositivo</th>
             </tr></thead>
             <tbody>
                 {% for r in revendedores %}
                 <tr>
                     <td><a href="{% url 'reventa:revendedor' r.pk %}">{{ r }}</a>{% if r.usuario.telefono %}<small class="tabla-subtexto">{{ r.usuario.telefono }}</small>{% endif %}</td>
-                    <td class="texto-suave">{{ r.usuario.username }}{% if not r.usuario.is_active %} <span class="chip chip-no">Inactivo</span>{% endif %}</td>
+                    <td class="texto-suave d-none d-md-table-cell">{{ r.usuario.username }}{% if not r.usuario.is_active %} <span class="chip chip-no">Inactivo</span>{% endif %}</td>
                     <td class="dato">{{ r.saldo_actual }}</td>
                     <td class="dato">{{ r.clientes_vigentes }}</td>
-                    <td class="dato">$ {{ r.precio_pantalla|floatformat:2|intcomma }}</td>
+                    <td class="dato d-none d-lg-table-cell">$ {{ r.precio_pantalla|floatformat:2|intcomma }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -67,16 +67,16 @@
         <table class="table tabla mb-0">
             <thead><tr>
                 <th scope="col">Cliente</th>
-                {% if revendedores is not None %}<th scope="col">Revendedor</th>{% endif %}
-                <th scope="col">Teléfono</th><th scope="col">Dispositivos</th><th scope="col">Vence</th><th scope="col">Estado</th>
+                {% if revendedores is not None %}<th scope="col" class="d-none d-md-table-cell">Revendedor</th>{% endif %}
+                <th scope="col" class="d-none d-lg-table-cell">Teléfono</th><th scope="col" class="d-none d-md-table-cell">Dispositivos</th><th scope="col">Vence</th><th scope="col">Estado</th>
             </tr></thead>
             <tbody>
             {% for c in pagina %}
                 <tr>
                     <td><a href="{% url 'reventa:cliente' c.pk %}">{{ c.nombre }}</a><small class="tabla-subtexto">Código {{ c.codigo_legible }}</small></td>
-                    {% if revendedores is not None %}<td class="texto-suave">{{ c.revendedor|default:"Directo" }}</td>{% endif %}
-                    <td class="texto-suave">{{ c.telefono|default:"—" }}</td>
-                    <td class="dato">{% if c.vigente and c.dispositivos_hoy %}{{ c.dispositivos_hoy }}{% else %}—{% endif %}</td>
+                    {% if revendedores is not None %}<td class="texto-suave d-none d-md-table-cell">{{ c.revendedor|default:"Directo" }}</td>{% endif %}
+                    <td class="texto-suave d-none d-lg-table-cell">{{ c.telefono|default:"—" }}</td>
+                    <td class="dato d-none d-md-table-cell">{% if c.vigente and c.dispositivos_hoy %}{{ c.dispositivos_hoy }}{% else %}—{% endif %}</td>
                     <td class="small">{{ c.vence|date:"j/m/Y"|default:"—" }}</td>
                     <td>{% include "reventa/_estado_cliente.html" with c=c %}</td>
                 </tr>

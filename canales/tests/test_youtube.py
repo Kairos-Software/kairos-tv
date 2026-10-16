@@ -163,7 +163,21 @@ class ImportarTests(TestCase):
         servicios.procesar_lote(primera, _todas_funcionan, segundos=None)
         servicios.cargar_lote(primera)
         segunda = servicios.crear_importacion_de_youtube(self.listado, minimo_minutos=40)
-        self.assertEqual(segunda.entradas.get(tvg_id='aaaaaaaaaa1').estado, Estado.REPETIDA)
+        repetida = segunda.entradas.get(tvg_id='aaaaaaaaaa1')
+        self.assertEqual(repetida.estado, Estado.REPETIDA)
+        # Dice DÓNDE está (sin eso parecía que el video no aparecía) y cómo encontrarlo
+        cargado = Canal.objects.get(tvg_id='aaaaaaaaaa1')
+        self.assertIn('buscá aaaaaaaaaa1 en Organizar', repetida.motivo)
+        self.assertIn(f'como «{cargado.nombre}»', repetida.motivo)
+
+    def test_el_buscador_encuentra_un_video_por_su_link_o_su_id(self):
+        importacion = servicios.crear_importacion_de_youtube(self.listado, minimo_minutos=40)
+        servicios.procesar_lote(importacion, _todas_funcionan, segundos=None)
+        servicios.cargar_lote(importacion)
+        cargado = Canal.objects.get(tvg_id='aaaaaaaaaa1')
+        for texto in ('https://www.youtube.com/watch?v=aaaaaaaaaa1', 'https://youtu.be/aaaaaaaaaa1', 'aaaaaaaaaa1'):
+            self.assertEqual(list(consultas.catalogo(texto=texto)), [cargado], texto)
+        self.assertEqual(list(consultas.catalogo(texto=cargado.fuentes.get().url)), [cargado])
 
 
 def _masha(*ids):

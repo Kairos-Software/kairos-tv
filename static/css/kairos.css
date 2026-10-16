@@ -1001,7 +1001,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     border-radius: 13px; background: var(--celeste-fondo); color: var(--celeste); font-size: 1.15rem;
 }
 .youtube-form {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; align-items: start;
     margin-top: 1rem;
 }
 .herramienta-paso {
@@ -1383,6 +1383,9 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .clientes-por-vencer li a { font-weight: 700; text-decoration: none; }
 
 .tabla-ancha-con-fija { position: relative; scrollbar-width: thin; }
+/* La pista "Deslizá de costado..." (js/tablas_anchas.js): solo si la tabla no entra */
+.tabla-pista { margin: 0 0 .4rem; font-size: .75rem; color: var(--celeste-claro); text-align: right; }
+.tabla-pista[hidden] { display: none; }
 .tabla-ancha-con-fija:focus-visible { outline: 2px solid var(--celeste); outline-offset: -2px; }
 .tabla-ancha-con-fija th:first-child, .tabla-ancha-con-fija td:first-child {
     position: sticky; left: 0; z-index: 2; background: var(--capa);
@@ -1750,6 +1753,10 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 
 @media (max-width: 1199.98px) {
     .tablero-grid { grid-template-columns: minmax(0, 1fr); }
+    /* Números del revendedor: en 3 columnas, con el menú abierto, las cajitas quedaban apretadas
+       ("Por vencer (7 días)" en tres renglones). Desde acá van de a 2 (antes, recién bajo 992px) */
+    .reventa-metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reventa-metricas > :last-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 991.98px) {

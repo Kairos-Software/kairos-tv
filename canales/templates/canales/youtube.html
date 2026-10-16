@@ -69,9 +69,10 @@
                 {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-6" %}
                 <div class="col-12" data-solo-serie {% if not form.es_serie.value %}hidden{% endif %}>
                     <div class="row g-3">
-                        {% include "parciales/_campo.html" with campo=form.nombre_serie ancho="col-md-6" %}
-                        {% include "parciales/_campo.html" with campo=form.temporada ancho="col-md-6" %}
-                        <div class="col-12"><p class="ds-resumen" data-ds-resumen></p></div>
+                        {# A lo ancho: en la columna de la derecha, de a dos, las listas cortaban los nombres #}
+                        {% include "parciales/_campo.html" with campo=form.nombre_serie ancho="col-12" %}
+                        {% include "parciales/_campo.html" with campo=form.temporada ancho="col-12" %}
+                        {% include "parciales/_campo.html" with campo=form.segun_titulo ancho="col-12" %}
                     </div>
                 </div>
             </div>
@@ -115,6 +116,7 @@
     var minimo = form.querySelector('[name=minimo_minutos]');
     var maximo = form.querySelector('[name=maximo_minutos]');
     var soloEspanol = form.querySelector('[name=solo_espanol]');
+    var segunTitulo = form.querySelector('[name=segun_titulo]');
     var lista = form.querySelector('[name=categoria_destino]');
     var nueva = form.querySelector('[name=categoria_nueva]');
     var resumen = form.querySelector('[data-resumen]');
@@ -127,6 +129,9 @@
 
     var titulos = [[lista, 'Categoría', '1. Categoría'], [nombreSerie, 'Serie', '2. Serie'], [temporada, 'Temporada', '3. Temporada']];
     var destinoSerie = form.querySelector('[data-destino-serie]');
+    // La ayuda de Categoría habla de películas, series y secciones: con "Es una serie", solo lo de series
+    var ayudaCategoria = lista.parentNode.querySelector('.form-text');
+    var ayudaGeneral = ayudaCategoria ? ayudaCategoria.textContent : '';
 
     function acomodar() {
         var serie = esSerie.checked;
@@ -135,6 +140,11 @@
             var etiqueta = form.querySelector('label[for="' + t[0].id + '"]');
             if (etiqueta) etiqueta.textContent = serie ? t[2] : t[1];
         });
+        if (ayudaCategoria) {
+            ayudaCategoria.textContent = serie
+                ? 'La de Series donde va la serie (Disney, Infantiles...). Si elegís una serie que ya existe, se pone sola la suya.'
+                : ayudaGeneral;
+        }
         form.querySelector('[data-solo-serie]').hidden = !serie;
         form.querySelector('[data-sin-serie]').hidden = serie || seccion.options.length < 2;
         Array.prototype.forEach.call(lista.querySelectorAll('optgroup'), function (grupo) {
@@ -155,7 +165,8 @@
         var largo = 'desde ' + desde + ' min' + (maximo.value ? ' hasta ' + maximo.value + ' min' : ', sin máximo');
         filtrosResumen.textContent = largo + (soloEspanol.checked ? ' · solo en español' : '');
         if (esSerie.checked) {
-            resumen.textContent = destinoSerie.dataset.resumen || '';
+            resumen.textContent = (destinoSerie.dataset.resumen || '') + (segunTitulo.checked
+                ? ' · Cada video, a la temporada y capítulo que dice su título (esa temporada, para los que no dicen la suya).' : '');
         } else if (seccion.value) {
             resumen.textContent = nombreDeLaSeccion() + ' → ' +
                 (categoria || 'una categoría con el nombre del canal') + '.';
@@ -202,6 +213,7 @@
     nombreSerie.addEventListener('input', explicar);
     [temporada, minimo, maximo].forEach(function (campo) { campo.addEventListener('input', explicar); });
     soloEspanol.addEventListener('change', explicar);
+    segunTitulo.addEventListener('change', explicar);
     esSerie.addEventListener('change', acomodar);
     form.addEventListener('destino-serie', explicar);
     seccion.addEventListener('change', acomodar);

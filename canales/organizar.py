@@ -22,6 +22,9 @@ numerada.
     organizar.cambiar_contenido(canales, 'serie', nombre_serie='Pocoyó')
     organizar.ordenar_capitulos('Pocoyó', 1, [pk, pk, ...])        -> los renumera 1, 2, 3... en ese orden
     organizar.mover_a_temporada('Pocoyó', [pk, ...], 2)           -> esos capítulos pasan a la temporada 2
+    organizar.eliminar_capitulos('Pocoyó', [pk, ...])             -> los elimina y renumera sin huecos
+    organizar.plan_por_titulos('Casi Ángeles')                     -> cómo quedaría según "Temporada 3 Capítulo 33"
+    organizar.ordenar_por_titulos('Casi Ángeles')                  -> lo aplica
     organizar.destino_de_serie('Pocoyó', 'Infantiles')             -> la categoría donde van sus capítulos nuevos
     organizar.categorias_parecidas(categorias)                     -> [[cat, cat], ...] posibles repetidas
     organizar.borrar_categoria(infantil, con_contenido=True)       -> la borra con todo lo de adentro
@@ -41,7 +44,7 @@ from django.utils import timezone
 from actividad.models import Accion
 from actividad.registro import registrar
 
-from . import clasificar, imagenes, secciones
+from . import clasificar, imagenes, secciones, youtube
 from .models import Canal, Categoria, Contenido, EntradaImportada, Fuente, medidas_de_calidad
 
 
@@ -458,6 +461,25 @@ def eliminar_contenido(canales, usuario=None):
     return len(elegidos)
 
 
+def _hacer_lugar(serie, temporada, numero, usuario=None):
+    """
+    Para devolver un capítulo eliminado a su lugar: al eliminarlo, los de su
+    temporada se renumeraron sin huecos (eliminar_capitulos). Si su número ya
+    lo tiene otro, ese y los siguientes se corren uno (si no, habría dos).
+    """
+    capitulos = [(canal, clasificar.episodio(canal.nombre)) for canal in capitulos_de([serie])]
+    de_la_temporada = [(canal, partes) for canal, partes in capitulos if partes[1] == temporada]
+    if not any(partes[2] == numero for _, partes in de_la_temporada):
+        return
+    corridos = []
+    for canal, (nombre, _, viejo, titulo) in de_la_temporada:
+        if viejo is not None and viejo >= numero:
+            canal.nombre = nombre_de_capitulo(nombre, temporada, viejo + 1, titulo)
+            canal.marcar_autor(usuario)
+            corridos.append(canal)
+    Canal.objects.bulk_update(corridos, ['nombre', 'modificado_por'])
+
+
 @dataclass
 class Eliminacion:
     """Una vez que se eliminó contenido (todo lo que se eliminó junto tiene el mismo momento)."""
@@ -517,7 +539,13 @@ def restaurar_eliminados(muestra, usuario=None):
     en_uso = set(Fuente.objects.values_list('url', flat=True))
     activos = {(_clave(c.nombre), c.contenido) for c in Canal.objects.only('nombre', 'contenido')}
     categorias = {}
-    for canal in Canal.todos.filter(eliminado_en=momento).select_related('categoria').order_by('pk'):
+    # Los capítulos, de a temporada y en orden: cada uno vuelve a su lugar (ver _hacer_lugar)
+    def en_orden(canal):
+        _, temporada, numero, _ = clasificar.episodio(canal.nombre)
+        es_capitulo = canal.contenido == Contenido.SERIE
+        return (not es_capitulo, temporada if es_capitulo else 0, (numero or 0) if es_capitulo else 0, canal.pk)
+
+    for canal in sorted(Canal.todos.filter(eliminado_en=momento).select_related('categoria'), key=en_orden):
         if (_clave(canal.nombre), canal.contenido) in activos:
             resultado.ya_estaban += 1
             continue
@@ -544,6 +572,10 @@ def restaurar_eliminados(muestra, usuario=None):
                     categoria.restaurar(usuario)
                 categorias[categoria.pk] = otra or categoria
             canal.categoria = categorias[categoria.pk]
+        if canal.contenido == Contenido.SERIE:
+            serie, temporada, numero, _ = clasificar.episodio(canal.nombre)
+            if numero:
+                _hacer_lugar(serie, temporada, numero, usuario)
         canal.eliminado_en, canal.eliminado_por = None, None
         canal.marcar_autor(usuario)
         canal.save()
@@ -651,20 +683,56 @@ def mover_a_temporada(nombre_serie, pks, temporada, usuario=None):
         siguiente += 1
         canal.nombre = nombre_de_capitulo(serie, temporada, siguiente, partes[canal.pk][3])
         cambiados[canal.pk] = canal
-    for origen in {partes[c.pk][1] for c in elegidos}:
-        quedan = sorted((c for c in capitulos if partes[c.pk][1] == origen and c.pk not in cambiados), key=en_orden)
+    _renumerar_sin_huecos(capitulos, {partes[c.pk][1] for c in elegidos}, usuario, ya_cambiados=cambiados)
+    registrar(usuario, Accion.EDITAR, f'Pasó {len(elegidos)} capítulo(s) de "{serie}" a la temporada {temporada}.',
+              modulo='canales')
+    return len(elegidos)
+
+
+@transaction.atomic
+def eliminar_capitulos(nombre_serie, pks, usuario=None):
+    """
+    Elimina esos capítulos de la serie (se recuperan en "Eliminados", como
+    todo lo eliminado) y renumera sin huecos las temporadas de donde salieron:
+    si se borraba el capítulo 1, la temporada arrancaba en el 2 y la app
+    escondía la serie. Devuelve cuántos se eliminaron.
+    """
+    try:
+        pks = {int(pk) for pk in pks}
+    except (TypeError, ValueError):
+        raise NoSePuede('Lo que llegó no se entiende: volvé a cargar la página.') from None
+    capitulos = list(capitulos_de([nombre_serie]))
+    elegidos = [canal for canal in capitulos if canal.pk in pks]
+    if not elegidos:
+        raise NoSePuede('Elegí al menos un capítulo de esta serie.')
+    temporadas = {clasificar.episodio(canal.nombre)[1] for canal in elegidos}
+    cantidad = eliminar_contenido(Canal.objects.filter(pk__in=[c.pk for c in elegidos]), usuario)
+    _renumerar_sin_huecos([c for c in capitulos if c.pk not in pks], temporadas, usuario)
+    return cantidad
+
+
+def _renumerar_sin_huecos(capitulos, temporadas, usuario=None, ya_cambiados=None):
+    """
+    Deja esas temporadas numeradas 1, 2, 3... en el orden en que estaban (cada
+    capítulo conserva su título). `capitulos`: los de la serie que quedan.
+    Guarda los que cambian (y los de `ya_cambiados`) y devuelve cuántos guardó.
+    """
+    cambiados = dict(ya_cambiados or {})
+    partes = {canal.pk: clasificar.episodio(canal.nombre) for canal in capitulos}
+    for temporada in temporadas:
+        quedan = sorted((c for c in capitulos if partes[c.pk][1] == temporada and c.pk not in cambiados),
+                        key=lambda c: (partes[c.pk][2] is None, partes[c.pk][2] or 0, c.nombre))
         for numero, canal in enumerate(quedan, start=1):
-            if partes[canal.pk][2] != numero:
-                canal.nombre = nombre_de_capitulo(serie, origen, numero, partes[canal.pk][3])
+            serie, _, viejo, titulo = partes[canal.pk]
+            if viejo != numero:
+                canal.nombre = nombre_de_capitulo(serie, temporada, numero, titulo)
                 cambiados[canal.pk] = canal
     ahora = timezone.now()
     for canal in cambiados.values():
         canal.modificado = ahora
         canal.marcar_autor(usuario)
     Canal.objects.bulk_update(list(cambiados.values()), ['nombre', 'modificado', 'modificado_por'])
-    registrar(usuario, Accion.EDITAR, f'Pasó {len(elegidos)} capítulo(s) de "{serie}" a la temporada {temporada}.',
-              modulo='canales')
-    return len(elegidos)
+    return len(cambiados)
 
 
 def categoria_de_la_serie(nombre_serie):
@@ -785,3 +853,145 @@ def editar_serie(serie, usuario=None, **datos):
     elif cambios:
         registrar(usuario, Accion.EDITAR, f'Editó la serie "{serie}" ({", ".join(cambios)}).', modulo='canales')
     return cambios
+
+
+# ── Ordenar una serie según lo que dicen los títulos ────────────────
+
+_NUMERO_AL_PRINCIPIO = re.compile(r'^\s*#?(\d{1,4})\b')
+
+
+def temporada_y_numero_del_titulo(titulo):
+    """
+    (temporada, capítulo) que dice un título: 'Temporada 3 Capitulo 33 Un lugar...' -> (3, 33),
+    'S02 E26' -> (2, 26), 'Capítulo 12' -> (0, 12), '12 - El regreso' -> (0, 12). 0 = no dice la
+    temporada. None si no dice el capítulo.
+    """
+    dice = youtube.numero_de_capitulo(titulo)
+    if dice:
+        return dice
+    al_principio = _NUMERO_AL_PRINCIPIO.match(titulo or '')
+    return (0, int(al_principio.group(1))) if al_principio else None
+
+
+@dataclass
+class CapituloEnElPlan:
+    canal: Canal
+    titulo: str
+    antes: tuple          # (temporada, capítulo) de ahora
+    despues: tuple = (0, 0)
+    problema: str = ''    # '' | 'sin_numero' (no dice su número) | 'repetido' (otro dice el mismo)
+
+    @property
+    def cambia(self):
+        return self.antes != self.despues
+
+
+@dataclass
+class PlanPorTitulos:
+    capitulos: list
+    de_corrido: bool
+
+    def de_la_temporada(self, temporada):
+        return [c for c in self.capitulos if c.despues[0] == temporada]
+
+    @property
+    def temporadas(self):
+        """[(temporada, cuántos, primero, último)] como quedarían."""
+        resultado = []
+        for temporada in sorted({c.despues[0] for c in self.capitulos}):
+            numeros = [c.despues[1] for c in self.de_la_temporada(temporada)]
+            resultado.append((temporada, len(numeros), min(numeros), max(numeros)))
+        return resultado
+
+    @property
+    def cambian(self):
+        return [c for c in self.capitulos if c.cambia]
+
+    @property
+    def sin_numero(self):
+        return [c for c in self.capitulos if c.problema == 'sin_numero']
+
+    @property
+    def repetidos(self):
+        return [c for c in self.capitulos if c.problema == 'repetido']
+
+    @property
+    def con_numero(self):
+        return len(self.capitulos) - len(self.sin_numero)
+
+    @property
+    def falta_el_1(self):
+        """La temporada 1 no arrancaría en el capítulo 1: la app no mostraría la serie."""
+        return not any(c.despues == (1, 1) for c in self.capitulos)
+
+
+def plan_por_titulos(nombre_serie, de_corrido=False):
+    """
+    Cómo quedaría la serie si cada capítulo va a la temporada y al número que
+    dice su título ("Temporada 3 Capítulo 33" -> T3 E33). Sirve para ordenar
+    de una vez lo que vino mezclado de un canal de YouTube (numerado por fecha
+    de subida, todo en una temporada).
+      - Si el título no dice la temporada, se queda en la que está.
+      - Si no dice el número, va al final de su temporada (en el orden de ahora).
+      - Si dos dicen el mismo número, el primero se queda con ese y el otro va
+        al final (suelen ser subidas repetidas: conviene revisarlos).
+      - de_corrido: numerados 1, 2, 3... sin huecos, en ese orden (si en
+        YouTube falta un capítulo, el siguiente toma su número).
+    Si el nombre ya no tiene el título entero, usa el que traía de YouTube.
+    """
+    capitulos = list(capitulos_de([nombre_serie]))
+    originales = dict(EntradaImportada.objects.filter(canal__in=capitulos)
+                      .order_by('importacion__creada').values_list('canal', 'nombre_original'))
+    items = []
+    for canal in capitulos:
+        _, temporada, numero, titulo = clasificar.episodio(canal.nombre)
+        dice = temporada_y_numero_del_titulo(titulo)
+        if dice is None and canal.pk in originales:
+            dice = temporada_y_numero_del_titulo(originales[canal.pk])
+        item = CapituloEnElPlan(canal, titulo, (temporada, numero or 0))
+        item.dice = dice
+        items.append(item)
+    por_temporada = {}
+    for item in items:
+        destino = item.dice[0] if item.dice and item.dice[0] else item.antes[0]
+        por_temporada.setdefault(destino, []).append(item)
+    for temporada, lista in por_temporada.items():
+        con = sorted((i for i in lista if i.dice), key=lambda i: (i.dice[1], i.antes))
+        sin = sorted((i for i in lista if not i.dice), key=lambda i: i.antes)
+        usados, al_final = set(), []
+        for item in con:
+            if item.dice[1] in usados or item.dice[1] < 1:
+                item.problema = 'repetido'
+                al_final.append(item)
+            else:
+                usados.add(item.dice[1])
+                item.despues = (temporada, item.dice[1])
+        for item in sin:
+            item.problema = 'sin_numero'
+        siguiente = max(usados, default=0)
+        for item in al_final + sin:
+            siguiente += 1
+            item.despues = (temporada, siguiente)
+        if de_corrido:
+            for numero, item in enumerate(sorted(lista, key=lambda i: i.despues[1]), start=1):
+                item.despues = (temporada, numero)
+    items.sort(key=lambda i: i.despues)
+    return PlanPorTitulos(items, de_corrido)
+
+
+@transaction.atomic
+def ordenar_por_titulos(nombre_serie, de_corrido=False, usuario=None):
+    """Aplica plan_por_titulos: renombra los capítulos que cambian. Devuelve cuántos cambiaron."""
+    plan = plan_por_titulos(nombre_serie, de_corrido)
+    ahora, cambiados = timezone.now(), []
+    for item in plan.cambian:
+        serie = clasificar.episodio(item.canal.nombre)[0]
+        item.canal.nombre = nombre_de_capitulo(serie, item.despues[0], item.despues[1], item.titulo)
+        item.canal.modificado = ahora
+        item.canal.marcar_autor(usuario)
+        cambiados.append(item.canal)
+    Canal.objects.bulk_update(cambiados, ['nombre', 'modificado', 'modificado_por'])
+    if cambiados:
+        registrar(usuario, Accion.EDITAR, f'Ordenó "{nombre_serie}" según los títulos: {len(cambiados)} capítulos '
+                                          f'cambiaron de temporada o de número.', modulo='canales')
+    return len(cambiados)
