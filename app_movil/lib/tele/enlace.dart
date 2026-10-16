@@ -156,6 +156,21 @@ class Tele extends ChangeNotifier {
     }
   }
 
+  /// Corta la conexión con la tele. Si el celular no la deja cortar desde una
+  /// app (sigue conectada a los 3 segundos), abre la lista de Android para cortarla ahí.
+  Future<void> desconectar() async {
+    if (!conectada) return;
+    try {
+      await _canal.invokeMethod<Object?>('desconectar');
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      // Se prueba con la lista de Android
+    }
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (conectada) await conectar();
+  }
+
   /// Un botón del control remoto ('ok', 'pausa', 'izquierda', 'canalMas'...: ver PantallaTele.kt).
   void tecla(String tecla) => _invocar('tecla', {'tecla': tecla});
 

@@ -2,10 +2,12 @@ package com.kairossoftware.app_movil
 
 import android.app.Activity
 import android.app.Presentation
+import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
+import android.media.MediaRouter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -43,6 +45,7 @@ import io.flutter.plugins.videoplayer.KairosTele
  *   celular -> "tecla": un botón del control remoto del celular (OK, pausa, flechas...)
  *   celular -> "atras": como el botón Atrás de un control
  *   celular -> "conectar": abre los ajustes de Android para elegir la tele
+ *   celular -> "desconectar": corta la conexión con la tele (cortarConexion)
  *   celular -> "puedeQuedarFija" / "pedirQuedarFija": el permiso para que la
  *              tele muestre solo la app, siempre (ver mostrarEn)
  *   tele    -> "cerrada": la tele cerró sola algo que reproducía (terminó, Atrás)
@@ -94,6 +97,10 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
                     resultado.success(null)
                 }
                 "conectar" -> resultado.success(abrirAjustesDePantalla())
+                "desconectar" -> {
+                    cortarConexion()
+                    resultado.success(null)
+                }
                 "puedeQuedarFija" -> resultado.success(puedeQuedarFija())
                 "pedirQuedarFija" -> resultado.success(pedirQuedarFija())
                 else -> resultado.notImplemented()
@@ -106,9 +113,35 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
         revisar()
     }
 
+    /**
+     * La app se cierra del todo (se la saca de las recientes). Si quedara la
+     * conexión, la tele pasaría a mostrar el celular: se corta antes.
+     */
     fun terminar() {
         pantallas.unregisterDisplayListener(this)
+        if (conectada) cortarConexion()
         cerrar()
+    }
+
+    /**
+     * Corta la conexión con la tele (la de "Transmitir pantalla"). Android no
+     * deja que una app se conecte sola a una tele, pero cualquiera puede cortar
+     * la conexión. Al cortarse, Android avisa que la tele se fue (onDisplayRemoved).
+     */
+    private fun cortarConexion() {
+        try {
+            // Volver a la "salida" del propio celular corta la de la tele
+            val salidas = actividad.getSystemService(Context.MEDIA_ROUTER_SERVICE) as MediaRouter
+            salidas.selectRoute(MediaRouter.ROUTE_TYPE_LIVE_VIDEO, salidas.defaultRoute)
+        } catch (e: Exception) {
+            Log.w(ETIQUETA, "No se pudo cortar la conexión con la tele (MediaRouter)", e)
+        }
+        try {
+            // Lo mismo, directo (por si este celular no lo hace con lo anterior)
+            DisplayManager::class.java.getMethod("disconnectWifiDisplay").invoke(pantallas)
+        } catch (e: Exception) {
+            // Este Android no lo deja llamar así: alcanza con lo anterior
+        }
     }
 
     override fun onDisplayAdded(id: Int) = revisar()
@@ -143,7 +176,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     }
 
     private fun abrir(pantalla: Display) {
-        val motor = this.motor ?: crearMotor()
+        val motor = this.motor ?: crearMotor(pantalla)
         if (!mostrarEn(pantalla, motor)) {
             // La tele se desconectó justo en ese momento
             soltarMotor()
@@ -298,11 +331,12 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
         }
     }
 
-    private fun crearMotor(): FlutterEngine {
+    private fun crearMotor(pantalla: Display): FlutterEngine {
         val nuevo = FlutterEngine(actividad.applicationContext)
         // Los mismos datos del aparato que el motor del celular (nombre, códecs...)
         MainActivity.prepararCanalDelAparato(actividad, nuevo)
         nuevo.activityControlSurface.attachToActivity(componente, actividad.lifecycle)
+        medirConLaTele(nuevo, pantalla)
         canalTele = MethodChannel(nuevo.dartExecutor.binaryMessenger, CANAL).apply {
             setMethodCallHandler { llamada, resultado ->
                 when (llamada.method) {
@@ -321,6 +355,23 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
         )
         motor = nuevo
         return nuevo
+    }
+
+    /**
+     * Las vistas de Android que van dentro de la app (el reproductor de
+     * YouTube) Flutter las mide con la densidad de la pantalla de su contexto.
+     * Al prestarle la actividad, era la del CELULAR, no la de la tele, y el video
+     * de YouTube quedaba chico en la esquina de arriba a la izquierda y el
+     * resto negro. Se le da un contexto de la tele.
+     */
+    private fun medirConLaTele(motor: FlutterEngine, pantalla: Display) {
+        try {
+            val vistas = motor.platformViewsController
+            vistas.detach()
+            vistas.attach(actividad.createDisplayContext(pantalla), motor.renderer, motor.dartExecutor)
+        } catch (e: Exception) {
+            Log.w(ETIQUETA, "Las vistas de Android de la tele quedan medidas con el celular", e)
+        }
     }
 
     private fun cerrar() {

@@ -145,7 +145,10 @@ class _HojaTeleState extends State<_HojaTele> {
                   ),
                   const SizedBox(height: Espacio.lg),
                   OutlinedButton.icon(
-                    onPressed: Tele.instancia.conectar,
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Tele.instancia.desconectar();
+                    },
                     icon: const Icon(Icons.cancel_presentation_rounded),
                     label: const Text('Desconectar'),
                   ),
