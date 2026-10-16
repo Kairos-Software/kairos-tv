@@ -3,6 +3,7 @@ package com.kairossoftware.app_movil
 import android.app.Activity
 import android.app.Presentation
 import android.content.Intent
+import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.net.Uri
@@ -12,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.Display
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -55,13 +57,18 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     private var motor: FlutterEngine? = null
     private var vista: FlutterView? = null
     private var presentacion: Presentation? = null
-    private var ventanaFija = false
+
+    /** La ventana fija (con el permiso): la pone en la tele este gestor de ventanas. */
+    private var gestorFijo: WindowManager? = null
+
+    /** La tele que se está usando (null = ninguna). */
+    private var pantallaActual: Display? = null
 
     /** El volumen que tenía el celular antes de conectar la tele (para devolvérselo). */
     private var volumenAntes: Int? = null
 
     /** ¿Hay una tele conectada? (MainActivity: "Atrás" no cierra la app mientras tanto.) */
-    val conectada: Boolean get() = presentacion != null
+    val conectada: Boolean get() = pantallaActual != null
 
     /** Lo último que pidió el celular: la tele lo pide al arrancar (todavía no estaba escuchando). */
     private var ultimaOrden: Any? = null
@@ -109,18 +116,29 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     override fun onDisplayChanged(id: Int) {}
 
     private fun estado(): Map<String, Any?> = mapOf(
-        "conectada" to (presentacion != null),
-        "nombre" to (presentacion?.display?.name ?: ""),
+        "conectada" to (pantallaActual != null),
+        "nombre" to (pantallaActual?.name ?: ""),
     )
 
-    /** ¿Hay una pantalla de presentación (la tele)? Si apareció, se abre; si se fue, se cierra. */
+    /**
+     * ¿Hay una pantalla de presentación (la tele)? Si apareció, se abre; si se
+     * fue, se cierra. Pase lo que pase al abrirla, la app NO se cierra: si
+     * algo falla, la tele sigue mostrando el celular (como sin la app) y el
+     * celular anda igual.
+     */
     private fun revisar() {
         val pantalla = pantallas.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).firstOrNull()
         if (pantalla == null) {
             cerrar()
-        } else if (presentacion?.display?.displayId != pantalla.displayId) {
+        } else if (pantallaActual?.displayId != pantalla.displayId) {
             cerrar()
-            abrir(pantalla)
+            try {
+                abrir(pantalla)
+            } catch (e: Exception) {
+                Log.e(ETIQUETA, "No se pudo abrir la app en la tele", e)
+                quitarVentana()
+                soltarMotor()
+            }
         }
     }
 
@@ -131,21 +149,32 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
             soltarMotor()
             return
         }
+        pantallaActual = pantalla
         ponerAjustesDeTele(pantalla)
         canalCelular.invokeMethod("conectada", estado())
     }
 
     /**
-     * La ventana de la app en la tele. Con el permiso "Mostrar sobre otras
-     * apps" es una ventana FIJA: sigue en la tele aunque se salga de la app o
-     * se esté en los ajustes eligiendo la tele, así la tele nunca muestra el
-     * celular. Sin el permiso es la de la actividad: Android la esconde (y la
-     * tele vuelve a mostrar el celular) mientras la app no está adelante.
-     * false = la tele ya no está.
+     * La ventana de la app en la tele. false = no se pudo (la tele ya no está).
+     *
+     * Con el permiso "Mostrar sobre otras apps" es una ventana FIJA
+     * ([mostrarFija]): sigue en la tele aunque se salga de la app o se esté en
+     * los ajustes eligiendo la tele, así la tele nunca muestra el celular. Si
+     * no hay permiso, o el celular no la deja poner, es la de la actividad (una
+     * Presentation): Android la esconde, y la tele vuelve a mostrar el celular,
+     * mientras la app no está adelante.
      */
     private fun mostrarEn(pantalla: Display, motor: FlutterEngine): Boolean {
-        val fija = puedeQuedarFija()
-        val ventana = object : Presentation(if (fija) actividad.applicationContext else actividad, pantalla) {
+        if (puedeQuedarFija()) {
+            try {
+                if (mostrarFija(pantalla, motor)) return true
+            } catch (e: Exception) {
+                // Algunos celulares no la dejan poner (o piden otro permiso más): la otra forma
+                Log.w(ETIQUETA, "La ventana fija no se pudo poner en la tele", e)
+                quitarVentana()
+            }
+        }
+        val ventana = object : Presentation(actividad, pantalla) {
             override fun onCreate(estado: Bundle?) {
                 super.onCreate(estado)
                 window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -155,30 +184,67 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
                 vista = nueva
             }
         }
-        if (fija && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ventana.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
-        }
         try {
             ventana.show()
-        } catch (e: WindowManager.InvalidDisplayException) {
-            return false
-        } catch (e: WindowManager.BadTokenException) {
+        } catch (e: Exception) {
+            // InvalidDisplayException / BadTokenException: la tele se fue justo ahora
+            Log.w(ETIQUETA, "La tele no está para mostrar la app", e)
             return false
         }
         presentacion = ventana
-        ventanaFija = fija
+        motor.lifecycleChannel.appIsResumed()
+        return true
+    }
+
+    /**
+     * La ventana fija: una ventana "sobre otras apps" puesta directamente en
+     * la tele. Desde Android 11 tiene que crearse con un contexto de ventana de
+     * ESE tipo (createWindowContext). La 1.2.21 usaba una Presentation y le
+     * cambiaba el tipo, y Android 12 en adelante lo rechaza ("Window type
+     * mismatch"): la app se cerraba al conectar la tele.
+     */
+    private fun mostrarFija(pantalla: Display, motor: FlutterEngine): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        val tipo = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        val deLaTele = actividad.applicationContext.createDisplayContext(pantalla)
+        val contexto = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            deLaTele.createWindowContext(tipo, null)
+        } else {
+            deLaTele
+        }
+        val gestor = contexto.getSystemService(WindowManager::class.java) ?: return false
+        val nueva = FlutterView(contexto)
+        val medidas = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            tipo,
+            // Sin foco: las teclas le llegan desde el control del celular (teclear)
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.OPAQUE,
+        )
+        gestor.addView(nueva, medidas)
+        gestorFijo = gestor
+        vista = nueva
+        nueva.attachToFlutterEngine(motor)
         motor.lifecycleChannel.appIsResumed()
         return true
     }
 
     /** Volvió a la app: si recién dio el permiso, la ventana pasa a ser fija (la app de la tele sigue igual). */
     fun alVolver() {
-        val actual = presentacion ?: return
+        val pantalla = pantallaActual ?: return
         val motor = motor ?: return
-        if (ventanaFija || !puedeQuedarFija()) return
-        val pantalla = actual.display
-        quitarVentana()
-        if (!mostrarEn(pantalla, motor)) cerrar()
+        if (gestorFijo != null || !puedeQuedarFija()) return
+        try {
+            quitarVentana()
+            if (!mostrarEn(pantalla, motor)) cerrar()
+        } catch (e: Exception) {
+            Log.e(ETIQUETA, "No se pudo pasar a la ventana fija", e)
+            cerrar()
+        }
     }
 
     private fun puedeQuedarFija(): Boolean =
@@ -258,7 +324,8 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     }
 
     private fun cerrar() {
-        val estaba = presentacion != null
+        val estaba = pantallaActual != null
+        pantallaActual = null
         quitarVentana()
         soltarMotor()
         if (estaba) {
@@ -268,15 +335,23 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     }
 
     private fun quitarVentana() {
+        val fija = vista
+        gestorFijo?.let {
+            try {
+                if (fija != null) it.removeView(fija)
+            } catch (e: Exception) {
+                // La ventana ya no estaba (la tele se fue)
+            }
+        }
+        gestorFijo = null
         presentacion?.let {
             try {
                 it.dismiss()
             } catch (e: Exception) {
-                // La ventana ya no existía (la tele se fue)
+                // Idem
             }
         }
         presentacion = null
-        ventanaFija = false
         vista?.detachFromFlutterEngine()
         vista = null
     }
@@ -319,6 +394,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
 
     companion object {
         const val CANAL = "kairos/tele"
+        private const val ETIQUETA = "KairosTele"
 
         private val TECLAS = mapOf(
             "ok" to KeyEvent.KEYCODE_DPAD_CENTER,
