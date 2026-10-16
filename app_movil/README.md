@@ -52,6 +52,10 @@ La misma APK se instala en celulares y en televisores Android / Google TV:
   oficial de YouTube no deja cambiar el audio) y, en la TV, no deja que el reproductor de YouTube
   se quede con el foco del control remoto.
 
+## Ver en la tele (teles que no son Android)
+
+Desde el celular, el ícono de la tele de la barra de arriba conecta la app a una tele cualquiera **como segundo monitor**: la tele muestra la app con el diseño de TV y se maneja desde el celular. Sin cable, con "Transmitir pantalla / Smart View"; con cable, USB-C a HDMI. La tele no muestra nada más del teléfono. Ver `lib/tele/README.md`. La parte de Android es `PantallaTele.kt`.
+
 Instalar en una TV: copiar la APK con un pendrive, o con la app *Downloader*
 desde una dirección web (cuando esté en producción), o por la red:
 `adb connect <ip-de-la-tv>` y `flutter install` / `adb install app-produccion-release.apk`

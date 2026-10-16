@@ -28,6 +28,7 @@ import '../marca.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
 import '../sesion.dart';
+import '../tele/en_la_tele.dart';
 import '../utiles.dart';
 import 'buscar.dart';
 import 'cuenta.dart';
@@ -64,6 +65,7 @@ class PantallaTv extends StatefulWidget {
     this.biblioteca,
     this.seccionInicial = SeccionTv.inicio,
     this.esperaReposo = const Duration(minutes: 1),
+    this.espejo = false,
   });
 
   /// Solo para las pruebas: un catálogo y una biblioteca ya armados.
@@ -76,6 +78,10 @@ class PantallaTv extends StatefulWidget {
   /// protector de pantalla de Android TV (5 minutos o más), para que se vea el nuestro.
   final Duration esperaReposo;
 
+  /// En la tele que se maneja desde el celular ("Ver en la tele", lib/tele/):
+  /// lo que se ve lo decide el celular (tele/en_la_tele.dart -> EspejoTv).
+  final bool espejo;
+
   @override
   State<PantallaTv> createState() => _PantallaTvState();
 }
@@ -84,8 +90,13 @@ class _PantallaTvState extends State<PantallaTv> {
   static const _cadaCuanto = Duration(minutes: 15);
 
   late final Catalogo _catalogo = widget.catalogo ?? Catalogo(SesionScope.leer(context).api);
+  // En la tele del celular, con su propia copia en el aparato (la del celular la escribe el otro motor)
   late final Biblioteca _biblioteca =
-      widget.biblioteca ?? Biblioteca(api: SesionScope.leer(context).api, cuenta: SesionScope.leer(context).cuenta);
+      widget.biblioteca ??
+      Biblioteca(
+        api: SesionScope.leer(context).api,
+        cuenta: '${SesionScope.leer(context).cuenta}${widget.espejo ? '~tele' : ''}',
+      );
   late SeccionTv _seccion = widget.seccionInicial;
 
   /// Dónde se estaba antes de ir a Buscar: desde Series se buscan series.
@@ -113,6 +124,9 @@ class _PantallaTvState extends State<PantallaTv> {
     HardwareKeyboard.instance.addHandler(_teclaSinFoco);
     _esperarReposo();
     FocusManager.instance.addListener(_vigilarFoco);
+    if (widget.espejo) {
+      EspejoTv.instancia.conectar(contexto: () => _contexto, irA: _irA, despertar: _esperarReposo);
+    }
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_alCargarPorPrimeraVez);
     if (widget.catalogo != null) return;
@@ -129,6 +143,7 @@ class _PantallaTvState extends State<PantallaTv> {
 
   @override
   void dispose() {
+    if (widget.espejo) EspejoTv.instancia.desconectar();
     _catalogo.removeListener(_alCargarPorPrimeraVez);
     _ciclo?.dispose();
     _refresco?.cancel();
@@ -152,6 +167,11 @@ class _PantallaTvState extends State<PantallaTv> {
   void _alCargarPorPrimeraVez() {
     if (!_catalogo.cargado) return;
     _catalogo.removeListener(_alCargarPorPrimeraVez);
+    // En la tele del celular: lo que el celular pidió mientras cargaba (y no "volver al último canal")
+    if (widget.espejo) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => EspejoTv.instancia.catalogoListo());
+      return;
+    }
     final ultimo = _biblioteca.ultimoCanal == null ? null : _catalogo.canalPorId(_biblioteca.ultimoCanal!);
     if (!_biblioteca.volverAlUltimo || ultimo == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -291,6 +311,7 @@ class _PantallaTvState extends State<PantallaTv> {
 
   Future<void> _atras() async {
     if (_menuAbierto) return _cerrarMenu();
+    if (widget.espejo) return; // la sección la elige el celular
     if (_seccion != SeccionTv.inicio) return _irA(SeccionTv.inicio);
     final salir = await showDialog<bool>(context: context, builder: (_) => const _ConfirmarSalida());
     if (salir == true) await SystemNavigator.pop();

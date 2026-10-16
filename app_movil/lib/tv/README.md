@@ -26,6 +26,8 @@ escala a la pantalla (`escala.dart`): así se ve igual en cualquier televisor.
 | `favoritos.dart` | Canales, películas y series guardados; vacío: "Explorar contenido". | `tv-15`, `tv-21` |
 | `cuenta.dart` | Datos de la cuenta y preferencias (volver al último canal, modo de video "TV" o "compatible" por si la imagen sale verde, buscar actualizaciones, cerrar sesión). **"Lo que no se ve en esta TV"** (`CuadroLoQueNoSeVe`, desde la 1.2.20): lo que el panel manda pero esta TV esconde y por qué (falló acá, o "esta TV no lee H.265 de 10 bits"), qué códecs lee la TV, "Volver a mostrar lo que falló acá" y "Probar igual lo que quizá no lea" (`Biblioteca.probarTodo`). Para cuando algo está en el celular y no en la TV (pasó con Next). | `tv-16` |
 
+**"Ver en la tele"** (`lib/tele/`): el celular usa una tele cualquiera como segundo monitor, y esa tele muestra esta misma app con `PantallaTv(espejo: true)`. En ese modo la sección y lo que se abre los decide el celular (`tele/en_la_tele.dart` → `EspejoTv`), y los botones del control remoto del celular llegan como teclas de un control.
+
 El login, "Tu servicio venció" y la carga son los mismos del celular
 (`lib/acceso.dart`), que en pantalla ancha se parten en dos columnas.
 

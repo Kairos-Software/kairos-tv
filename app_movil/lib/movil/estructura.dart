@@ -15,6 +15,8 @@ import 'package:flutter/services.dart';
 
 import '../sesion.dart';
 import '../marca.dart';
+import '../tele/control_remoto.dart';
+import '../tele/enlace.dart';
 import 'buscar.dart';
 import 'datos.dart';
 import 'en_vivo.dart';
@@ -68,6 +70,7 @@ class _PantallaMovilState extends State<PantallaMovil> {
   @override
   void initState() {
     super.initState();
+    Tele.instancia.seccion(_seccion.name); // si hay una tele conectada, que muestre lo mismo
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_volverAlUltimoCanal);
     if (widget.catalogo != null) return;
@@ -84,6 +87,7 @@ class _PantallaMovilState extends State<PantallaMovil> {
 
   @override
   void dispose() {
+    Tele.instancia.seccion(null); // salió (cerró sesión): la tele vuelve al logo
     _catalogo.removeListener(_volverAlUltimoCanal);
     _ciclo?.dispose();
     _refresco?.cancel();
@@ -103,6 +107,7 @@ class _PantallaMovilState extends State<PantallaMovil> {
   }
 
   void _irA(Seccion seccion, {String? categoria, int? canal}) {
+    Tele.instancia.seccion(seccion.name);
     setState(() {
       _seccion = seccion;
       if (seccion == Seccion.enVivo && (categoria != null || canal != null)) {
@@ -235,6 +240,8 @@ class _BarraSuperior extends StatelessWidget implements PreferredSizeWidget {
                       ),
                     ),
                   ),
+                  // "Ver en la tele" (lib/tele/)
+                  const BotonTele(),
                   IconButton(
                     tooltip: 'Buscar',
                     onPressed: alBuscar,

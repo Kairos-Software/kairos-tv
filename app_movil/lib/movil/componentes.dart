@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../api/modelos.dart';
+import '../tele/enlace.dart';
 import 'datos.dart';
 import 'estilo.dart';
 
@@ -779,16 +780,22 @@ class Vacio extends StatelessWidget {
 
 /// Abre una pantalla nueva llevándole el catálogo, la biblioteca y el diseño
 /// (las pantallas que se abren encima no los "heredan" solas).
+///
+/// Con una tele conectada ("Ver en la tele", lib/tele/), la tele muestra lo
+/// mismo y, si es un reproductor, en el celular queda el control remoto.
 Future<T?> abrirPantalla<T>(BuildContext context, Widget pantalla) {
   final datos = DatosScope.of(context);
-  return Navigator.push<T>(
+  final enLaTele = Tele.instancia.abrir(pantalla);
+  final abierta = Navigator.push<T>(
     context,
     MaterialPageRoute<T>(
       builder: (_) => DatosScope(
         catalogo: datos.catalogo,
         biblioteca: datos.biblioteca,
-        child: Theme(data: temaMovil(), child: pantalla),
+        child: Theme(data: temaMovil(), child: enLaTele?.enElCelular ?? pantalla),
       ),
     ),
   );
+  if (enLaTele != null) abierta.whenComplete(() => Tele.instancia.cerrar(enLaTele));
+  return abierta;
 }

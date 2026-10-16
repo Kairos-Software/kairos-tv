@@ -12,6 +12,8 @@ import 'config.dart';
 import 'movil/estructura.dart';
 import 'pantallas/perfil.dart';
 import 'sesion.dart';
+import 'tele/en_la_tele.dart';
+import 'tele/enlace.dart';
 import 'tema.dart';
 import 'tv/escala.dart';
 import 'tv/estructura.dart';
@@ -25,6 +27,8 @@ Future<void> main() async {
   final sesion = Sesion();
   sesion.alSalir = () => claveNavegador.currentState?.popUntil((ruta) => ruta.isFirst);
   sesion.iniciar();
+  // "Ver en la tele": si se conecta una tele como pantalla (lib/tele/)
+  Tele.instancia.escuchar();
   runApp(
     SesionScope(
       sesion: sesion,
@@ -36,6 +40,12 @@ Future<void> main() async {
     ),
   );
 }
+
+/// La app en la TELE, cuando el celular se conecta a una como pantalla
+/// ("Ver en la tele", lib/tele/). La arranca Android (PantallaTele.kt) en un
+/// segundo motor de Flutter: no pasa por main().
+@pragma('vm:entry-point')
+Future<void> pantallaTele() => iniciarTele();
 
 class App extends StatelessWidget {
   const App({super.key});

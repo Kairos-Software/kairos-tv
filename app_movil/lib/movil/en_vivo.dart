@@ -8,6 +8,10 @@
 /// vivo / Próx. 2 horas", "A continuación") va a aparecer cuando se cargue
 /// la guía (EPG); hasta entonces no se muestra nada inventado.
 ///
+/// Con una tele conectada ("Ver en la tele", lib/tele/) el canal se ve en la
+/// tele y arriba queda el panel con el control (PanelEnLaTele); si la tele se
+/// desconecta, sigue en el celular.
+///
 /// La misma pantalla muestra una sección nueva "en vivo" (Radio...: [nueva]),
 /// con sus categorías y sin la guía. Lo que no tiene imagen (una radio) deja
 /// ver su logo mientras suena.
@@ -23,6 +27,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../api/modelos.dart';
 import '../sesion.dart';
+import '../tele/control_remoto.dart';
+import '../tele/enlace.dart';
 import 'ajustes_video.dart';
 import 'componentes.dart';
 import 'control_senal.dart';
@@ -68,22 +74,59 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
   bool _controles = true;
   Timer? _ocultar;
 
+  /// El último canal que se puso en la tele (al volver a En Vivo sigue ese).
+  Canal? _ultimoEnLaTele;
+  bool _teleConectada = Tele.instancia.conectada;
+
+  @override
+  void initState() {
+    super.initState();
+    Tele.instancia.addListener(_alCambiarTele);
+  }
+
   @override
   void didUpdateWidget(SeccionEnVivo anterior) {
     super.didUpdateWidget(anterior);
     if (widget.pedido != anterior.pedido && widget.pedido != null) _atenderPedido(widget.pedido!);
     if (widget.visible && !anterior.visible) {
       WakelockPlus.enable();
-      if (_control.canal != null && _control.video == null) _control.reintentar();
+      if (Tele.instancia.conectada) {
+        if (_ultimoEnLaTele != null) _verEnLaTele(_ultimoEnLaTele!);
+      } else if (_control.canal != null && _control.video == null) {
+        _control.reintentar();
+      }
     }
     if (!widget.visible && anterior.visible) {
       WakelockPlus.disable();
       _control.detener();
+      Tele.instancia.dejarEnVivo(this);
+    }
+  }
+
+  /// Se conectó la tele: lo que se veía en el celular pasa a la tele. Se
+  /// desconectó: vuelve al celular.
+  void _alCambiarTele() {
+    final conectada = Tele.instancia.conectada;
+    if (conectada == _teleConectada || !mounted) return;
+    _teleConectada = conectada;
+    if (!widget.visible) return;
+    if (conectada) {
+      final canal = _controlCreado?.canal;
+      if (canal != null) {
+        _controlCreado!.detener();
+        _verEnLaTele(canal);
+      }
+    } else if (_ultimoEnLaTele != null) {
+      _control.abrir(_ultimoEnLaTele!);
+      _mostrarControles();
     }
   }
 
   @override
   void dispose() {
+    Tele.instancia
+      ..removeListener(_alCambiarTele)
+      ..dejarEnVivo(this);
     _ocultar?.cancel();
     _controlCreado?.dispose();
     _desplazamiento.dispose();
@@ -105,11 +148,28 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
   }
 
   void _ver(Canal canal) {
-    _control.abrir(canal);
-    _mostrarControles();
+    if (Tele.instancia.conectada) {
+      _verEnLaTele(canal);
+    } else {
+      _control.abrir(canal);
+      _mostrarControles();
+    }
     if (_desplazamiento.hasClients) {
       _desplazamiento.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
     }
+  }
+
+  void _verEnLaTele(Canal canal) {
+    _ultimoEnLaTele = canal;
+    Tele.instancia.verEnVivo(canal, duenio: this, nueva: widget.nueva);
+    DatosScope.of(context).biblioteca.registrarCanalVisto(canal.id);
+  }
+
+  /// Anterior (-1) o siguiente (+1) en la lista que se está viendo.
+  void _cambiarEnLaTele(int paso, List<Canal> lista) {
+    if (lista.isEmpty) return;
+    final actual = lista.indexWhere((c) => c.id == _ultimoEnLaTele?.id);
+    _verEnLaTele(lista[actual < 0 ? 0 : (actual + paso) % lista.length]);
   }
 
   void _mostrarControles() {
@@ -134,7 +194,7 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
   Widget build(BuildContext context) {
     final datos = DatosScope.of(context);
     return ListenableBuilder(
-      listenable: Listenable.merge([datos.catalogo, datos.biblioteca]),
+      listenable: Listenable.merge([datos.catalogo, datos.biblioteca, Tele.instancia]),
       builder: (context, _) {
         final catalogo = datos.catalogo;
         final biblioteca = datos.biblioteca;
@@ -162,15 +222,27 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
           padding: EdgeInsets.only(top: altoBarraSuperior(context)),
           child: Column(
             children: [
-              // El reproductor queda fijo arriba mientras se recorre la lista
-              _Reproductor(
-                control: _control,
-                controles: _controles,
-                alTocar: () => _controles ? setState(() => _controles = false) : _mostrarControles(),
-                alExpandir: () => _expandir(todos),
-                alAjustes: _ajustes,
-                alPrimerCanal: () => _ver(visibles.isNotEmpty ? visibles.first : todos.first),
-              ),
+              // Con la tele: el canal se ve allá y acá queda el control
+              if (Tele.instancia.conectada)
+                PanelEnLaTele(
+                  canal: Tele.instancia.enVivoDe(this),
+                  alCambiarCanal: (paso) => _cambiarEnLaTele(paso, visibles.isNotEmpty ? visibles : todos),
+                  alDetener: () {
+                    _ultimoEnLaTele = null;
+                    Tele.instancia.dejarEnVivo(this);
+                  },
+                  alPrimerCanal: () => _ver(visibles.isNotEmpty ? visibles.first : todos.first),
+                )
+              else
+                // El reproductor queda fijo arriba mientras se recorre la lista
+                _Reproductor(
+                  control: _control,
+                  controles: _controles,
+                  alTocar: () => _controles ? setState(() => _controles = false) : _mostrarControles(),
+                  alExpandir: () => _expandir(todos),
+                  alAjustes: _ajustes,
+                  alPrimerCanal: () => _ver(visibles.isNotEmpty ? visibles.first : todos.first),
+                ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: catalogo.cargar,
@@ -252,7 +324,9 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
                             final canal = visibles[i];
                             return _TarjetaCanal(
                               canal: canal,
-                              enReproduccion: _control.canal?.id == canal.id,
+                              enReproduccion:
+                                  (Tele.instancia.conectada ? Tele.instancia.enVivoDe(this) : _control.canal)?.id ==
+                                  canal.id,
                               control: _control,
                               favorito: biblioteca.estaEnMiLista(Biblioteca.claveDe(canal)),
                               alTocar: () => _ver(canal),

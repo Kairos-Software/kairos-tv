@@ -18,6 +18,7 @@ El código de la app. Flutter arranca por `main.dart`.
 | `utiles.dart` | Funciones chicas: fechas legibles, mensajes, "¿seguro?". | `herramientas/` |
 | `movil/` | La app en el **celular** con el diseño de Stitch (inicio, en vivo, guía, películas, series, favoritos, detalle, reproductores, mi espacio). También los datos que usa la TV (`datos.dart`, `control_senal.dart`) y los colores y letras (`estilo.dart`). Ver su README. | templates |
 | `tv/` | La app en la **TV**, manejada con el control remoto (diseño de `diseno_kairos_tv/`). Ver su README. | templates |
+| `tele/` | **"Ver en la tele"**: la app corre en el celular y una tele cualquiera (aunque no sea Android) hace de segundo monitor, con el diseño de TV. En el celular queda el control remoto. Ver su README. | — |
 | `api/` | Cómo se habla con la API y las clases de los datos. Ver su README. | — |
 | `pantallas/` | Las herramientas del panel en el celular (perfil, usuarios, avisos). Ver su README. | `views.py` + templates |
 | `widgets/` | Piezas de pantalla reutilizables. Ver su README. | `templates/parciales/` |
