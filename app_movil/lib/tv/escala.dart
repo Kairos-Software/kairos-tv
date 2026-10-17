@@ -7,6 +7,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../aparato.dart';
+
 const anchoTv = 1920.0;
 
 class EscalaTv extends StatelessWidget {
@@ -50,6 +52,11 @@ class EscalaTv extends StatelessWidget {
 /// grande, y tapaba la parte derecha de la barra de controles. Esto lo arma
 /// del tamaño REAL de la pantalla y lo agranda después. Fuera de la TV (sin
 /// achique) no hace nada.
+///
+/// En la tele del celular ("Ver en la tele", lib/tele/) Android mide esas
+/// vistas con la densidad del CELULAR ([Aparato.densidadDeVistas]) y no con la
+/// de la tele: si no se compensa, el video de YouTube queda chico en la esquina
+/// de arriba a la izquierda y el resto negro.
 class TamanioReal extends StatelessWidget {
   const TamanioReal({super.key, required this.child});
 
@@ -59,8 +66,12 @@ class TamanioReal extends StatelessWidget {
   Widget build(BuildContext context) {
     final vista = View.of(context);
     final anchoReal = vista.physicalSize.width / vista.devicePixelRatio; // una TV Full HD dice 960
-    final escala = anchoReal <= 0 ? 1.0 : MediaQuery.sizeOf(context).width / anchoReal; // 1920 / 960 = 2
-    if (escala <= 1.01) return child;
+    final densidad = Aparato.densidadDeVistas > 0 ? Aparato.densidadDeVistas : vista.devicePixelRatio;
+    final escala = anchoReal <= 0
+        ? 1.0
+        // 1920 / 960 = 2 (y en la tele del celular, por cuánto difieren las dos densidades)
+        : MediaQuery.sizeOf(context).width / anchoReal * densidad / vista.devicePixelRatio;
+    if ((escala - 1).abs() <= .01) return child;
     return LayoutBuilder(
       builder: (context, limites) => FittedBox(
         fit: BoxFit.fill,

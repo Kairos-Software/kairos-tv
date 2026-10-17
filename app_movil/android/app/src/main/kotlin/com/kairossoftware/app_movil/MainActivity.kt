@@ -150,6 +150,9 @@ class MainActivity : FlutterActivity() {
                             "version" to actividad.packageManager.getPackageInfo(actividad.packageName, 0).versionName,
                             "carpetaTemporal" to File(actividad.cacheDir, "actualizaciones").apply { mkdirs() }.absolutePath,
                             "codecs" to codecsDeVideo(),
+                            // Con la que Flutter mide las vistas de Android dentro de la app (YouTube):
+                            // la de la pantalla de la actividad (en la tele del celular, la del celular)
+                            "densidadDeVistas" to actividad.resources.displayMetrics.density.toDouble(),
                         ))
                     }
                     "instalar" -> {

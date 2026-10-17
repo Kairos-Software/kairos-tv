@@ -26,6 +26,12 @@ class Aparato {
   /// los mismos nombres que usa el servidor). Vacío = no se sabe (se prueba todo).
   static Set<String> codecs = {};
 
+  /// La densidad con la que Android mide lo que dibuja él dentro de la app (el
+  /// reproductor de YouTube): la de la pantalla de la actividad. En la tele del
+  /// celular ("Ver en la tele") es la del CELULAR, no la de la tele: ver
+  /// TamanioReal (tv/escala.dart). 0 = no se sabe (se usa la de la pantalla).
+  static double densidadDeVistas = 0;
+
   /// Abre el instalador de Android con la APK de [ruta] (la persona confirma).
   static Future<void> instalar(String ruta) => _canal.invokeMethod('instalar', {'ruta': ruta});
 
@@ -58,6 +64,7 @@ class Aparato {
       version = '${datos?['version'] ?? ''}';
       carpetaTemporal = '${datos?['carpetaTemporal'] ?? ''}';
       codecs = {for (final c in datos?['codecs'] as List? ?? const []) '$c'};
+      densidadDeVistas = (datos?['densidadDeVistas'] as num?)?.toDouble() ?? 0;
     } on MissingPluginException {
       // En los tests (o fuera de Android) no hay canal: quedan los valores por defecto
     } on PlatformException {

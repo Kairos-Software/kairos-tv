@@ -176,7 +176,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     }
 
     private fun abrir(pantalla: Display) {
-        val motor = this.motor ?: crearMotor(pantalla)
+        val motor = this.motor ?: crearMotor()
         if (!mostrarEn(pantalla, motor)) {
             // La tele se desconectó justo en ese momento
             soltarMotor()
@@ -331,12 +331,11 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
         }
     }
 
-    private fun crearMotor(pantalla: Display): FlutterEngine {
+    private fun crearMotor(): FlutterEngine {
         val nuevo = FlutterEngine(actividad.applicationContext)
         // Los mismos datos del aparato que el motor del celular (nombre, códecs...)
         MainActivity.prepararCanalDelAparato(actividad, nuevo)
         nuevo.activityControlSurface.attachToActivity(componente, actividad.lifecycle)
-        medirConLaTele(nuevo, pantalla)
         canalTele = MethodChannel(nuevo.dartExecutor.binaryMessenger, CANAL).apply {
             setMethodCallHandler { llamada, resultado ->
                 when (llamada.method) {
@@ -355,23 +354,6 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
         )
         motor = nuevo
         return nuevo
-    }
-
-    /**
-     * Las vistas de Android que van dentro de la app (el reproductor de
-     * YouTube) Flutter las mide con la densidad de la pantalla de su contexto.
-     * Al prestarle la actividad, era la del CELULAR, no la de la tele, y el video
-     * de YouTube quedaba chico en la esquina de arriba a la izquierda y el
-     * resto negro. Se le da un contexto de la tele.
-     */
-    private fun medirConLaTele(motor: FlutterEngine, pantalla: Display) {
-        try {
-            val vistas = motor.platformViewsController
-            vistas.detach()
-            vistas.attach(actividad.createDisplayContext(pantalla), motor.renderer, motor.dartExecutor)
-        } catch (e: Exception) {
-            Log.w(ETIQUETA, "Las vistas de Android de la tele quedan medidas con el celular", e)
-        }
     }
 
     private fun cerrar() {

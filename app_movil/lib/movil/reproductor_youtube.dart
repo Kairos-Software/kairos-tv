@@ -584,6 +584,11 @@ class ControlYoutube extends ChangeNotifier {
   @override
   void dispose() {
     guardarProgreso();
+    // El video se para YA y la página se vacía: Android destruye el WebView
+    // recién un rato después, y mientras tanto seguía sonando (pasó en la tele
+    // del celular: se volvía a En Vivo y YouTube se seguía escuchando)
+    _js('reproductor.stopVideo();');
+    unawaited(web?.loadRequest(Uri.parse('about:blank')).catchError((Object _) {}));
     _cerrado = true;
     _guardar?.cancel();
     _vigia?.cancel();
