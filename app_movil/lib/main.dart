@@ -9,6 +9,7 @@ import 'actualizacion.dart';
 import 'aparato.dart';
 import 'bienvenida.dart';
 import 'config.dart';
+import 'movil/agenda.dart';
 import 'movil/estructura.dart';
 import 'pantallas/perfil.dart';
 import 'sesion.dart';
@@ -29,6 +30,8 @@ Future<void> main() async {
   sesion.iniciar();
   // "Ver en la tele": si se conecta una tele como pantalla (lib/tele/)
   Tele.instancia.escuchar();
+  // "Avisarme" de la Agenda (lo marcado y, en el celular, los avisos de Android)
+  Avisos.iniciar();
   runApp(
     SesionScope(
       sesion: sesion,

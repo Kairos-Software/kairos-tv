@@ -11,6 +11,7 @@ import '../api/modelos.dart';
 import '../movil/componentes.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
+import '../movil/logo_legible.dart';
 import 'foco.dart';
 
 /// Márgenes: a la izquierda queda el menú (88 px cerrado); a la derecha, el margen seguro de la TV.
@@ -190,11 +191,15 @@ class LogoCanalTv extends StatelessWidget {
     if (canal.logo.isEmpty) return iniciales;
     return Padding(
       padding: relleno,
-      child: Image.network(
-        canal.logo,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => iniciales,
-        frameBuilder: (_, imagen, cuadro, sincronica) => sincronica || cuadro != null ? imagen : iniciales,
+      // Si es oscuro, sobre una placa clara (movil/logo_legible.dart)
+      child: LogoLegible(
+        url: canal.logo,
+        imagen: Image.network(
+          canal.logo,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => iniciales,
+          frameBuilder: (_, imagen, cuadro, sincronica) => sincronica || cuadro != null ? imagen : iniciales,
+        ),
       ),
     );
   }

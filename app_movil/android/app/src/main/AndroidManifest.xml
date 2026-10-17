@@ -9,6 +9,10 @@
          sobre otras apps", lo da la persona una vez) la app queda fija en la tele
          aunque se salga de ella, así la tele nunca muestra el celular. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <!-- "Avisarme" de la Agenda (lib/movil/agenda.dart): el aviso programado
+         vuelve a programarse si el celular se reinicia. El de mostrar
+         notificaciones (POST_NOTIFICATIONS) lo trae flutter_local_notifications. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <!-- Android TV: la app también se instala en televisores. "required=false"
          = sirve en TV pero NO es obligatorio (sigue andando en celulares).
@@ -51,6 +55,17 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- "Avisarme" de la Agenda: muestran el aviso a su hora (aunque la app
+             esté cerrada) y lo reprograman al reiniciar el celular o actualizar la app -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- Le presta al instalador de Android la APK nueva que bajó la app
              (está en la carpeta privada de la app; ver res/xml/archivos_compartidos.xml) -->
         <provider

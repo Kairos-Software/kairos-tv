@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %} Cargar o editar un evento de la agenda (views.editar). {% endcomment %}
+
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block clase_body %}pagina-agenda-formulario{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/agenda.css' %}">{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado">
+    <a href="{% url 'agenda:lista' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Agenda</a>
+    <h1 class="pagina-titulo">{{ titulo }}</h1>
+    <p class="pagina-bajada">Sale en la app con su canal y el botón <strong>Avisarme</strong>. Las horas son las de Argentina.</p>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<form method="post" novalidate class="formulario">
+    {% csrf_token %}
+    {% if form.errors %}
+    <div class="alert alert-danger" role="alert">
+        Revisá los campos marcados en rojo.
+        {% for error in form.non_field_errors %}<br>{{ error }}{% endfor %}
+    </div>
+    {% endif %}
+    <section class="tarjeta formulario-seccion">
+        <div class="row g-3">
+            {% include "parciales/_campo.html" with campo=form.titulo ancho="col-md-8" %}
+            {% include "parciales/_campo.html" with campo=form.tipo ancho="col-md-4" %}
+            {% include "parciales/_campo.html" with campo=form.detalle ancho="col-12" %}
+            <div class="col-12">
+                <label class="form-label" for="{{ form.canal.id_for_label }}">Canal</label>
+                <input type="search" class="form-control agenda-buscar-canal" placeholder="Buscar el canal por nombre o número"
+                       aria-label="Buscar el canal" data-filtra="{{ form.canal.id_for_label }}">
+                {{ form.canal }}
+                {% if form.canal.errors %}<div class="invalid-feedback d-block">{{ form.canal.errors|join:" " }}</div>
+                {% else %}<div class="form-text">{{ form.canal.help_text }}</div>{% endif %}
+            </div>
+            {% include "parciales/_campo.html" with campo=form.empieza %}
+            {% include "parciales/_campo.html" with campo=form.termina %}
+        </div>
+    </section>
+    <div class="formulario-acciones">
+        <a href="{% url 'agenda:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+        {% if not evento %}<button type="submit" name="y_otro" class="btn btn-outline-primary">Guardar y cargar otro igual</button>{% endif %}
+        <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'js/agenda.js' %}"></script>{% endblock %}

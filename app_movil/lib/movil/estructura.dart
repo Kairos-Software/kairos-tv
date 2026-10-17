@@ -18,6 +18,7 @@ import '../marca.dart';
 import '../tele/control_remoto.dart';
 import '../tele/enlace.dart';
 import 'buscar.dart';
+import 'agenda.dart';
 import 'datos.dart';
 import 'en_vivo.dart';
 import 'favoritos.dart';
@@ -73,6 +74,9 @@ class _PantallaMovilState extends State<PantallaMovil> {
     Tele.instancia.seccion(_seccion.name); // si hay una tele conectada, que muestre lo mismo
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_volverAlUltimoCanal);
+    // Un aviso de la Agenda tocado (o "Ver" en la Agenda): a En Vivo con ese canal
+    Avisos.canalPedido.addListener(_abrirCanalPedido);
+    _catalogo.addListener(_abrirCanalPedido);
     if (widget.catalogo != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _catalogo.cargar());
     _ciclo = AppLifecycleListener(onResume: _alVolver, onHide: _biblioteca.sincronizar);
@@ -88,6 +92,8 @@ class _PantallaMovilState extends State<PantallaMovil> {
   @override
   void dispose() {
     Tele.instancia.seccion(null); // salió (cerró sesión): la tele vuelve al logo
+    Avisos.canalPedido.removeListener(_abrirCanalPedido);
+    _catalogo.removeListener(_abrirCanalPedido);
     _catalogo.removeListener(_volverAlUltimoCanal);
     _ciclo?.dispose();
     _refresco?.cancel();
@@ -104,6 +110,16 @@ class _PantallaMovilState extends State<PantallaMovil> {
     if (_biblioteca.volverAlUltimo && ultimo != null && _catalogo.canalPorId(ultimo) != null) {
       _irA(Seccion.enVivo, canal: ultimo);
     }
+  }
+
+  /// El canal de un aviso de la Agenda que se tocó (la app pudo abrirse con el aviso: espera al catálogo).
+  void _abrirCanalPedido() {
+    final id = Avisos.canalPedido.value;
+    if (id == null || !_catalogo.cargado || !mounted) return;
+    Avisos.canalPedido.value = null;
+    if (_catalogo.canalPorId(id) == null) return;
+    Navigator.of(context).popUntil((ruta) => ruta.isFirst);
+    _irA(Seccion.enVivo, canal: id);
   }
 
   void _irA(Seccion seccion, {String? categoria, int? canal}) {

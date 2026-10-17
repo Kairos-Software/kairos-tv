@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/cliente.dart';
 import '../api/modelos.dart';
 import '../aparato.dart';
+import 'agenda.dart';
 import 'calidad_youtube.dart';
 import 'control_senal.dart';
 import 'medidor.dart';
@@ -226,6 +227,19 @@ class Catalogo extends ChangeNotifier {
   /// Las secciones creadas en el panel que tienen algo para ver acá, en el orden del menú.
   List<SeccionNueva> seccionesNuevas = [];
 
+  /// La Agenda tal como llegó (movil/agenda.dart): se arma con los canales de [agenda].
+  List<Map<String, dynamic>> _agendaRecibida = [];
+
+  /// La Agenda (partidos y programas especiales): lo que todavía no terminó,
+  /// con su canal. Lo que tiene un canal que este aparato no muestra, no está.
+  List<EventoAgenda> get agenda {
+    final porId = {
+      for (final canal in [...canales, ..._vivosNuevos]) canal.id: canal,
+    };
+    return [for (final datos in _agendaRecibida) ?EventoAgenda.desdeJson(datos, (id) => porId[id])]
+      ..removeWhere((evento) => evento.termino());
+  }
+
   /// Lo de las secciones nuevas "en vivo" (radios...) y "a demanda" (música...), para favoritos y búsquedas.
   List<Canal> get _vivosNuevos => [for (final s in seccionesNuevas.where((s) => s.enVivo)) ...s.canales];
 
@@ -364,6 +378,19 @@ class Catalogo extends ChangeNotifier {
       return nuevas;
     }
 
+    // La Agenda: un servidor viejo no la tiene (no es un error: no hay agenda)
+    Future<List<Map<String, dynamic>>> pedirAgenda() async {
+      try {
+        final datos = await api.get('agenda/') as Map<String, dynamic>;
+        return [
+          for (final evento in datos['eventos'] as List? ?? const [])
+            if (evento is Map<String, dynamic>) evento,
+        ];
+      } catch (_) {
+        return [];
+      }
+    }
+
     try {
       final resultados = await Future.wait([
         pedir('vivo'),
@@ -373,6 +400,7 @@ class Catalogo extends ChangeNotifier {
         pedirSeccionesNuevas(),
         FuentePreferida.cargar(),
         CalidadYoutube.cargar(),
+        pedirAgenda(),
       ]);
       final vivo = resultados[0] as List<CategoriaCanales>;
       _recibidos = [
@@ -396,8 +424,11 @@ class Catalogo extends ChangeNotifier {
         seccion.categorias = seccion.categorias.where((c) => c.canales.isNotEmpty).toList();
       }
       seccionesNuevas = nuevas.where((s) => s.canales.isNotEmpty).toList();
+      _agendaRecibida = resultados[7] as List<Map<String, dynamic>>;
       _numerar();
       cargado = true;
+      // Los "Avisarme" con la hora de ahora (si cambió en el panel), y se olvida lo que se sacó
+      unawaited(Avisos.sincronizar(agenda));
     } catch (e) {
       error = e;
     } finally {

@@ -73,6 +73,7 @@ Depuración por red).
 | `webview_flutter`, `webview_flutter_android` | El reproductor oficial de YouTube para las películas de canales oficiales (ver `lib/movil/reproductor_youtube.dart`). |
 | `youtube_explode_dart` | Saca la dirección del video de YouTube en el aparato (ver `lib/senales.dart`). |
 | `cronet_http` | El motor de red de Chrome: con él se le habla a YouTube, que rechaza (error 429) al cliente de red de Dart. `android/app/build.gradle.kts` fija `cronet-api` en la 119 (la 141 no compila con este Android Gradle). |
+| `flutter_local_notifications`, `timezone` | Los avisos de "Avisarme" (la Agenda, `lib/movil/agenda.dart`): programados en Android, llegan aunque la app esté cerrada. Piden "desugaring" en `android/app/build.gradle.kts` y los receptores del `AndroidManifest.xml`; el ícono es `res/drawable/ic_aviso.xml` (y `res/raw/keep.xml` para que no se borre al armar la APK). |
 | `wakelock_plus` | Que la pantalla no se apague mientras se mira un canal. |
 | `flutter_launcher_icons` (solo desarrollo) | Genera los íconos de Android desde el logo: `dart run flutter_launcher_icons`. |
 

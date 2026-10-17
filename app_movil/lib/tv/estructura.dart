@@ -25,11 +25,13 @@ import 'package:flutter/services.dart';
 
 import '../api/modelos.dart';
 import '../marca.dart';
+import '../movil/agenda.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
 import '../sesion.dart';
 import '../tele/en_la_tele.dart';
 import '../utiles.dart';
+import 'agenda.dart';
 import 'buscar.dart';
 import 'cuenta.dart';
 import 'en_vivo.dart';
@@ -116,6 +118,10 @@ class _PantallaTvState extends State<PantallaTv> {
   Timer? _reposo;
   bool _enReposo = false;
 
+  /// Cada tanto se fija si empieza algo marcado con "Avisarme" (tv/agenda.dart).
+  Timer? _vigiaAgenda;
+  final Set<int> _yaAvisados = {};
+
   @override
   void initState() {
     super.initState();
@@ -129,6 +135,8 @@ class _PantallaTvState extends State<PantallaTv> {
     }
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_alCargarPorPrimeraVez);
+    // En la tele del celular avisa el celular (con el aviso de Android)
+    if (!widget.espejo) _vigiaAgenda = Timer.periodic(const Duration(seconds: 30), (_) => _mirarAgenda());
     if (widget.catalogo != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _catalogo.cargar());
     _ciclo = AppLifecycleListener(onResume: _alVolver, onHide: _biblioteca.sincronizar);
@@ -148,6 +156,7 @@ class _PantallaTvState extends State<PantallaTv> {
     _ciclo?.dispose();
     _refresco?.cancel();
     _reposo?.cancel();
+    _vigiaAgenda?.cancel();
     _contenido.dispose();
     HardwareKeyboard.instance.removeHandler(_alTocarElControl);
     HardwareKeyboard.instance.removeHandler(_teclaSinFoco);
@@ -182,6 +191,24 @@ class _PantallaTvState extends State<PantallaTv> {
       );
       if (seguir == true && mounted) verCanalTv(_contexto, ultimo);
     });
+  }
+
+  /// Empezó algo marcado con "Avisarme": "Empieza ahora" con "Verlo" (encima de lo que se esté viendo).
+  Future<void> _mirarAgenda() async {
+    if (!mounted || !_catalogo.cargado) return;
+    final empezando = Avisos.empezandoAhora(_catalogo.agenda, _yaAvisados);
+    if (empezando.isEmpty) return;
+    final evento = empezando.first;
+    _yaAvisados.add(evento.id);
+    final ver = await showDialog<bool>(
+      context: _contexto,
+      builder: (_) => CartelEmpiezaTv(evento: evento),
+    );
+    if (ver == true && mounted) {
+      // Si se estaba viendo otra cosa, se cierra antes de poner el canal
+      Navigator.of(_contexto).popUntil((ruta) => ruta.isFirst);
+      await verCanalTv(_contexto, evento.canal);
+    }
   }
 
   /// Un contexto debajo de DatosScope (para abrir pantallas con el catálogo).

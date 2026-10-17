@@ -9,6 +9,7 @@ urlpatterns = [
     path('', include('usuarios.urls')),
     path('actividad/', include('actividad.urls')),
     path('canales/', include('canales.urls')),
+    path('agenda/', include('agenda.urls')),
     path('reventa/', include('reventa.urls')),
     path('', include('descargas.urls')),   # /descargar/ y /app-android/
     path('notificaciones/', include('notificaciones.urls')),

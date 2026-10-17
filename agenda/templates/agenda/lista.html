@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+    La Agenda: lo que viene, por día (views.lista). En la app sale con el
+    botón "Avisarme". Lo que no tiene canal no sale en la app.
+{% endcomment %}
+
+{% block titulo %}Agenda{% endblock %}
+{% block clase_body %}pagina-listado pagina-agenda{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/agenda.css' %}">{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
+    <div>
+        <h1 class="pagina-titulo">Agenda</h1>
+        <p class="pagina-bajada">Partidos y programas especiales. En la app salen con el botón <strong>Avisarme</strong>: le avisa a cada persona cuando empieza.</p>
+    </div>
+    {% if puede_editar %}
+    <a href="{% url 'agenda:nuevo' %}" class="btn btn-acento"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nuevo evento</a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block contenido %}
+<nav class="agenda-pestanias" aria-label="Qué mostrar">
+    <a href="{% url 'agenda:lista' %}" class="{% if not pasados %}activa{% endif %}"{% if not pasados %} aria-current="page"{% endif %}>Lo que viene</a>
+    <a href="{% url 'agenda:lista' %}?ver=pasados" class="{% if pasados %}activa{% endif %}"{% if pasados %} aria-current="page"{% endif %}>Ya pasó</a>
+</nav>
+
+{% if sin_canal and not pasados %}
+<p class="agenda-aviso" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+    {{ sin_canal }} evento{{ sin_canal|pluralize }} sin canal: no sale{{ sin_canal|pluralize:"n" }} en la app hasta que elijas en qué canal se ve.</p>
+{% endif %}
+
+{% for nombre_del_dia, eventos in dias %}
+<section class="agenda-dia" aria-labelledby="dia-{{ forloop.counter }}">
+    <h2 class="agenda-dia-titulo" id="dia-{{ forloop.counter }}">{{ nombre_del_dia }}</h2>
+    <ul class="agenda-lista">
+        {% for e in eventos %}
+        <li class="tarjeta agenda-evento{% if not e.canal %} agenda-sin-canal{% endif %}">
+            <div class="agenda-hora">
+                <strong>{{ e.empieza|date:"H:i" }}</strong>
+                {% if e.empieza <= ahora and ahora < e.fin %}<span class="chip chip-si">En vivo</span>{% endif %}
+            </div>
+            <div class="agenda-que">
+                <span class="agenda-titulo">{{ e.titulo }}</span>
+                <span class="agenda-detalle">{{ e.get_tipo_display }}{% if e.detalle %} · {{ e.detalle }}{% endif %} · hasta las {{ e.fin|date:"H:i" }}</span>
+            </div>
+            <div class="agenda-canal">
+                {% if e.canal %}
+                    {% if e.canal.logo %}<img src="{{ e.canal.logo }}" alt="" loading="lazy">{% endif %}
+                    <span>{{ e.canal.nombre }}</span>
+                {% else %}
+                    <span class="chip chip-pendiente">Falta el canal</span>
+                {% endif %}
+            </div>
+            {% if puede_editar %}
+            <div class="agenda-acciones">
+                <a href="{% url 'agenda:editar' e.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
+                <a href="{% url 'agenda:nuevo' %}?copiar={{ e.pk }}" class="btn btn-sm btn-outline-secondary" title="Otro evento con el mismo canal y tipo"><i class="bi bi-copy" aria-hidden="true"></i> Otro igual</a>
+                <form method="post" action="{% url 'agenda:eliminar' e.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger" data-confirmar="¿Sacar «{{ e.titulo }}» de la agenda?"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Eliminar</span></button>
+                </form>
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% empty %}
+<div class="tarjeta p-0">
+    <div class="vacio">
+        <i class="bi bi-calendar-event" aria-hidden="true"></i>
+        <p>{% if pasados %}Todavía no pasó ningún evento.{% else %}No hay nada en la agenda. Cargá un partido o un programa especial y en la app aparece con "Avisarme".{% endif %}</p>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'js/agenda.js' %}"></script>{% endblock %}

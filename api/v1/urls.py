@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from . import app, auth, biblioteca, canales, cliente, notificaciones, perfil, usuarios
+from . import agenda, app, auth, biblioteca, canales, cliente, notificaciones, perfil, usuarios
 
 app_name = 'api_v1'
 
@@ -31,6 +31,7 @@ def indice(request):
             'cliente': url('cliente'),
             'cliente_logout': url('cliente_logout'),
             'biblioteca': url('biblioteca'),
+            'agenda': url('agenda'),
             'app': url('app'),
         },
     })
@@ -69,6 +70,9 @@ urlpatterns = [
 
     # Favoritos, "Continuar viendo" y últimos canales vistos de la cuenta (no del aparato)
     path('biblioteca/', biblioteca.biblioteca, name='biblioteca'),
+
+    # Partidos y programas especiales, con su canal ("Avisarme" en la app)
+    path('agenda/', agenda.lista, name='agenda'),
 
     path('notificaciones/', notificaciones.lista, name='notificaciones'),
     path('notificaciones/<int:pk>/leida/', notificaciones.marcar_leida, name='notificacion_leida'),

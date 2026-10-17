@@ -8,6 +8,7 @@ import '../api/modelos.dart';
 import '../tele/enlace.dart';
 import 'datos.dart';
 import 'estilo.dart';
+import 'logo_legible.dart';
 
 /// Iniciales de un nombre ("Canal 26" -> "C2"), lo que se ve si no hay imagen.
 String inicialesDe(String nombre) =>
@@ -47,20 +48,22 @@ class Imagen extends StatelessWidget {
         ),
       ),
     );
+    final imagen = Image.network(
+      url,
+      fit: ajuste,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (_, _, _) => iniciales,
+      frameBuilder: (_, imagen, cuadro, sincronica) => sincronica || cuadro != null ? imagen : iniciales,
+    );
     return ColoredBox(
       color: fondo,
       child: url.isEmpty
           ? iniciales
           : Padding(
               padding: relleno,
-              child: Image.network(
-                url,
-                fit: ajuste,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (_, _, _) => iniciales,
-                frameBuilder: (_, imagen, cuadro, sincronica) => sincronica || cuadro != null ? imagen : iniciales,
-              ),
+              // Entera (un logo): si es oscuro, va sobre una placa clara (logo_legible.dart)
+              child: ajuste == BoxFit.contain ? LogoLegible(url: url, imagen: imagen) : imagen,
             ),
     );
   }

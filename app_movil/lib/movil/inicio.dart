@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../api/modelos.dart';
 import '../utiles.dart';
+import 'agenda_vista.dart';
 import 'componentes.dart';
 import 'datos.dart';
 import 'detalle.dart';
@@ -52,6 +53,8 @@ class SeccionInicio extends StatelessWidget {
               const _Chips(),
               const _SeguirAca(),
               const _Portada(),
+              // Partidos y programas especiales, con "Avisarme" (agenda_vista.dart)
+              const FilaAgenda(),
               _FilaCanales(
                 titulo: 'Tus canales favoritos',
                 icono: const Icon(Icons.favorite_rounded, size: 20, color: Tono.rubi),

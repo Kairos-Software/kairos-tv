@@ -21,6 +21,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Lo pide flutter_local_notifications ("Avisarme" de la Agenda, lib/movil/agenda.dart)
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -117,6 +119,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     // Meter un script en el reproductor de YouTube (elegir el audio en castellano, MainActivity.kt)
     implementation("androidx.webkit:webkit:1.15.0")
+    // Lo pide flutter_local_notifications (ver compileOptions)
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 // cronet_http (la app le habla a YouTube con Cronet, ver lib/senales.dart)

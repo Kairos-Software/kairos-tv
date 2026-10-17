@@ -1,0 +1,22 @@
+# nginx de TODAS las páginas del servidor (/opt/nginx, compilado a mano: no es
+# el de Ubuntu). Va en /opt/paginas-services/ y se activa con systemctl link +
+# enable (ver README.md -> "nginx arranca solo"). Sin esto, nginx no arrancaba
+# después de un reinicio y se caían todas las páginas (pasó el 17/10/2026).
+[Unit]
+Description=nginx de las páginas (/opt/nginx)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# En primer plano: systemd lo vigila directo (sin archivo de PID)
+Type=simple
+ExecStartPre=/opt/nginx/sbin/nginx -t -q
+ExecStart=/opt/nginx/sbin/nginx -g "daemon off;"
+ExecReload=/opt/nginx/sbin/nginx -s reload
+ExecStop=/opt/nginx/sbin/nginx -s quit
+# Si no puede arrancar (un puerto ocupado), reintenta solo
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -6,6 +6,7 @@ No son parte del sistema: se copian a mano en el servidor.
 | Archivo | Va en el servidor en | Para qué |
 |---|---|---|
 | `kairostv.service` | `/opt/paginas-services/kairostv.service` | Arranca Django con gunicorn en el puerto 8017 |
+| `nginx-paginas.service` | `/opt/paginas-services/nginx-paginas.service` | Arranca el nginx de **todas** las páginas (`/opt/nginx`) al prender el servidor |
 | `nginx/kairostv-paso1.conf` | `/opt/nginx/conf/conf.d/kairostv.conf` (temporal) | Solo puerto 80, para sacar el certificado |
 | `nginx/kairostv.conf` | `/opt/nginx/conf/conf.d/kairostv.conf` (definitivo) | https + static + media + proxy a gunicorn |
 
@@ -136,8 +137,32 @@ cp despliegue/nginx/kairostv.conf /opt/nginx/conf/conf.d/kairostv.conf
 Ejemplo: en octubre 2026 se agregó `client_max_body_size 25m;` para poder subir
 listas M3U grandes desde el panel (sin eso nginx corta en 1 MB con error 413).
 
+## nginx arranca solo (desde el 17/10/2026)
+
+El nginx de `/opt/nginx` atiende **todas** las páginas del servidor (Kairos TV, ventas, etc.).
+Antes se había prendido a mano. El 17/10/2026 el servidor se reinició solo (por las
+actualizaciones automáticas de Ubuntu), nginx no volvió a arrancar y **se cayeron todas las páginas**.
+Ahora es un servicio:
+
+```
+cp despliegue/nginx-paginas.service /opt/paginas-services/
+systemctl link /opt/paginas-services/nginx-paginas.service
+systemctl daemon-reload
+/opt/nginx/sbin/nginx -s quit; sleep 2; systemctl enable --now nginx-paginas
+```
+
+- Estado: `systemctl status nginx-paginas`. Recargar la configuración: `systemctl reload nginx-paginas`
+  (o `/opt/nginx/sbin/nginx -s reload`, que sigue andando, también para los certificados).
+- nginx es "todo o nada": si UN puerto de UNA página está ocupado, no arranca ninguna.
+  Ese día fue `conf.d/acceso.conf` (puerto 7500, que tomó un programa de Node al arrancar):
+  se apagó renombrándola a `acceso.conf.apagado`. El servicio reintenta solo cada 5 s.
+- En el mismo servidor está **Xtream Codes** con su propio nginx
+  (`/home/xtreamcodes/...`): no es el nuestro, no tocarlo.
+
 ## Si algo falla
 - Errores de Django: `journalctl -u kairostv -f`
 - Errores de nginx: `tail -f /opt/nginx/logs/error.log`
 - Error 400 "Bad Request": el dominio no está en `ALLOWED_HOSTS` de `.env.production`.
 - Error 502: gunicorn no está corriendo (`systemctl status kairostv`).
+- Todas las páginas caídas a la vez: nginx no está corriendo (`systemctl status nginx-paginas`;
+  `ss -tlnp | grep -E ':80 |:443 '` tiene que mostrar nginx). El motivo, en `journalctl -u nginx-paginas`.
