@@ -11,7 +11,7 @@
 ///       se ve. Arriba/Abajo la recorren, OK cambia de canal, Atrás la cierra.
 ///   Arriba/Abajo (o CH+/CH-): zapping.
 ///   Izquierda/Derecha (o Info/Menú): las opciones (Guía, canal anterior y
-///       siguiente, favoritos, Ajustes: calidad, idioma, imagen y fuente).
+///       siguiente, favoritos, Recordarme, Ajustes: calidad, idioma, imagen y fuente).
 ///   Números: se escribe el número del canal (hasta 3, 1,5 s) y cambia solo.
 ///   Atrás: cierra lo que esté abierto; si no hay nada, sale.
 ///
@@ -49,6 +49,7 @@ import '../movil/reproductor_youtube.dart';
 import '../sesion.dart';
 import 'estructura.dart' show DialogoTv;
 import 'foco.dart';
+import 'mi_agenda.dart';
 import 'piezas.dart';
 
 /// Las opciones y la barra se cierran solas si no se toca nada en este tiempo.
@@ -287,6 +288,13 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
     if (mounted) _cerrar();
   }
 
+  /// "Recordarme" en este canal (Mi agenda: tv/mi_agenda.dart).
+  Future<void> _recordarme() async {
+    _cerrarCapa?.cancel();
+    await recordarmeTv(context, canal: _canal);
+    if (mounted) _cerrar();
+  }
+
   @override
   Widget build(BuildContext context) {
     final biblioteca = DatosScope.of(context).biblioteca;
@@ -424,6 +432,12 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
                           alternarFavoritoTv(context, clave);
                           _esperarParaCerrar();
                         },
+                      ),
+                      const SizedBox(width: 14),
+                      _BotonCuadrado(
+                        icono: Icons.notifications_none_rounded,
+                        etiqueta: 'Recordarme',
+                        alOk: _recordarme,
                       ),
                       const SizedBox(width: 18),
                       _BotonCuadrado(icono: Icons.settings_rounded, etiqueta: 'Ajustes', alOk: _ajustes),

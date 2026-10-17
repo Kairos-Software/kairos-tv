@@ -73,7 +73,7 @@ INSTALLED_APPS = [
     'reventa',  # revendedores, sus clientes, créditos, paquetes y compras
     'descargas',  # la APK de la app Android para descargar desde el panel
     'biblioteca',  # favoritos y "Continuar viendo" de cada cuenta (no del aparato)
-    'agenda',  # partidos y programas especiales con su canal ("Avisarme" en la app)
+    'agenda',  # sacada: solo queda para borrar su tabla (agenda/README.md)
     'api',  # la API (JSON) para las apps de celular/TV: login por token, perfil, usuarios...
 ]
 

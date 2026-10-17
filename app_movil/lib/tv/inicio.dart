@@ -17,7 +17,7 @@ import '../movil/componentes.dart' show reloj;
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
 import '../sesion.dart';
-import 'agenda.dart';
+import 'mi_agenda.dart';
 import 'detalle.dart';
 import 'estructura.dart';
 import 'foco.dart';
@@ -77,8 +77,8 @@ class InicioTv extends StatelessWidget {
             ),
             if (hayQueSeguir) _SeguirAca(seguir: seguir),
             if (destacado != null) _Portada(canal: destacado, foco: !hayQueSeguir),
-            // Partidos y programas especiales, con "Avisarme" (tv/agenda.dart)
-            filaAgendaTv(context),
+            // Lo que cada uno anotó con "Recordarme" (tv/mi_agenda.dart)
+            const FilaMiAgendaTv(),
             if (catalogo.canales.isEmpty &&
                 catalogo.peliculas.isEmpty &&
                 catalogo.series.isEmpty &&

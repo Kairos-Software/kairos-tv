@@ -6,10 +6,13 @@ import 'dart:async';
 import 'package:app_movil/api/modelos.dart';
 import 'package:app_movil/movil/datos.dart';
 import 'package:app_movil/sesion.dart';
+import 'package:app_movil/movil/recordatorios.dart';
+import 'package:app_movil/tv/mi_agenda.dart';
 import 'package:app_movil/tv/reproductor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 class _VideoDeMentira extends VideoPlayerPlatform {
@@ -202,7 +205,7 @@ void main() {
   testWidgets('en vivo: las opciones abren los ajustes (calidad, idioma, imagen) y cambian de canal', (tester) async {
     await _abrir(tester, ReproductorVivoTv(canal: _canales[0], lista: _canales));
     await _tecla(tester, LogicalKeyboardKey.arrowRight); // opciones, en "Guía"
-    for (final esperado in ['Canal anterior', 'Canal siguiente', 'Agregar a favoritos', 'Ajustes']) {
+    for (final esperado in ['Canal anterior', 'Canal siguiente', 'Agregar a favoritos', 'Recordarme', 'Ajustes']) {
       await _tecla(tester, LogicalKeyboardKey.arrowRight);
       expect(_enfocado(), esperado); // Derecha recorre la barra (no salta al video)
     }
@@ -228,6 +231,25 @@ void main() {
     await _tecla(tester, LogicalKeyboardKey.arrowRight);
     await _tecla(tester, LogicalKeyboardKey.select);
     expect(find.text('Telemax'), findsWidgets);
+  });
+
+  testWidgets('en vivo: "Recordarme" desde las opciones anota ese canal en Mi agenda', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    Recordatorios.poner([]);
+    await _abrir(tester, ReproductorVivoTv(canal: _canales[0], lista: _canales));
+    await _tecla(tester, LogicalKeyboardKey.arrowRight); // opciones, en "Guía"
+    for (var i = 0; i < 4; i++) {
+      await _tecla(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(_enfocado(), 'Recordarme');
+    await _tecla(tester, LogicalKeyboardKey.select);
+    expect(find.byType(DialogoRecordarmeTv), findsOneWidget);
+    await tester.tap(find.text('Guardar'));
+    await _pasar(tester);
+    await tester.pump(const Duration(seconds: 3)); // el aviso "Anotado: ..." se va solo
+    expect(find.byType(DialogoRecordarmeTv), findsNothing);
+    expect(Recordatorios.tiene(_canales[0]), isTrue);
+    Recordatorios.poner([]);
   });
 
   testWidgets('película: OK pausa y deja el foco en Pausa; Atrás esconde la barra y después sale', (tester) async {

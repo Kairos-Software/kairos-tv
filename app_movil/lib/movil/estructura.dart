@@ -18,7 +18,6 @@ import '../marca.dart';
 import '../tele/control_remoto.dart';
 import '../tele/enlace.dart';
 import 'buscar.dart';
-import 'agenda.dart';
 import 'datos.dart';
 import 'en_vivo.dart';
 import 'favoritos.dart';
@@ -26,6 +25,7 @@ import 'estilo.dart';
 import 'grilla.dart';
 import 'inicio.dart';
 import 'mi_espacio.dart';
+import 'recordatorios.dart';
 
 /// Las secciones de la barra de abajo.
 enum Seccion { inicio, enVivo, series, peliculas, favoritos, miEspacio }
@@ -74,8 +74,8 @@ class _PantallaMovilState extends State<PantallaMovil> {
     Tele.instancia.seccion(_seccion.name); // si hay una tele conectada, que muestre lo mismo
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_volverAlUltimoCanal);
-    // Un aviso de la Agenda tocado (o "Ver" en la Agenda): a En Vivo con ese canal
-    Avisos.canalPedido.addListener(_abrirCanalPedido);
+    // Un aviso de "Mi agenda" tocado (o "Ver" en Mi agenda): a En Vivo con ese canal
+    Recordatorios.canalPedido.addListener(_abrirCanalPedido);
     _catalogo.addListener(_abrirCanalPedido);
     if (widget.catalogo != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _catalogo.cargar());
@@ -92,7 +92,7 @@ class _PantallaMovilState extends State<PantallaMovil> {
   @override
   void dispose() {
     Tele.instancia.seccion(null); // salió (cerró sesión): la tele vuelve al logo
-    Avisos.canalPedido.removeListener(_abrirCanalPedido);
+    Recordatorios.canalPedido.removeListener(_abrirCanalPedido);
     _catalogo.removeListener(_abrirCanalPedido);
     _catalogo.removeListener(_volverAlUltimoCanal);
     _ciclo?.dispose();
@@ -112,11 +112,11 @@ class _PantallaMovilState extends State<PantallaMovil> {
     }
   }
 
-  /// El canal de un aviso de la Agenda que se tocó (la app pudo abrirse con el aviso: espera al catálogo).
+  /// El canal de un aviso de "Mi agenda" que se tocó (la app pudo abrirse con el aviso: espera al catálogo).
   void _abrirCanalPedido() {
-    final id = Avisos.canalPedido.value;
+    final id = Recordatorios.canalPedido.value;
     if (id == null || !_catalogo.cargado || !mounted) return;
-    Avisos.canalPedido.value = null;
+    Recordatorios.canalPedido.value = null;
     if (_catalogo.canalPorId(id) == null) return;
     Navigator.of(context).popUntil((ruta) => ruta.isFirst);
     _irA(Seccion.enVivo, canal: id);

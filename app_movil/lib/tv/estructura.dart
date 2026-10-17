@@ -25,13 +25,13 @@ import 'package:flutter/services.dart';
 
 import '../api/modelos.dart';
 import '../marca.dart';
-import '../movil/agenda.dart';
+import '../movil/recordatorios.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
 import '../sesion.dart';
 import '../tele/en_la_tele.dart';
 import '../utiles.dart';
-import 'agenda.dart';
+import 'mi_agenda.dart';
 import 'buscar.dart';
 import 'cuenta.dart';
 import 'en_vivo.dart';
@@ -118,9 +118,9 @@ class _PantallaTvState extends State<PantallaTv> {
   Timer? _reposo;
   bool _enReposo = false;
 
-  /// Cada tanto se fija si empieza algo marcado con "Avisarme" (tv/agenda.dart).
+  /// Cada tanto se fija si empieza algo anotado en "Mi agenda" (tv/mi_agenda.dart).
   Timer? _vigiaAgenda;
-  final Set<int> _yaAvisados = {};
+  final Set<String> _yaAvisados = {};
 
   @override
   void initState() {
@@ -193,21 +193,25 @@ class _PantallaTvState extends State<PantallaTv> {
     });
   }
 
-  /// Empezó algo marcado con "Avisarme": "Empieza ahora" con "Verlo" (encima de lo que se esté viendo).
+  /// Empezó algo anotado en "Mi agenda": "Empieza ..." con "Verlo" (encima de lo que se esté viendo).
   Future<void> _mirarAgenda() async {
     if (!mounted || !_catalogo.cargado) return;
-    final empezando = Avisos.empezandoAhora(_catalogo.agenda, _yaAvisados);
-    if (empezando.isEmpty) return;
-    final evento = empezando.first;
-    _yaAvisados.add(evento.id);
+    for (final (recordatorio, vez) in Recordatorios.empezandoAhora(_yaAvisados)) {
+      _yaAvisados.add(Recordatorios.claveDeLaVez(recordatorio, vez));
+      final canal = _catalogo.canalPorId(recordatorio.canal);
+      if (canal != null) return _avisarQueEmpieza(recordatorio, canal, vez);
+    }
+  }
+
+  Future<void> _avisarQueEmpieza(Recordatorio recordatorio, Canal canal, DateTime vez) async {
     final ver = await showDialog<bool>(
       context: _contexto,
-      builder: (_) => CartelEmpiezaTv(evento: evento),
+      builder: (_) => CartelEmpiezaTv(recordatorio: recordatorio, canal: canal, vez: vez),
     );
     if (ver == true && mounted) {
       // Si se estaba viendo otra cosa, se cierra antes de poner el canal
       Navigator.of(_contexto).popUntil((ruta) => ruta.isFirst);
-      await verCanalTv(_contexto, evento.canal);
+      await verCanalTv(_contexto, canal);
     }
   }
 

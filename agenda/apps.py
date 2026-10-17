@@ -3,4 +3,4 @@ from django.apps import AppConfig
 
 class AgendaConfig(AppConfig):
     name = 'agenda'
-    verbose_name = 'Agenda (partidos y programas especiales, con "Avisarme" en la app)'
+    verbose_name = 'Agenda (sacada: solo borra su tabla, ver README.md)'

@@ -16,6 +16,8 @@ import 'datos.dart';
 import 'estilo.dart';
 import 'estructura.dart';
 import 'inicio.dart';
+import 'mi_agenda.dart';
+import 'recordatorios.dart';
 
 class SeccionMiEspacio extends StatelessWidget {
   const SeccionMiEspacio({super.key});
@@ -42,6 +44,34 @@ class SeccionMiEspacio extends StatelessWidget {
             ),
             const SizedBox(height: 28),
             _Continuar(biblioteca: biblioteca, catalogo: catalogo),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Espacio.margen, 0, Espacio.margen, 12),
+              child: Material(
+                color: Tono.capa,
+                borderRadius: BorderRadius.circular(Curva.grande),
+                clipBehavior: Clip.antiAlias,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: Recordatorios.cambios,
+                  builder: (context, _, _) {
+                    final cuantos = Recordatorios.conCanal(catalogo).length;
+                    return ListTile(
+                      onTap: () => abrirPantalla<void>(context, const PantallaMiAgenda()),
+                      leading: const Icon(Icons.event_rounded, color: Tono.celeste),
+                      title: Text('Mi agenda', style: Letra.etiqueta.copyWith(fontSize: 14)),
+                      subtitle: Text(
+                        cuantos == 0
+                            ? 'Anotá lo que querés ver y te avisamos antes.'
+                            : cuantos == 1
+                            ? '1 recordatorio anotado.'
+                            : '$cuantos recordatorios anotados.',
+                        style: Letra.cuerpo,
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: Tono.textoApagado),
+                    );
+                  },
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Espacio.margen),
               child: Material(

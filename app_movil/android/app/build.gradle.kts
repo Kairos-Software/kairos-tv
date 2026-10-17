@@ -21,7 +21,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        // Lo pide flutter_local_notifications ("Avisarme" de la Agenda, lib/movil/agenda.dart)
+        // Lo pide flutter_local_notifications ("Recordarme" de Mi agenda, lib/movil/recordatorios.dart)
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Que al armar la APK no se borre el ícono de los avisos de la Agenda: se
+<!-- Que al armar la APK no se borre el ícono de los avisos de Mi agenda: se
      usa desde Dart por su nombre ("ic_aviso"), y Android no lo ve usado. -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ic_aviso" />

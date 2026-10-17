@@ -7,8 +7,8 @@ import 'package:app_movil/api/cliente.dart';
 import 'package:app_movil/api/modelos.dart';
 import 'package:app_movil/aparato.dart';
 import 'package:app_movil/marca.dart';
-import 'package:app_movil/movil/agenda.dart';
-import 'package:app_movil/movil/agenda_vista.dart';
+import 'package:app_movil/movil/mi_agenda.dart';
+import 'package:app_movil/movil/recordatorios.dart';
 import 'package:app_movil/movil/estilo.dart';
 import 'package:app_movil/movil/datos.dart';
 import 'package:app_movil/movil/estructura.dart';
@@ -16,6 +16,7 @@ import 'package:app_movil/sesion.dart';
 import 'package:app_movil/tv/cuenta.dart';
 import 'package:app_movil/tv/escenario.dart';
 import 'package:app_movil/tv/estructura.dart';
+import 'package:app_movil/tv/mi_agenda.dart';
 import 'package:app_movil/tv/reposo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -111,32 +112,12 @@ Future<(Catalogo, Biblioteca)> _datosConAlgoEnOtroAparato(WidgetTester tester, S
   return (catalogo, biblioteca);
 }
 
-/// Un servidor con canales y una agenda (uno en vivo, uno marcado, uno sin marcar).
-class _ConAgenda extends ApiCliente {
-  _ConAgenda() : super(urlBase: 'http://prueba/api/v1/');
+/// Un servidor con cuatro canales en vivo (para "Mi agenda").
+class _ConCanales extends ApiCliente {
+  _ConCanales() : super(urlBase: 'http://prueba/api/v1/');
 
   @override
   Future<dynamic> get(String ruta, {Map<String, String>? parametros}) async {
-    final ahora = DateTime.now();
-    Map<String, dynamic> evento(int id, String titulo, String detalle, String tipo, int canal, Duration desde) => {
-      'id': id,
-      'titulo': titulo,
-      'detalle': detalle,
-      'tipo': tipo,
-      'canal': canal,
-      'empieza': ahora.add(desde).toUtc().toIso8601String(),
-      'termina': ahora.add(desde + const Duration(hours: 2)).toUtc().toIso8601String(),
-    };
-    if (ruta == 'agenda/') {
-      return {
-        'eventos': [
-          evento(1, 'Racing vs Independiente', 'Liga Profesional · Fecha 14', 'futbol', 1, const Duration(minutes: -20)),
-          evento(2, 'Boca vs River', 'Superclásico', 'futbol', 2, const Duration(hours: 4)),
-          evento(3, 'Los Pumas vs All Blacks', 'Rugby Championship', 'deporte', 3, const Duration(hours: 27)),
-          evento(4, 'Martín Fierro de la TV', 'La entrega de premios', 'especial', 4, const Duration(days: 3)),
-        ],
-      };
-    }
     if (ruta == 'canales/secciones/') return {'secciones': []};
     if (parametros?['contenido'] != 'vivo') return {'cantidad': 0, 'categorias': []};
     return {
@@ -160,23 +141,42 @@ class _ConAgenda extends ApiCliente {
   }
 }
 
-Future<(Catalogo, Biblioteca)> _datosConAgenda(WidgetTester tester) async {
+/// Lo anotado: uno que se está dando, uno hoy, uno semanal y uno sin nombre.
+Future<(Catalogo, Biblioteca)> _datosConMiAgenda(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues({});
-  final catalogo = Catalogo(_ConAgenda());
+  final catalogo = Catalogo(_ConCanales());
   await tester.runAsync(catalogo.cargar);
-  Avisos.poner({2});
+  final ahora = DateTime.now();
+  final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+  Recordatorios.poner([
+    Recordatorio(
+      id: 1,
+      canal: 1,
+      cuando: ahora.subtract(const Duration(minutes: 20)),
+      nombre: 'Racing vs Independiente',
+    ),
+    Recordatorio(id: 2, canal: 2, cuando: ahora.add(const Duration(hours: 4)), nombre: 'Boca vs River'),
+    Recordatorio(
+      id: 3,
+      canal: 4,
+      cuando: hoy.add(const Duration(days: 2, hours: 21)),
+      nombre: 'Noticiero',
+      semanal: true,
+    ),
+    Recordatorio(id: 4, canal: 3, cuando: hoy.add(const Duration(days: 3, hours: 16))),
+  ]);
   return (catalogo, Biblioteca());
 }
 
 void main() {
-  testWidgets('agenda en el celular', (tester) async {
+  testWidgets('mi agenda en el celular', (tester) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     await cargarLetras();
-    final (catalogo, biblioteca) = await _datosConAgenda(tester);
+    final (catalogo, biblioteca) = await _datosConMiAgenda(tester);
     await foto(
       tester,
-      'movil-agenda',
+      'movil-mi-agenda',
       SesionScope(
         sesion: Sesion(),
         child: PantallaMovil(catalogo: catalogo, biblioteca: biblioteca),
@@ -185,33 +185,111 @@ void main() {
     );
   });
 
-  testWidgets('agenda completa en el celular', (tester) async {
+  testWidgets('mi agenda completa en el celular', (tester) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     await cargarLetras();
-    final (catalogo, biblioteca) = await _datosConAgenda(tester);
+    final (catalogo, biblioteca) = await _datosConMiAgenda(tester);
     await foto(
       tester,
-      'movil-agenda-completa',
+      'movil-mi-agenda-completa',
       Theme(
         data: temaMovil(),
-        child: DatosScope(catalogo: catalogo, biblioteca: biblioteca, child: const PantallaAgenda()),
+        child: DatosScope(catalogo: catalogo, biblioteca: biblioteca, child: const PantallaMiAgenda()),
       ),
       espera: const Duration(milliseconds: 600),
     );
   });
 
-  testWidgets('agenda en la TV', (tester) async {
+  testWidgets('mi agenda vacía en el celular', (tester) async {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    await cargarLetras();
+    final (catalogo, biblioteca) = await _datosConMiAgenda(tester);
+    Recordatorios.poner([]);
+    await foto(
+      tester,
+      'movil-mi-agenda-vacia',
+      Theme(
+        data: temaMovil(),
+        child: DatosScope(catalogo: catalogo, biblioteca: biblioteca, child: const PantallaMiAgenda()),
+      ),
+      espera: const Duration(milliseconds: 600),
+    );
+  });
+
+  testWidgets('en vivo con la campanita en el celular', (tester) async {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    await cargarLetras();
+    final (catalogo, biblioteca) = await _datosConMiAgenda(tester);
+    await foto(
+      tester,
+      'movil-en-vivo-campanita',
+      SesionScope(
+        sesion: Sesion(),
+        child: PantallaMovil(catalogo: catalogo, biblioteca: biblioteca, seccionInicial: Seccion.enVivo),
+      ),
+      espera: const Duration(milliseconds: 600),
+    );
+  });
+
+  testWidgets('recordarme en el celular', (tester) async {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    await cargarLetras();
+    final (catalogo, _) = await _datosConMiAgenda(tester);
+    await foto(
+      tester,
+      'movil-recordarme',
+      Theme(
+        data: temaMovil(),
+        child: ColoredBox(
+          color: Colors.black54,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Material(
+              color: Tono.capaBaja,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              child: HojaRecordarme(canal: catalogo.canalPorId(2)!),
+            ),
+          ),
+        ),
+      ),
+      espera: const Duration(milliseconds: 600),
+    );
+  });
+
+  testWidgets('mi agenda en la TV', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1;
     await cargarLetras();
-    final (catalogo, biblioteca) = await _datosConAgenda(tester);
+    final (catalogo, biblioteca) = await _datosConMiAgenda(tester);
     await foto(
       tester,
-      'tv-agenda',
+      'tv-mi-agenda',
       SesionScope(
         sesion: Sesion(),
         child: PantallaTv(catalogo: catalogo, biblioteca: biblioteca),
+      ),
+      espera: const Duration(milliseconds: 600),
+    );
+  });
+
+  testWidgets('recordarme en la TV', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    await cargarLetras();
+    final (catalogo, _) = await _datosConMiAgenda(tester);
+    await foto(
+      tester,
+      'tv-recordarme',
+      Theme(
+        data: temaMovil(),
+        child: ColoredBox(
+          color: const Color(0xFF101014),
+          child: Center(child: DialogoRecordarmeTv(canal: catalogo.canalPorId(2)!)),
+        ),
       ),
       espera: const Duration(milliseconds: 600),
     );

@@ -35,6 +35,7 @@ import 'control_senal.dart';
 import 'datos.dart';
 import 'estilo.dart';
 import 'guia.dart';
+import 'mi_agenda.dart';
 import 'estructura.dart';
 
 /// Lo que se pidió al venir a En Vivo desde otra sección.
@@ -634,7 +635,8 @@ class _Pildora extends StatelessWidget {
 }
 
 /// Un canal de la lista ("epg-card"): logo, nombre con el punto rubí,
-/// categoría y número, y el corazón de favoritos. El que se está viendo
+/// categoría y número, la campanita de "Recordarme" (mi_agenda.dart) y el
+/// corazón de favoritos. El que se está viendo
 /// tiene el recuadro de "Viendo ahora".
 class _TarjetaCanal extends StatelessWidget {
   const _TarjetaCanal({
@@ -727,6 +729,8 @@ class _TarjetaCanal extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  BotonRecordarme(canal: canal),
+                  const SizedBox(width: 6),
                   BotonRedondo(
                     icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                     tamanio: 36,

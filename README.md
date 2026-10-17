@@ -35,7 +35,7 @@ Cada carpeta tiene su propio `README.md` que explica qué contiene y para qué s
 | `notificaciones/` | Avisos internos (la campanita) |
 | `canales/` | Canales de TV en vivo: categorías, canales, fuentes e importación de listas M3U |
 | `biblioteca/` | Favoritos, "Continuar viendo" y últimos canales vistos de cada cuenta (no del aparato) |
-| `agenda/` | La Agenda: partidos y programas especiales con su canal, que en la app salen con "Avisarme" |
+| `agenda/` | Sacada (17/10/2026): solo queda la migración que borra su tabla; la agenda ahora es de cada persona, en la app ("Recordarme") |
 | `herramientas/` | Código reutilizable en todo el sistema (modelo base, formularios...) |
 | `api/` | La API (JSON) para las apps de celular/TV y otros sistemas: login por token, perfil, usuarios, notificaciones |
 | `app_movil/` | La app Android (Flutter) que usa la API. Tiene su propio README |

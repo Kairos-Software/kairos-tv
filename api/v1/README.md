@@ -29,7 +29,7 @@ Hay **dos tipos de sesión**:
 - **Usuario del panel** (`login/`, usuario y contraseña): administradores y
   revendedores. El superusuario ve los canales sin créditos ni límite de dispositivos.
 - **Cliente** (`cliente/login/`, código de 8 números): solo puede usar
-  `canales/` (con `secciones/`, `fuentes/<id>/resolver/` y los avisos de falla y de lo visto), `biblioteca/`, `agenda/`, `cliente/` y `cliente/logout/` (lo demás responde 403). Su token
+  `canales/` (con `secciones/`, `fuentes/<id>/resolver/` y los avisos de falla y de lo visto), `biblioteca/`, `cliente/` y `cliente/logout/` (lo demás responde 403). Su token
   empieza con `c_`. Si su servicio vence o lo suspenden, todo responde 403
   `servicio_vencido` / `suspendido`; si le liberan el dispositivo, 401.
   Reglas en `reventa/sesiones.py`.
@@ -57,7 +57,6 @@ Hay **dos tipos de sesión**:
 | POST | `/api/v1/canales/fuentes/<id>/estabilidad/` | sesión (usuario o cliente) | `{segundos, cortes}`. La app dejó de ver esa fuente: cuánto la vio y cuántas veces se cortó. Con lo de todos los aparatos, `/canales/` manda primero las fuentes que no se cortan. → `{cortes_por_hora}` (null si todavía se vio poco) |
 | POST | `/api/v1/canales/visto/` | sesión (usuario o cliente) | `{vistos: [{id, segundos, vista}], favoritos: ["c:12", "s:Serie"]}`. Lo que se miró desde el último aviso y lo agregado a favoritos. Se suma a los totales del día **sin guardar quién lo mandó** ("Lo más visto" del panel). → `{sumados}` |
 | GET / POST | `/api/v1/biblioteca/` | sesión (usuario o cliente) | Favoritos, "Continuar viendo" y últimos canales vistos **de la cuenta** (el cliente, la pantalla con código propio o el usuario; ver `biblioteca/README.md`). GET → `{favoritos: ["c:12", "s:Serie"], progresos: [{id, p, d, t, aparato}], recientes: [{id, t, aparato}]}` (segundos; `t` en milisegundos). POST manda CAMBIOS (todo opcional): `{aparato, agregar, quitar, progresos, olvidar, vistos}` → la biblioteca como quedó. Desde la app 1.2.20 |
-| GET | `/api/v1/agenda/` | sesión (usuario o cliente) | La Agenda (`agenda/README.md`): partidos y programas especiales de los próximos 14 días que tienen canal y no terminaron → `{eventos: [{id, titulo, detalle, tipo, canal, empieza, termina}]}` (`canal`: el id del canal en vivo; las horas con zona, ISO). La app muestra cada uno si su canal se ve en el aparato. Desde la app 1.2.25 |
 | GET | `/api/v1/app/` | — | Última versión publicada de la app: `{version, notas, descarga}` (`version: null` si no hay). La app lo consulta al abrirse |
 | POST | `/api/v1/cliente/login/` | — | `{codigo, dispositivo}` → `{token, cliente}`. Errores: 400 `codigo_invalido`, 403 `servicio_vencido`/`suspendido`, 409 `cuenta_en_uso`, 429 `login_bloqueado` |
 | GET | `/api/v1/cliente/` | cliente | Su estado (`nombre`, `vence`, `pantallas`, `conectados`, `vendedor`: `{nombre, telefono}`). La app lo llama cada 5 min: es la "señal" que mantiene ocupada su pantalla |
