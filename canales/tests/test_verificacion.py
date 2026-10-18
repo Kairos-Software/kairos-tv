@@ -4,6 +4,7 @@ Nunca sale a internet: se reemplaza la descarga (o el verificador entero)
 por uno de mentira.
 """
 
+import threading
 import time
 import urllib.error
 from datetime import timedelta
@@ -107,6 +108,49 @@ class VerificarUrlTests(TestCase):
             resultado = verificacion.verificar_url('http://x:8080/u/p/57485')
         self.assertEqual((resultado.estado, resultado.tipo), (FUNCIONA, 'directo'))
 
+    def test_archivo_directo_de_xtream_prueba_vlc_primero(self):
+        """Hay paneles que dejan esperando al navegador pero entregan el MKV a VLC."""
+        def segun_quien(cabeceras):
+            if cabeceras['User-Agent'] == USER_AGENT_VLC:
+                return b'\x1aE\xdf\xa3video'
+            return urllib.error.URLError(TimeoutError())
+
+        url = 'http://x:8080/series/usuario/clave/446965.mkv'
+        with self.respuestas({url: segun_quien}):
+            resultado = verificacion.verificar_url(url, 'directo')
+        self.assertEqual((resultado.estado, resultado.tipo, resultado.user_agent),
+                         (FUNCIONA, 'directo', USER_AGENT_VLC))
+        self.assertEqual(len(self.pedidos), 1)
+        self.assertEqual(self.pedidos[0][1]['User-Agent'], USER_AGENT_VLC)
+        self.assertEqual(self.pedidos[0][1]['Range'], 'bytes=0-65535')
+
+    def test_archivo_directo_pide_un_rango_como_el_reproductor(self):
+        def solo_con_rango(cabeceras):
+            if cabeceras.get('Range') == 'bytes=0-65535':
+                return b'\x1aE\xdf\xa3video'
+            return urllib.error.URLError(TimeoutError())
+
+        url = 'http://x:8080/series/usuario/clave/446961.mkv'
+        with self.respuestas({url: solo_con_rango}):
+            resultado = verificacion.verificar_url(url, 'directo')
+        self.assertEqual(resultado.estado, FUNCIONA)
+
+    def test_archivo_directo_reintenta_timeouts_intermitentes(self):
+        intentos = 0
+
+        def intermitente(_cabeceras):
+            nonlocal intentos
+            intentos += 1
+            if intentos < 3:
+                return urllib.error.URLError(TimeoutError())
+            return b'\x1aE\xdf\xa3video'
+
+        url = 'http://x:8080/series/usuario/clave/446961.mkv'
+        with self.respuestas({url: intermitente}), mock.patch.object(verificacion, '_esperar'):
+            resultado = verificacion.verificar_url(url, 'directo')
+        self.assertEqual(resultado.estado, FUNCIONA)
+        self.assertEqual(intentos, 3)
+
     def test_detectar_formato(self):
         self.assertEqual(verificacion.detectar_formato(b'\xef\xbb\xbf#EXTM3U\n'), 'hls')
         self.assertEqual(verificacion.detectar_formato(b'<?xml?><MPD xmlns="x">'), 'dash')
@@ -168,6 +212,26 @@ class VerificarUrlTests(TestCase):
         with mock.patch.object(verificacion, 'verificar_url', side_effect=lambda url, tipo, *cabeceras, **_: Resultado(FUNCIONA)):
             resultados = verificacion.verificar_varias({'https://a': 'hls', 'https://b': 'hls'})
         self.assertEqual(set(resultados), {'https://a', 'https://b'})
+
+    def test_varias_directas_del_mismo_servidor_se_prueban_de_a_una(self):
+        activas = 0
+        maximo = 0
+        candado = threading.Lock()
+
+        def probar(*_args, **_kwargs):
+            nonlocal activas, maximo
+            with candado:
+                activas += 1
+                maximo = max(maximo, activas)
+            time.sleep(.02)
+            with candado:
+                activas -= 1
+            return Resultado(FUNCIONA)
+
+        fuentes = {f'http://panel:8080/series/u/p/{numero}.mkv': 'directo' for numero in range(4)}
+        with mock.patch.object(verificacion, 'verificar_url', side_effect=probar):
+            verificacion.verificar_varias(fuentes)
+        self.assertEqual(maximo, 1)
 
     def test_pasado_el_tiempo_no_empieza_mas(self):
         with mock.patch.object(verificacion, 'verificar_url', return_value=Resultado(FUNCIONA)) as verificar_url:

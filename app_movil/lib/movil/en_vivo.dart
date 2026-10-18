@@ -144,19 +144,20 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
       _categoria = pedido.categoria;
       _soloFavoritos = false;
     });
+    // Cambió la categoría: la lista es otra, se empieza desde arriba
+    if (_desplazamiento.hasClients) _desplazamiento.jumpTo(0);
     final canal = pedido.canal == null ? null : catalogo.canalPorId(pedido.canal!);
     if (canal != null) _ver(canal);
   }
 
+  /// Pone el canal. La lista se queda donde está (el reproductor está fijo
+  /// arriba): si ese no anda, el de al lado está ahí mismo, sin volver a bajar.
   void _ver(Canal canal) {
     if (Tele.instancia.conectada) {
       _verEnLaTele(canal);
     } else {
       _control.abrir(canal);
       _mostrarControles();
-    }
-    if (_desplazamiento.hasClients) {
-      _desplazamiento.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
     }
   }
 

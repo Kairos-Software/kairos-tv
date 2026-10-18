@@ -12,11 +12,12 @@ Hace lo mismo que el reproductor de la app, pero desde el servidor:
   3. En HLS, pide el pedazo de video MÁS RECIENTE (por ahí arranca el
      reproductor): hay servidores que entregan la lista pero rechazan el video.
 
-Se presenta igual que el reproductor de la app (USER_AGENT_REPRODUCTOR, o
-el User-Agent / Referer propio de la fuente). Si el servidor lo rechaza,
-prueba otra vez presentándose como VLC (USER_AGENT_VLC): hay paneles que
-solo le entregan la señal a reproductores conocidos. Si así anda, el
-resultado trae ese User-Agent para guardarlo en la fuente (y la app lo usa).
+En HLS se presenta igual que el reproductor de la app (USER_AGENT_REPRODUCTOR,
+o el User-Agent / Referer propio de la fuente); si el servidor lo rechaza,
+prueba como VLC. Los archivos directos se piden primero como VLC y con Range,
+igual que un reproductor: hay paneles Xtream que dejan esperando a un navegador
+o intentan enviar el MKV completo. Si así anda, el resultado trae ese User-Agent
+para guardarlo en la fuente (y la app lo usa).
 
 De paso averigua el CÓDEC del video (h264, h265, mpeg2...): en HLS lo dice
 la lista maestra (CODECS=...) o, si no, el pedazo de video; en video directo,
@@ -48,8 +49,8 @@ web, también se prueba si adentro hay un video. RTSP se comprueba con un
 pedido OPTIONS. RTMP la app no lo reproduce.
 
 Cada pedido espera como máximo TIEMPO_MAXIMO segundos; se verifican HILOS
-fuentes a la vez, pero nunca más de POR_SERVIDOR al mismo servidor (los
-paneles IPTV cortan si una misma cuenta abre muchas conexiones).
+fuentes a la vez, pero nunca más de POR_SERVIDOR al mismo servidor. Los videos
+directos van de a uno: las cuentas IPTV suelen permitir una sola reproducción.
 
     from canales.verificacion import verificar_url, verificar_varias
     verificar_url('https://.../playlist.m3u8')        -> Resultado('funciona', tipo='hls')
@@ -74,6 +75,7 @@ from . import analisis
 TIEMPO_MAXIMO = 9         # segundos por pedido (el HTML usa 9)
 HILOS = 10                # fuentes verificadas a la vez
 POR_SERVIDOR = 2          # ...pero como mucho estas al mismo servidor
+POR_SERVIDOR_DIRECTO = 1  # las cuentas Xtream suelen permitir un solo video a la vez
 BYTES_INICIALES = 64 * 1024   # para saber qué es alcanza con el principio
 MAX_BYTES = 512 * 1024    # una lista .m3u8 pesa pocos KB: no hace falta leer más
 BYTES_DE_VIDEO = 32 * 1024    # del pedazo de video alcanza con ver que empieza a llegar
@@ -97,6 +99,12 @@ USER_AGENT_REPRODUCTOR = ('Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36
                           'Chrome/124.0.0.0 Mobile Safari/537.36')
 # El segundo intento: hay paneles IPTV que solo atienden a reproductores conocidos
 USER_AGENT_VLC = 'VLC/3.0.21 LibVLC/3.0.21'
+
+# Los paneles Xtream suelen servir los archivos directos solo a reproductores
+# conocidos. Algunos no responden con error al User-Agent de navegador: dejan
+# la conexión esperando hasta el timeout. Probar VLC primero evita nueve
+# segundos perdidos por cada capítulo y permite guardar esa cabecera para la app.
+_EXTENSIONES_DE_VIDEO_DIRECTO = ('.mkv', '.mp4', '.avi', '.mov', '.wmv', '.webm', '.m4v', '.mpeg', '.mpg')
 
 FUNCIONA = 'funciona'
 CAIDA = 'caida'
@@ -164,6 +172,14 @@ def cabeceras_para(user_agent='', referer=''):
     return cabeceras
 
 
+def _cabeceras_para_video_directo(user_agent='', referer='', a_fondo=False):
+    """Como un reproductor: pide solo el comienzo del archivo, no el MKV/MP4 completo."""
+    cabeceras = cabeceras_para(user_agent, referer)
+    maximo = BYTES_A_FONDO if a_fondo else BYTES_INICIALES
+    cabeceras['Range'] = f'bytes=0-{maximo - 1}'
+    return cabeceras
+
+
 def _descargar(url, cabeceras, maximo=MAX_BYTES):
     """(bytes, dirección final después de redirecciones, Content-Type)."""
     pedido = urllib.request.Request(url, headers=cabeceras)
@@ -192,8 +208,11 @@ def _bajar(url, cabeceras, maximo=BYTES_A_FONDO, segundos=SEGUNDOS_DE_MUESTRA):
                 break
             partes.append(parte)
             total += len(parte)
+        rango = re.search(r'/(\d+)$', respuesta.headers.get('Content-Range') or '')
         try:
-            largo = int(respuesta.headers.get('Content-Length') or 0)
+            # Con Range, Content-Length es solo el pedazo. Para medir la
+            # velocidad hace falta el tamaño del archivo completo.
+            largo = int(rango.group(1) if rango else respuesta.headers.get('Content-Length') or 0)
         except ValueError:
             largo = 0
         return Bajada(b''.join(partes), respuesta.geturl(), respuesta.headers.get('Content-Type', '') or '',
@@ -547,6 +566,21 @@ def _verificar_rtsp(url):
                      tipo='rtsp')
 
 
+def _conviene_vlc_primero(url, tipo):
+    """Los archivos directos de paneles IPTV suelen requerir un reproductor conocido."""
+    ruta = urlsplit(url).path.lower()
+    return tipo == 'directo' or ruta.endswith(_EXTENSIONES_DE_VIDEO_DIRECTO)
+
+
+def _probar_video_directo(url, cabeceras, a_fondo=False, intentos=3):
+    """Los paneles Xtream son intermitentes: reintenta solo cuando agotan el tiempo."""
+    for intento in range(intentos):
+        resultado = _probar(url, cabeceras, a_fondo)
+        if resultado.error != 'No respondió a tiempo.' or intento == intentos - 1:
+            return resultado
+        _esperar(.25)
+
+
 def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
     if tipo == 'yt_video':
         from . import youtube
@@ -559,6 +593,21 @@ def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
         return Resultado(CAIDA, 'Es RTMP: la app todavía no reproduce ese formato.')
     if esquema in ('rtsp', 'rtsps'):
         return _verificar_rtsp(url)
+
+    if _conviene_vlc_primero(url, tipo):
+        agente = user_agent or USER_AGENT_VLC
+        resultado = _probar_video_directo(
+            url, _cabeceras_para_video_directo(agente, referer, a_fondo), a_fondo)
+        if resultado.estado == FUNCIONA:
+            if not user_agent:
+                resultado.user_agent = USER_AGENT_VLC
+            return resultado
+        # Si el panel rechazó a VLC, todavía puede aceptar el reproductor de
+        # la app. Para errores de red definitivos no se duplica la espera.
+        if resultado.rechazo and not user_agent:
+            return _probar_video_directo(
+                url, _cabeceras_para_video_directo('', referer, a_fondo), a_fondo)
+        return resultado
 
     resultado = _probar(url, cabeceras_para(user_agent, referer), a_fondo)
     if resultado.estado == CAIDA and resultado.rechazo and not user_agent:
@@ -589,11 +638,20 @@ def verificar_varias(fuentes, cabeceras=None, hasta=None, a_fondo=False):
     cabeceras = cabeceras or {}
     por_servidor = {}
     candado = threading.Lock()
+    # Si una tanda trae MKV/MP4 de un panel, todo ese host se prueba de a uno.
+    # Muchas cuentas Xtream permiten una sola reproducción simultánea: con dos,
+    # una conexión funciona y la otra queda esperando hasta el timeout.
+    servidores_con_video_directo = {
+        (urlsplit(url).hostname or '').lower()
+        for url, tipo in fuentes.items()
+        if _conviene_vlc_primero(url, tipo)
+    }
 
     def turno(url):
         servidor = (urlsplit(url).hostname or '').lower()
+        limite = POR_SERVIDOR_DIRECTO if servidor in servidores_con_video_directo else POR_SERVIDOR
         with candado:
-            return por_servidor.setdefault(servidor, threading.Semaphore(POR_SERVIDOR))
+            return por_servidor.setdefault(servidor, threading.Semaphore(limite))
 
     def una(par):
         url, tipo = par
