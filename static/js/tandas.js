@@ -15,7 +15,7 @@
          alCambiar: function (corriendo) { ... },        // para los botones Empezar / Pausar
          alError: function (mensaje) { ... },
      });
-     tarea.empezar();  tarea.pausar();
+     tarea.empezar();  tarea.pausar();  tarea.cancelar();
    ═══════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -43,6 +43,8 @@
         var alTerminar = opciones.alTerminar || nada;
         var alCambiar = opciones.alCambiar || nada;
         var alError = opciones.alError || nada;
+        var alCancelar = opciones.alCancelar || nada;
+        var pedidoEnCurso = null;
 
         function avisarAlSalir(evento) {
             // Si se cierra la página se corta (se puede seguir después), pero mejor avisar
@@ -61,14 +63,31 @@
             var cuerpo = new FormData();
             var extra = opciones.datos ? opciones.datos() : {};
             Object.keys(extra).forEach(function (clave) { cuerpo.append(clave, extra[clave]); });
-            var respuesta = await fetch(opciones.url, {
+            pedidoEnCurso = new AbortController();
+            try {
+                var respuesta = await fetch(opciones.url, {
+                    method: 'POST',
+                    body: cuerpo,
+                    credentials: 'same-origin',
+                    headers: {'X-CSRFToken': tokenCsrf(), 'Accept': 'application/json'},
+                    signal: pedidoEnCurso.signal,
+                });
+                if (!respuesta.ok) throw new Error('El servidor respondió ' + respuesta.status + '.');
+                return respuesta.json();
+            } finally {
+                pedidoEnCurso = null;
+            }
+        }
+
+        async function cancelarEnServidor() {
+            if (!opciones.urlCancelar) return;
+            var respuesta = await fetch(opciones.urlCancelar, {
                 method: 'POST',
-                body: cuerpo,
                 credentials: 'same-origin',
                 headers: {'X-CSRFToken': tokenCsrf(), 'Accept': 'application/json'},
             });
             if (!respuesta.ok) throw new Error('El servidor respondió ' + respuesta.status + '.');
-            return respuesta.json();
+            await respuesta.json();
         }
 
         async function correr() {
@@ -79,6 +98,7 @@
                     resultado = await pedir();
                     errores = 0;
                 } catch (error) {
+                    if (!corriendo || error.name === 'AbortError') return;
                     errores += 1;
                     if (errores >= REINTENTOS) {
                         cambiar(false);
@@ -106,6 +126,16 @@
                 correr();
             },
             pausar: function () { if (corriendo) cambiar(false); },
+            cancelar: async function () {
+                if (corriendo) cambiar(false);
+                if (pedidoEnCurso) pedidoEnCurso.abort();
+                try {
+                    await cancelarEnServidor();
+                    alCancelar();
+                } catch (error) {
+                    alError('No se pudo cancelar: ' + error.message);
+                }
+            },
             corriendo: function () { return corriendo; },
         };
     };

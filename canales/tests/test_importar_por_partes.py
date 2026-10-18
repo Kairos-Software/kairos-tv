@@ -170,7 +170,9 @@ class PantallaPorPartesTests(TestCase):
         importacion = Importacion.objects.get()
         url = reverse('canales:importacion', args=[importacion.pk])
         self.assertRedirects(respuesta, url)   # sin ?empezar=1: no se prueba todo de una
-        self.assertContains(self.client.get(url), 'Leyendo la lista')
+        leyendo = self.client.get(url)
+        self.assertContains(leyendo, 'Leyendo la lista')
+        self.assertContains(leyendo, 'data-accion="cancelar-lectura"')
         leida = self.client.post(reverse('canales:importacion_leer', args=[importacion.pk])).json()
         self.assertTrue(leida['terminada'])
 

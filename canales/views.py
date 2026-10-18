@@ -324,14 +324,26 @@ def importacion_lote(request, pk):
                              importacion_url(importacion), servicios.progreso(importacion))
     if esperar:
         return esperar
-    verificar = partial(verificar_varias, a_fondo=True) if importacion.a_fondo else verificar_varias
+    verificar = partial(verificar_varias, a_fondo=importacion.a_fondo,
+                        cancelado=partial(trabajos.cancelado, clave))
     avance = servicios.procesar_lote(importacion, verificar, seleccion=servicios.Seleccion.de(request.POST))
-    if avance['terminada']:
+    if trabajos.cancelado(clave):
+        avance['cancelada'] = True
+    elif avance['terminada']:
         trabajos.terminar(clave)
     else:
         trabajos.avance(clave, avance['porcentaje'],
                         f'{avance["verificadas"]:,} de {avance["para_verificar"]:,} probados'.replace(',', '.'))
     return JsonResponse(avance)
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_cancelar(request, pk):
+    """Cancela la tanda en curso sin perder lo que ya se procesó."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    trabajos.cancelar(f'importacion:{importacion.pk}')
+    return JsonResponse({'cancelada': True})
 
 
 @require_POST

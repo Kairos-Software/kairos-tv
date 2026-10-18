@@ -23,6 +23,7 @@ from canales.models import Canal, EntradaImportada, Fuente, Importacion
 from canales.servicios import (crear_importacion, importar_m3u, procesar_lote, verificar_fuentes_guardadas,
                                verificar_lote_de_fuentes)
 from canales.verificacion import CAIDA, FUNCIONA, SIN_VERIFICAR, USER_AGENT_VLC, Resultado
+from core import trabajos
 from usuarios.models import Rol, Usuario
 
 LISTA = '''#EXTM3U
@@ -37,7 +38,7 @@ https://www.youtube.com/user/encuentro/live
 TS = (b'\x47' + b'\x00' * 187) * 4   # cuatro paquetes MPEG-TS
 
 
-def verificador_falso(fuentes, cabeceras=None, hasta=None):
+def verificador_falso(fuentes, cabeceras=None, hasta=None, a_fondo=False, cancelado=None):
     """Funciona todo lo de 'anda', se cae todo lo de 'caida', YouTube sin verificar."""
     def uno(url, tipo):
         if tipo == 'youtube':
@@ -151,6 +152,23 @@ class VerificarUrlTests(TestCase):
         self.assertEqual(resultado.estado, FUNCIONA)
         self.assertEqual(intentos, 3)
 
+    def test_xtream_bloqueado_desde_el_vps_se_carga_sin_verificar(self):
+        timeout = urllib.error.URLError(TimeoutError())
+        url = 'http://panel:8080/series/usuario/clave/446961.mkv'
+        with self.respuestas({url: timeout}), mock.patch.object(verificacion, '_esperar'):
+            resultado = verificacion.verificar_url(url, 'directo')
+        self.assertEqual((resultado.estado, resultado.tipo, resultado.user_agent),
+                         (SIN_VERIFICAR, 'directo', USER_AGENT_VLC))
+        self.assertIn('se cargará sin verificar', resultado.error)
+        self.assertEqual(len(self.pedidos), 3)
+
+    def test_un_mkv_comun_que_no_responde_sigue_caido(self):
+        timeout = urllib.error.URLError(TimeoutError())
+        url = 'https://cdn.ejemplo.com/pelicula.mkv'
+        with self.respuestas({url: timeout}), mock.patch.object(verificacion, '_esperar'):
+            resultado = verificacion.verificar_url(url, 'directo')
+        self.assertEqual(resultado.estado, CAIDA)
+
     def test_detectar_formato(self):
         self.assertEqual(verificacion.detectar_formato(b'\xef\xbb\xbf#EXTM3U\n'), 'hls')
         self.assertEqual(verificacion.detectar_formato(b'<?xml?><MPD xmlns="x">'), 'dash')
@@ -233,9 +251,26 @@ class VerificarUrlTests(TestCase):
             verificacion.verificar_varias(fuentes)
         self.assertEqual(maximo, 1)
 
+    def test_si_el_vps_esta_bloqueado_no_espera_por_cada_capitulo(self):
+        bloqueada = Resultado(
+            SIN_VERIFICAR, verificacion._MENSAJE_XTREAM_SIN_VERIFICAR,
+            tipo='directo', user_agent=USER_AGENT_VLC,
+        )
+        fuentes = {f'http://panel:8080/series/u/p/{numero}.mkv': 'directo' for numero in range(4)}
+        with mock.patch.object(verificacion, 'verificar_url', return_value=bloqueada) as verificar_url:
+            resultados = verificacion.verificar_varias(fuentes)
+        self.assertEqual(verificar_url.call_count, 1)
+        self.assertEqual({resultado.estado for resultado in resultados.values()}, {SIN_VERIFICAR})
+
     def test_pasado_el_tiempo_no_empieza_mas(self):
         with mock.patch.object(verificacion, 'verificar_url', return_value=Resultado(FUNCIONA)) as verificar_url:
             resultados = verificacion.verificar_varias({'https://a': 'hls'}, hasta=time.monotonic() - 1)
+        self.assertEqual(resultados, {})
+        verificar_url.assert_not_called()
+
+    def test_cancelada_no_empieza_mas(self):
+        with mock.patch.object(verificacion, 'verificar_url', return_value=Resultado(FUNCIONA)) as verificar_url:
+            resultados = verificacion.verificar_varias({'https://a': 'hls'}, cancelado=lambda: True)
         self.assertEqual(resultados, {})
         verificar_url.assert_not_called()
 
@@ -346,6 +381,20 @@ class ImportarDeATandasTests(TestCase):
         fuente = Fuente.objects.get()
         self.assertEqual((fuente.tipo, fuente.user_agent), (Fuente.Tipo.DIRECTO, USER_AGENT_VLC))
 
+    def test_importa_xtream_aunque_el_vps_no_pueda_comprobarlo(self):
+        lista = '#EXTM3U\n' + ''.join(
+            f'#EXTINF:-1 group-title="SERIES",Show S01 E{numero:02}\n'
+            f'http://panel:8080/series/usuario/clave/{numero}.mkv\n'
+            for numero in range(1, 4)
+        )
+        importacion = crear_importacion(lista, 'serie.m3u')
+        timeout = urllib.error.URLError(TimeoutError())
+        with mock.patch.object(verificacion, '_descargar', side_effect=timeout), \
+                mock.patch.object(verificacion, '_esperar'):
+            avance = procesar_lote(importacion, verificacion.verificar_varias, tamanio=3, segundos=0)
+        self.assertEqual((avance['aptas'], avance['caidas'], avance['rechazadas']), (3, 0, 0))
+        self.assertEqual(set(importacion.entradas.values_list('user_agent', flat=True)), {USER_AGENT_VLC})
+
     def test_no_vuelve_a_verificar_lo_que_ya_estaba(self):
         importar_m3u(LISTA, verificar=verificador_falso)
         pedidas = []
@@ -425,6 +474,24 @@ class PantallaCanalesTests(TestCase):
         self.assertEqual(set(Canal.objects.values_list('nombre', flat=True)), {'Canal 26', 'Encuentro'})
         pagina = self.client.get(reverse('canales:importacion', args=[importacion.pk]))
         self.assertContains(pagina, 'Ya se cargaron 2.')
+
+    def test_cancelar_detiene_el_trabajo_y_permite_retomarlo(self):
+        self.subir()
+        importacion = Importacion.objects.get()
+        clave = f'importacion:{importacion.pk}'
+        trabajos.turno(clave, 'Probando la lista', self.admin)
+        pagina = self.client.get(reverse('canales:importacion', args=[importacion.pk]))
+        self.assertContains(pagina, 'data-accion="cancelar-prueba"')
+
+        respuesta = self.client.post(reverse('canales:importacion_cancelar', args=[importacion.pk]))
+        self.assertEqual(respuesta.json(), {'cancelada': True})
+        self.assertTrue(trabajos.cancelado(clave))
+        self.assertFalse(trabajos.en_curso().exists())
+
+        # Retomar crea un turno nuevo y sigue desde las entradas pendientes.
+        datos = self.client.post(reverse('canales:importacion_lote', args=[importacion.pk])).json()
+        self.assertTrue(datos['terminada'])
+        self.assertNotIn('cancelada', datos)
 
     def test_pestanias_para_ver_las_que_pasaron(self):
         self.subir()
@@ -522,6 +589,7 @@ class PantallaCanalesTests(TestCase):
         self.assertEqual(self.subir().status_code, 403)
         self.assertEqual(self.client.post(reverse('canales:verificar_lote')).status_code, 403)
         self.assertEqual(self.client.post(reverse('canales:importacion_lote', args=[importacion.pk])).status_code, 403)
+        self.assertEqual(self.client.post(reverse('canales:importacion_cancelar', args=[importacion.pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('canales:organizar')).status_code, 200)
         self.assertEqual(self.client.post(reverse('canales:catalogo_quitar')).status_code, 403)
 

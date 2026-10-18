@@ -138,6 +138,9 @@
                     <button type="button" class="btn btn-primary" data-accion="correr">
                         <i class="bi bi-play-fill" aria-hidden="true"></i> <span>Probar {% if parte.pendientes == 1 %}el que falta{% else %}los {{ parte.pendientes }} que faltan{% endif %}</span>
                     </button>
+                    <button type="button" class="btn btn-outline-danger" data-accion="cancelar-prueba" hidden>
+                        <i class="bi bi-x-circle" aria-hidden="true"></i> Cancelar
+                    </button>
                     <span class="texto-suave small" data-texto="estado">Se prueban de a {{ tamanio_lote }}. Si cerrás la página se pausa, y después seguís desde acá.</span>
                 </div>
                 {% endif %}
@@ -258,6 +261,9 @@
                     <div class="imp-paso-acciones">
                         <button type="button" class="btn btn-primary" data-accion="cargar"{% if falta_probar %} disabled{% endif %}>
                             <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> <span>Cargar {% if parte.aptas == 1 %}el que pasó{% else %}los {{ parte.aptas }} que pasaron{% endif %}</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" data-accion="cancelar-carga" hidden>
+                            <i class="bi bi-x-circle" aria-hidden="true"></i> Cancelar
                         </button>
                         {% if parte.aptas > 10 %}<a href="?{{ datos_de_la_seleccion }}&amp;estado=apta#entradas" class="btn btn-outline-secondary"><i class="bi bi-eye" aria-hidden="true"></i> Verlos antes</a>{% endif %}
                         <span class="texto-suave small" data-texto="estado-carga">{% if falta_probar %}Primero terminá de probar (paso 1): falta{{ parte.pendientes|pluralize:"n" }} {{ parte.pendientes }}.{% endif %}</span>
@@ -501,8 +507,10 @@
     var probar = caja.querySelector('[data-accion=correr]');
     if (probar) {
         var estado = caja.querySelector('[data-texto=estado]');
+        var cancelarPrueba = caja.querySelector('[data-accion=cancelar-prueba]');
         var prueba = Tandas({
             url: '{% url "canales:importacion_lote" importacion.pk %}',
+            urlCancelar: '{% url "canales:importacion_cancelar" importacion.pk %}',
             datos: datos,
             termino: function (r) { return r.terminada; },
             alAvanzar: function (r) {
@@ -520,14 +528,21 @@
                 probar.querySelector('i').className = corriendo ? 'bi bi-pause-fill' : 'bi bi-play-fill';
                 probar.classList.toggle('btn-primary', !corriendo);
                 probar.classList.toggle('btn-outline-secondary', corriendo);
+                cancelarPrueba.hidden = !corriendo;
                 if (corriendo) estado.textContent = 'Probando… no hace falta quedarse mirando, pero no cierres esta página.';
                 else if (!estado.dataset.error) estado.textContent = 'En pausa. Lo que ya se probó quedó guardado.';
             },
             alError: function (mensaje) { estado.dataset.error = '1'; estado.textContent = mensaje; },
+            alCancelar: function () { estado.textContent = 'Cancelado. Lo que ya se probó quedó guardado.'; },
         });
         probar.addEventListener('click', function () {
             delete estado.dataset.error;
             prueba.corriendo() ? prueba.pausar() : prueba.empezar();
+        });
+        cancelarPrueba.addEventListener('click', function () {
+            delete estado.dataset.error;
+            prueba.cancelar();
+            estado.textContent = 'Cancelando…';
         });
         {% if empezar %}prueba.empezar();{% endif %}
     }
@@ -535,9 +550,11 @@
     var cargar = caja.querySelector('[data-accion=cargar]');
     if (cargar && !cargar.disabled) {
         var estadoCarga = caja.querySelector('[data-texto=estado-carga]');
+        var cancelarCarga = caja.querySelector('[data-accion=cancelar-carga]');
         var total = {{ parte.aptas }};
         var carga = Tandas({
             url: '{% url "canales:importacion_cargar" importacion.pk %}',
+            urlCancelar: '{% url "canales:importacion_cancelar" importacion.pk %}',
             datos: datos,
             // Si alguien la puso a probar de nuevo (otra pestaña), no se carga hasta que termine
             termino: function (r) { return !r.en_la_seleccion.aptas || r.en_la_seleccion.pendientes > 0; },
@@ -549,10 +566,18 @@
                 estadoCarga.textContent = 'Listo. Actualizando…';
                 window.location.href = aca + '#carga';
             },
-            alCambiar: function (corriendo) { cargar.disabled = corriendo; },
+            alCambiar: function (corriendo) {
+                cargar.disabled = corriendo;
+                cancelarCarga.hidden = !corriendo;
+            },
             alError: function (mensaje) { estadoCarga.textContent = mensaje; },
+            alCancelar: function () { estadoCarga.textContent = 'Carga cancelada. Lo que ya se cargó quedó guardado.'; },
         });
         cargar.addEventListener('click', function () { carga.empezar(); });
+        cancelarCarga.addEventListener('click', function () {
+            carga.cancelar();
+            estadoCarga.textContent = 'Cancelando…';
+        });
     }
 })();
 </script>

@@ -10,6 +10,7 @@ urlpatterns = [
     path('importaciones/<int:pk>/', views.importacion, name='importacion'),
     path('importaciones/<int:pk>/leer/', views.importacion_leer, name='importacion_leer'),
     path('importaciones/<int:pk>/lote/', views.importacion_lote, name='importacion_lote'),
+    path('importaciones/<int:pk>/cancelar/', views.importacion_cancelar, name='importacion_cancelar'),
     path('importaciones/<int:pk>/descartar/', views.importacion_descartar, name='importacion_descartar'),
     path('importaciones/<int:pk>/destino/', views.importacion_destino, name='importacion_destino'),
     path('importaciones/<int:pk>/cargar/', views.importacion_cargar, name='importacion_cargar'),

@@ -44,6 +44,13 @@ class TurnoTests(TestCase):
         self.assertEqual((dato['porcentaje'], dato['detalle'], dato['quien']),
                          (45, '1.230 de 2.700 probados', 'el servidor'))
 
+    def test_cancelar_no_se_revierte_con_la_respuesta_de_una_tanda_vieja(self):
+        trabajos.turno('importacion:1', 'Probando')
+        trabajos.cancelar('importacion:1')
+        self.assertTrue(trabajos.cancelado('importacion:1'))
+        trabajos.avance('importacion:1', 80, 'respuesta tardía')
+        self.assertFalse(trabajos.en_curso().exists())
+
 
 @mock.patch('canales.views.verificar_varias', verificador_falso)
 class EnElPanelTests(TestCase):

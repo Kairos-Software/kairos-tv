@@ -32,6 +32,9 @@
     {% if puede_importar %}
     <div class="d-flex flex-wrap align-items-center gap-2">
         <button type="button" class="btn btn-outline-secondary" data-accion="leer"><i class="bi bi-pause-fill" aria-hidden="true"></i> <span>Pausar</span></button>
+        <button type="button" class="btn btn-outline-danger" data-accion="cancelar-lectura" hidden>
+            <i class="bi bi-x-circle" aria-hidden="true"></i> Cancelar
+        </button>
         <span class="texto-suave small" data-texto="estado">Tarda un par de minutos. No cierres esta página (si la cerrás, se pausa y seguís desde acá).</span>
     </div>
     {% else %}
@@ -47,11 +50,13 @@
 (function () {
     var caja = document.getElementById('lectura');
     var boton = caja.querySelector('[data-accion=leer]');
+    var cancelar = caja.querySelector('[data-accion=cancelar-lectura]');
     var relleno = caja.querySelector('.avance-relleno');
     var barra = caja.querySelector('.avance-barra');
     var estado = caja.querySelector('[data-texto=estado]');
     var tarea = Tandas({
         url: '{% url "canales:importacion_leer" importacion.pk %}',
+        urlCancelar: '{% url "canales:importacion_cancelar" importacion.pk %}',
         termino: function (r) { return r.terminada; },
         alAvanzar: function (r) {
             relleno.style.width = r.porcentaje + '%';
@@ -68,13 +73,20 @@
         alCambiar: function (corriendo) {
             boton.querySelector('span').textContent = corriendo ? 'Pausar' : 'Seguir leyendo';
             boton.querySelector('i').className = corriendo ? 'bi bi-pause-fill' : 'bi bi-play-fill';
+            cancelar.hidden = !corriendo;
             if (!corriendo && !estado.dataset.error) estado.textContent = 'En pausa. Lo leído quedó guardado.';
         },
         alError: function (mensaje) { estado.dataset.error = '1'; estado.textContent = mensaje; },
+        alCancelar: function () { estado.textContent = 'Cancelado. Lo que ya se leyó quedó guardado.'; },
     });
     boton.addEventListener('click', function () {
         delete estado.dataset.error;
         tarea.corriendo() ? tarea.pausar() : tarea.empezar();
+    });
+    cancelar.addEventListener('click', function () {
+        delete estado.dataset.error;
+        tarea.cancelar();
+        estado.textContent = 'Cancelando…';
     });
     tarea.empezar();
 })();

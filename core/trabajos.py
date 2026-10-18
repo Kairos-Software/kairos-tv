@@ -81,9 +81,23 @@ def anotar(clave, titulo, usuario=None, url='', margen=MARGEN):
 
 def avance(clave, porcentaje, detalle='', margen=MARGEN):
     """Cuánto va (y que sigue vivo)."""
-    Trabajo.objects.filter(clave=clave).update(
+    # Un trabajo cancelado queda con el plazo vencido. La respuesta de una
+    # tanda que ya estaba dentro del servidor no debe volver a activarlo.
+    Trabajo.objects.filter(clave=clave, vence__gt=timezone.now()).update(
         porcentaje=max(0, min(100, int(porcentaje))), detalle=detalle[:150], vence=timezone.now() + margen,
     )
+
+
+def cancelar(clave):
+    """Marca un trabajo para que la tanda que está corriendo se detenga."""
+    # Borrarlo también evita que una respuesta de una versión anterior del
+    # servidor (todavía terminando durante un despliegue) pueda reactivarlo.
+    return Trabajo.objects.filter(clave=clave).delete()
+
+
+def cancelado(clave):
+    """Si el trabajo fue cancelado (o ya no existe)."""
+    return not Trabajo.objects.filter(clave=clave, vence__gt=timezone.now()).exists()
 
 
 def terminar(clave):

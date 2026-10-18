@@ -572,6 +572,24 @@ def _conviene_vlc_primero(url, tipo):
     return tipo == 'directo' or ruta.endswith(_EXTENSIONES_DE_VIDEO_DIRECTO)
 
 
+def _es_vod_de_xtream(url):
+    """Un archivo /series/usuario/clave/id o /movie/usuario/clave/id de un panel Xtream."""
+    partes = [parte for parte in urlsplit(url).path.lower().split('/') if parte]
+    return len(partes) >= 4 and partes[0] in ('series', 'movie')
+
+
+_MENSAJE_XTREAM_SIN_VERIFICAR = (
+    'El proveedor no permite comprobar este video desde el servidor; se cargará sin verificar.'
+)
+
+
+def _xtream_sin_verificar(user_agent=USER_AGENT_VLC):
+    return Resultado(
+        SIN_VERIFICAR, _MENSAJE_XTREAM_SIN_VERIFICAR,
+        tipo='directo', user_agent=user_agent or USER_AGENT_VLC,
+    )
+
+
 def _probar_video_directo(url, cabeceras, a_fondo=False, intentos=3):
     """Los paneles Xtream son intermitentes: reintenta solo cuando agotan el tiempo."""
     for intento in range(intentos):
@@ -607,6 +625,12 @@ def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
         if resultado.rechazo and not user_agent:
             return _probar_video_directo(
                 url, _cabeceras_para_video_directo('', referer, a_fondo), a_fondo)
+        if resultado.error == 'No respondió a tiempo.' and _es_vod_de_xtream(url):
+            # Algunos proveedores reproducen en VLC y en la app, pero bloquean
+            # las IP de datacenter para impedir restreaming. El VPS no puede
+            # afirmar que el archivo esté caído: se carga sin verificar y la
+            # app lo pide directamente desde la conexión del cliente.
+            return _xtream_sin_verificar(agente)
         return resultado
 
     resultado = _probar(url, cabeceras_para(user_agent, referer), a_fondo)
@@ -624,7 +648,7 @@ def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
     return resultado
 
 
-def verificar_varias(fuentes, cabeceras=None, hasta=None, a_fondo=False):
+def verificar_varias(fuentes, cabeceras=None, hasta=None, a_fondo=False, cancelado=None):
     """
     {url: tipo} -> {url: Resultado}. Verifica varias a la vez.
     `cabeceras`: {url: (user_agent, referer)} para las fuentes que tienen las suyas.
@@ -632,11 +656,14 @@ def verificar_varias(fuentes, cabeceras=None, hasta=None, a_fondo=False):
     más; las que no llegaron a probarse NO vienen en el resultado (quedan para
     la próxima tanda). Así un pedido del panel nunca tarda demasiado.
     `a_fondo`: la prueba a fondo (ver el principio).
+    `cancelado`: función que permite cortar una tanda desde otro pedido. Las
+    fuentes que todavía no empezaron quedan pendientes para poder retomarlas.
     """
     if not fuentes:
         return {}
     cabeceras = cabeceras or {}
     por_servidor = {}
+    servidores_xtream_bloqueados = set()
     candado = threading.Lock()
     # Si una tanda trae MKV/MP4 de un panel, todo ese host se prueba de a uno.
     # Muchas cuentas Xtream permiten una sola reproducción simultánea: con dos,
@@ -656,9 +683,22 @@ def verificar_varias(fuentes, cabeceras=None, hasta=None, a_fondo=False):
     def una(par):
         url, tipo = par
         with turno(url):
+            if cancelado and cancelado():
+                return None
             if hasta is not None and time.monotonic() >= hasta:
                 return None
-            return verificar_url(url, tipo, *cabeceras.get(url, ('', '')), a_fondo=a_fondo)
+            servidor = (urlsplit(url).hostname or '').lower()
+            if _es_vod_de_xtream(url):
+                with candado:
+                    bloqueado = servidor in servidores_xtream_bloqueados
+                if bloqueado:
+                    return _xtream_sin_verificar(cabeceras.get(url, ('', ''))[0])
+            resultado = verificar_url(url, tipo, *cabeceras.get(url, ('', '')), a_fondo=a_fondo)
+            if (resultado.estado == SIN_VERIFICAR and resultado.error == _MENSAJE_XTREAM_SIN_VERIFICAR
+                    and _es_vod_de_xtream(url)):
+                with candado:
+                    servidores_xtream_bloqueados.add(servidor)
+            return resultado
 
     with ThreadPoolExecutor(max_workers=HILOS) as hilos:
         resultados = dict(zip(fuentes, hilos.map(una, fuentes.items())))
