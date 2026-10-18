@@ -1,0 +1,35 @@
+/* Importar varias listas de una (canales/inicio.html; static/js/importar_varias.js):
+   la tarjeta resalta al arrastrar archivos encima y cada lista muestra cómo va. */
+
+#importar-lista.soltar-aca {
+    border-color: var(--celeste);
+    background: var(--celeste-fondo);
+}
+
+.subidas {
+    list-style: none;
+    padding: 0;
+    margin: .75rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+.subida {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem .75rem;
+    padding: .55rem .8rem;
+    border-radius: 12px;
+    background: var(--capa-baja);
+    border: 1px solid var(--borde);
+    font-size: .9rem;
+}
+.subida > .bi { color: var(--texto-suave); }
+.subida-nombre { font-weight: 600; flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.subida-estado { color: var(--texto-suave); display: flex; align-items: center; gap: .5rem; }
+.subida.subiendo > .bi { color: var(--celeste); }
+.subida.lista > .bi { color: var(--verde); }
+.subida.error { border-color: var(--rubi-claro); }
+.subida.error > .bi, .subida.error .subida-estado { color: var(--rubi-claro); }
+.subidas-resumen { margin: .6rem 0 0; font-size: .9rem; }

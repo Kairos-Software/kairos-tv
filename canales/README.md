@@ -74,6 +74,16 @@ que está bien** (no la lista entera: se descarta la basura de cada lista):
 3. **Cargar las aptas.** Un botón "Cargar los N que pasaron" (de a 200, con
    avance). Recién ahí entran a la app.
 
+### Varias listas de una (desde el 18/10/2026)
+
+En Contenido, el botón **Importar lista** abre la tarjeta y directo el
+explorador. Se eligen (o se arrastran a la tarjeta) varias listas y se suben
+solas, de a una, sin confirmar (`static/js/importar_varias.js`). Cada una es
+su propio pedido a `inicio` con `X-Requested-With: XMLHttpRequest`, y la
+respuesta es JSON: `{"ok": true, "url": ..., "total": ...}` o `{"ok": false,
+"error": ...}`. Las opciones de la tarjeta valen para todas. Cada lista queda
+con "Abrir" (en otra pestaña) para probarla y cargarla.
+
 ### Una lista grande: por partes (desde el 18/10/2026)
 
 Una lista completa de un proveedor (en vivo + películas + series: 268 000

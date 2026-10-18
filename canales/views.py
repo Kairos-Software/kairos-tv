@@ -69,15 +69,21 @@ def inicio(request):
         if not chequear_permiso(request.user, 'importar_canales'):
             raise PermissionDenied
         form = ImportarListaForm(request.POST, request.FILES)
+        # Varias listas de una (static/js/importar_varias.js): la página las sube de a una y espera JSON
+        de_a_varias = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if form.is_valid():
             # Solo analiza (segundos). Una lista grande ni eso: la pantalla de
             # la importación la lee de a tandas, y después se elige qué probar.
             # La verificación también la va pidiendo la pantalla, de a tandas.
             importacion = servicios.preparar_importacion(
                 form.texto, form.cleaned_data['archivo'].name, request.user, **form.opciones())
-            if importacion.por_leer:
-                return redirect(importacion_url(importacion))
-            return redirect(f'{importacion_url(importacion)}?empezar=1')
+            url = importacion_url(importacion) if importacion.por_leer else f'{importacion_url(importacion)}?empezar=1'
+            if de_a_varias:
+                return JsonResponse({'ok': True, 'url': url, 'total': importacion.total})
+            return redirect(url)
+        if de_a_varias:
+            errores = [str(e) for campo in form.errors.values() for e in campo]
+            return JsonResponse({'ok': False, 'error': ' '.join(errores) or 'No se pudo subir.'}, status=400)
 
     return render(request, 'canales/inicio.html', {
         'form': form,

@@ -235,7 +235,8 @@ class TraerDeYoutubeForm(EstiloBootstrapMixin, forms.Form):
 class ImportarListaForm(EstiloBootstrapMixin, forms.Form):
     archivo = forms.FileField(
         label='Lista de canales',
-        help_text='Archivo .m3u, .m3u8 o un .zip que la contenga (máximo 20 MB).',
+        help_text=f'Archivo .m3u, .m3u8 o un .zip que la contenga (máximo {TAMANIO_MAXIMO // (1024 * 1024)} MB '
+                  f'cada uno). Podés elegir o arrastrar varios a la vez.',
         widget=forms.FileInput(attrs={'accept': '.m3u,.m3u8,.zip'}),
     )
     descartar_vod = forms.BooleanField(
