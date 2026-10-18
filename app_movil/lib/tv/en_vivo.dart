@@ -6,6 +6,9 @@
 ///
 /// También muestra una sección nueva "en vivo" (Radio...: [EnVivoTv.nueva]),
 /// con sus categorías y sin el botón de la guía.
+///
+/// Al volver de un canal el foco sigue en esa tarjeta; si el canal no andaba y
+/// se escondió, en la que quedó en su lugar ([LugarDelFoco]).
 library;
 
 import 'package:flutter/material.dart';
@@ -30,12 +33,14 @@ class EnVivoTv extends StatefulWidget {
 
 class _EnVivoTvState extends State<EnVivoTv> {
   String? _categoria;
+  final _lugar = LugarDelFoco();
 
   @override
   Widget build(BuildContext context) {
     final datos = DatosScope.of(context);
     return ListenableBuilder(
-      listenable: datos.biblioteca,
+      // También el catálogo: lo que no anda se saca enseguida (y el foco pasa al de al lado)
+      listenable: Listenable.merge([datos.biblioteca, datos.catalogo]),
       builder: (context, _) {
         final catalogo = datos.catalogo;
         final biblioteca = datos.biblioteca;
@@ -44,14 +49,31 @@ class _EnVivoTvState extends State<EnVivoTv> {
         final todos = nueva?.canales ?? catalogo.canales;
         final elegida = categorias.where((c) => c.nombre == _categoria).firstOrNull;
 
-        Widget tarjeta(Canal canal, List<Canal> lista, {bool autofocus = false}) => TarjetaCanalTv(
-          canal: canal,
-          numero: catalogo.numeroDe(canal),
-          autofocus: autofocus,
-          favorito: biblioteca.estaEnMiLista(Biblioteca.claveDe(canal)),
-          alOk: () => verCanalTv(context, canal, lista: lista),
-          alOkLargo: () => alternarFavoritoTv(context, Biblioteca.claveDe(canal)),
-        );
+        final listas = elegida != null ? [elegida] : categorias;
+        final nombres = [for (final c in listas) c.nombre];
+        Widget tarjeta(CategoriaCanales categoria, int lugar) {
+          final lista = categoria.canales;
+          final canal = lista[lugar];
+          return _lugar.anotar(
+            lista: categoria.nombre,
+            id: canal.id,
+            lugar: lugar,
+            child: TarjetaCanalTv(
+              canal: canal,
+              numero: catalogo.numeroDe(canal),
+              autofocus: _lugar.esInicial(
+                lista: categoria.nombre,
+                ids: [for (final c in lista) c.id],
+                lugar: lugar,
+                primera: identical(categoria, listas.first),
+                listas: nombres,
+              ),
+              favorito: biblioteca.estaEnMiLista(Biblioteca.claveDe(canal)),
+              alOk: () => verCanalTv(context, canal, lista: lista),
+              alOkLargo: () => alternarFavoritoTv(context, Biblioteca.claveDe(canal)),
+            ),
+          );
+        }
 
         final cabecera = [
           EncabezadoTv(
@@ -111,7 +133,7 @@ class _EnVivoTvState extends State<EnVivoTv> {
                     childAspectRatio: 290 / 164,
                   ),
                   itemCount: elegida.canales.length,
-                  itemBuilder: (_, i) => tarjeta(elegida.canales[i], elegida.canales, autofocus: i == 0),
+                  itemBuilder: (_, i) => tarjeta(elegida, i),
                 ),
               ),
             ],
@@ -130,10 +152,7 @@ class _EnVivoTvState extends State<EnVivoTv> {
               titulo: categoriaLegible(categoria.nombre).isEmpty ? 'Otros' : categoriaLegible(categoria.nombre),
               final_: '${canales.length} canales',
               alto: 164,
-              tarjetas: [
-                for (final (j, canal) in canales.indexed)
-                  tarjeta(canal, canales, autofocus: i == cabecera.length && j == 0),
-              ],
+              tarjetas: [for (var j = 0; j < canales.length; j++) tarjeta(categoria, j)],
             );
           },
         );

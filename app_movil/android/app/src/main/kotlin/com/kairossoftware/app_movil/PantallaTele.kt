@@ -27,6 +27,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.videoplayer.KairosTele
+import io.flutter.plugins.webviewflutter.ProxyApiRegistrar
+import io.flutter.plugins.webviewflutter.WebViewFlutterPlugin
 
 /**
  * "Ver en la tele": el celular usa la TV como segundo monitor.
@@ -75,6 +77,17 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
 
     /** Lo último que pidió el celular: la tele lo pide al arrancar (todavía no estaba escuchando). */
     private var ultimaOrden: Any? = null
+
+    /**
+     * La densidad con la que dibuja YouTube en la tele: la de la tele si se le
+     * pudo dar su contexto ([prestarLaTeleAYoutube]); si no, la del celular.
+     * La usa TamanioReal (lib/tv/escala.dart) para medirlo.
+     */
+    private var densidadDeYoutube: Double? = null
+
+    /** Cuántas veces se reintentó la ventana fija desde que se conectó la tele. */
+    private var reintentosFija = 0
+    private val reloj = Handler(Looper.getMainLooper())
 
     /** El motor de la tele se "presta" la actividad (lo necesitan los WebView de YouTube). */
     private val componente = object : ExclusiveAppComponent<Activity> {
@@ -176,6 +189,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     }
 
     private fun abrir(pantalla: Display) {
+        reintentosFija = 0
         val motor = this.motor ?: crearMotor()
         if (!mostrarEn(pantalla, motor)) {
             // La tele se desconectó justo en ese momento
@@ -206,6 +220,9 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
                 Log.w(ETIQUETA, "La ventana fija no se pudo poner en la tele", e)
                 quitarVentana()
             }
+            // Puede fallar justo al conectarse (la tele todavía no está lista): se reintenta en un
+            // rato. Sin la fija, al salir de la app la tele mostraría el celular.
+            reintentarFija()
         }
         val ventana = object : Presentation(actividad, pantalla) {
             override fun onCreate(estado: Bundle?) {
@@ -215,6 +232,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
                 setContentView(nueva)
                 nueva.attachToFlutterEngine(motor)
                 vista = nueva
+                prestarLaTeleAYoutube(context)
             }
         }
         try {
@@ -263,11 +281,46 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
         vista = nueva
         nueva.attachToFlutterEngine(motor)
         motor.lifecycleChannel.appIsResumed()
+        prestarLaTeleAYoutube(contexto)
         return true
     }
 
+    /**
+     * YouTube es un navegador (WebView) que el plugin crea con la actividad, o
+     * sea con la pantalla del CELULAR: en la tele se armaba con las medidas y
+     * la densidad del celular, y el video se veía en una parte de la pantalla
+     * (arriba a la izquierda) y el resto negro. Acá el plugin del motor de la
+     * tele pasa a crearlo con un contexto de la TELE. El plugin no tiene cómo
+     * pedirlo: se le cambia por dentro (proguard-rules.pro mantiene ese
+     * nombre). Si no se puede, sigue como antes.
+     */
+    private fun prestarLaTeleAYoutube(contexto: Context) {
+        val motor = motor ?: return
+        try {
+            val plugin = motor.plugins.get(WebViewFlutterPlugin::class.java) as? WebViewFlutterPlugin ?: return
+            val campo = WebViewFlutterPlugin::class.java.getDeclaredField("proxyApiRegistrar")
+            campo.isAccessible = true
+            val registrar = campo.get(plugin) as? ProxyApiRegistrar ?: return
+            registrar.setContext(contexto)
+            densidadDeYoutube = contexto.resources.displayMetrics.density.toDouble()
+        } catch (e: Exception) {
+            Log.w(ETIQUETA, "YouTube sigue con el contexto del celular", e)
+        }
+    }
+
     /** Volvió a la app: si recién dio el permiso, la ventana pasa a ser fija (la app de la tele sigue igual). */
-    fun alVolver() {
+    fun alVolver() = asegurarFija()
+
+    /**
+     * Se sale de la app (Inicio, otra app, la pantalla se apaga): si la tele
+     * no tiene la ventana fija, Android esconde la de la app y la tele vuelve
+     * a mostrar el celular (WhatsApp, notificaciones...). Con el permiso, se
+     * pasa a la fija ahora, antes de que se esconda.
+     */
+    fun alSalir() = asegurarFija()
+
+    /** Si hay tele, el permiso y todavía no es la ventana fija: pasa a la fija (la app de la tele sigue igual). */
+    private fun asegurarFija() {
         val pantalla = pantallaActual ?: return
         val motor = motor ?: return
         if (gestorFijo != null || !puedeQuedarFija()) return
@@ -278,6 +331,12 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
             Log.e(ETIQUETA, "No se pudo pasar a la ventana fija", e)
             cerrar()
         }
+    }
+
+    private fun reintentarFija() {
+        if (reintentosFija >= 3) return
+        reintentosFija++
+        reloj.postDelayed({ asegurarFija() }, 1500L * reintentosFija)
     }
 
     private fun puedeQuedarFija(): Boolean =
@@ -333,8 +392,11 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
 
     private fun crearMotor(): FlutterEngine {
         val nuevo = FlutterEngine(actividad.applicationContext)
-        // Los mismos datos del aparato que el motor del celular (nombre, códecs...)
-        MainActivity.prepararCanalDelAparato(actividad, nuevo)
+        // Los mismos datos del aparato que el motor del celular (nombre, códecs...); YouTube, con la de la tele
+        densidadDeYoutube = null
+        MainActivity.prepararCanalDelAparato(actividad, nuevo) {
+            densidadDeYoutube ?: actividad.resources.displayMetrics.density.toDouble()
+        }
         nuevo.activityControlSurface.attachToActivity(componente, actividad.lifecycle)
         canalTele = MethodChannel(nuevo.dartExecutor.binaryMessenger, CANAL).apply {
             setMethodCallHandler { llamada, resultado ->
@@ -359,6 +421,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
     private fun cerrar() {
         val estaba = pantallaActual != null
         pantallaActual = null
+        reloj.removeCallbacksAndMessages(null)
         quitarVentana()
         soltarMotor()
         if (estaba) {

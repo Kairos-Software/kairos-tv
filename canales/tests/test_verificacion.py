@@ -342,7 +342,7 @@ class PantallaCanalesTests(TestCase):
         self.assertRedirects(respuesta, reverse('canales:importacion', args=[importacion.pk]) + '?empezar=1')
         self.assertEqual(Canal.objects.count(), 0)   # todavía no verificó nada
         pagina = self.client.get(reverse('canales:importacion', args=[importacion.pk]))
-        self.assertContains(pagina, 'Empezar a probar')
+        self.assertContains(pagina, 'Probar los 3 que faltan')
         self.assertContains(pagina, 'Telemax')
 
     def test_las_tandas_responden_el_avance(self):
@@ -355,12 +355,12 @@ class PantallaCanalesTests(TestCase):
         self.assertContains(pagina, 'Volver a probar las que fallaron')
         # Probar no cargó nada: las aptas se cargan con otro botón
         self.assertEqual(Canal.objects.count(), 0)
-        self.assertContains(pagina, 'Cargar las 2 que pasaron')
+        self.assertContains(pagina, 'Cargar los 2 que pasaron')
         datos = self.client.post(reverse('canales:importacion_cargar', args=[importacion.pk])).json()
         self.assertEqual((datos['aptas'], datos['agregadas']), (0, 2))
         self.assertEqual(set(Canal.objects.values_list('nombre', flat=True)), {'Canal 26', 'Encuentro'})
         pagina = self.client.get(reverse('canales:importacion', args=[importacion.pk]))
-        self.assertContains(pagina, 'Listo: se cargaron 2')
+        self.assertContains(pagina, 'Ya se cargaron 2.')
 
     def test_pestanias_para_ver_las_que_pasaron(self):
         self.subir()
@@ -377,12 +377,11 @@ class PantallaCanalesTests(TestCase):
         self.assertContains(pagina, 'No responden <span class="pestania-numero">1</span>')
         self.assertNotContains(pagina, 'Ya estaban <span')
         self.assertContains(pagina, 'href="?idioma=es&amp;estado=apta#entradas"')
-        self.assertContains(pagina, 'Ver las 2 que pasaron')
+        self.assertContains(pagina, 'Cargar los 2 que pasaron')
         aptas = self.client.get(url, {'estado': 'apta'})
         self.assertContains(aptas, 'Canal 26')
         self.assertContains(aptas, 'Encuentro')
         self.assertNotContains(aptas, 'Telemax')
-        self.assertNotContains(aptas, 'Ver las 2 que pasaron')   # ya las está viendo
         self.assertContains(aptas, 'class="activa" aria-current="page">Pasaron')
         # La dirección completa, sin cortar
         caidas = self.client.get(url, {'estado': 'caida'})

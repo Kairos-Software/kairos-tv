@@ -53,10 +53,10 @@ class EscalaTv extends StatelessWidget {
 /// del tamaño REAL de la pantalla y lo agranda después. Fuera de la TV (sin
 /// achique) no hace nada.
 ///
-/// En la tele del celular ("Ver en la tele", lib/tele/) Android mide esas
-/// vistas con la densidad del CELULAR ([Aparato.densidadDeVistas]) y no con la
-/// de la tele: si no se compensa, el video de YouTube queda chico en la esquina
-/// de arriba a la izquierda y el resto negro.
+/// En la tele del celular ("Ver en la tele", lib/tele/) YouTube dibuja con la
+/// densidad de [Aparato.densidadDeVistas]: la de la tele, si PantallaTele.kt le
+/// pudo dar el contexto de la tele (desde la 1.2.27), y si no la del celular
+/// (la cuenta lo compensa).
 class TamanioReal extends StatelessWidget {
   const TamanioReal({super.key, required this.child});
 

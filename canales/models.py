@@ -394,6 +394,9 @@ class Importacion(models.Model):
     # La lista la exportó este sistema (canales/exportar.py): lo que trae ya
     # estaba aceptado acá, así que sus series entran aunque tengan pocos capítulos
     de_kairos = models.BooleanField('exportada de Kairos', default=False)
+    # Una lista grande (más de servicios.LEER_DE_UNA entradas) se lee de a tandas,
+    # desde la pantalla de la importación: cuántas faltan leer (0 = ya se leyó toda)
+    por_leer = models.PositiveIntegerField('faltan leer', default=0)
 
     class Meta:
         verbose_name = 'importación'
@@ -463,7 +466,11 @@ class EntradaImportada(models.Model):
         verbose_name = 'entrada importada'
         verbose_name_plural = 'entradas importadas'
         ordering = ['posicion']
-        indexes = [models.Index(fields=['importacion', 'estado', 'posicion'])]
+        indexes = [
+            models.Index(fields=['importacion', 'estado', 'posicion']),
+            # Para trabajar por partes una lista grande: En vivo / Películas / Series y sus categorías
+            models.Index(fields=['importacion', 'contenido', 'categoria']),
+        ]
 
     def __str__(self):
         return f'{self.nombre} · {self.get_estado_display()}'

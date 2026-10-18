@@ -118,6 +118,37 @@ def categoria_por_nombre(nombre, contenido=Contenido.VIVO, indice=None, usuario=
     return categoria
 
 
+def categoria_existente(nombre, contenido=Contenido.VIVO, indice=None):
+    """Como categoria_por_nombre, pero sin crearla: None si no hay ninguna que se llame (o se llamara) así."""
+    if indice is None:
+        indice = indice_de_categorias()
+    return indice.get((contenido, _clave(_limpio(nombre))))
+
+
+def recordar_nombre(categoria, nombre):
+    """
+    La próxima lista que traiga la categoría `nombre` la manda a `categoria`
+    (queda entre sus otros nombres, como al juntar). Si otra categoría lo tenía
+    como otro nombre, deja de tenerlo. False si en esa sección ya hay una
+    categoría que SE LLAMA así: manda la suya (para eso, juntarlas en Categorías).
+    """
+    nombre = _limpio(nombre)
+    clave = _clave(nombre)
+    if not nombre or clave == _clave(categoria.nombre):
+        return bool(nombre)
+    otras = list(Categoria.objects.filter(contenido=categoria.contenido).exclude(pk=categoria.pk))
+    if any(_clave(otra.nombre) == clave for otra in otras):
+        return False
+    for otra in otras:
+        otros = _otros(otra)
+        if any(_clave(n) == clave for n in otros):
+            otra.otros_nombres = '\n'.join(n for n in otros if _clave(n) != clave)
+            otra.save(update_fields=['otros_nombres', 'modificado'])
+    _sumar_otros(categoria, [nombre])
+    categoria.save(update_fields=['otros_nombres', 'modificado'])
+    return True
+
+
 # ── Las categorías ───────────────────────────────────────────────────
 
 def categorias_con_cantidades(contenido=None):

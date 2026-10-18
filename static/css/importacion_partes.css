@@ -1,0 +1,128 @@
+/* La pantalla de una lista importada, por partes (canales/importacion.html):
+   "Qué trae esta lista" (tarjetas por parte), las categorías de la parte
+   elegida y "Estás trabajando con…" en tres pasos (probar, revisar, cargar). */
+
+.imp-partes, .imp-categorias, .imp-trabajo { margin-bottom: 1rem; }
+
+/* Qué trae esta lista */
+.imp-partes-grilla {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .75rem;
+}
+.imp-parte {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    padding: .9rem 1rem;
+    border-radius: 14px;
+    background: var(--capa-baja);
+    border: 1px solid var(--borde);
+    color: var(--texto);
+    text-decoration: none;
+    transition: border-color .15s, background .15s;
+}
+.imp-parte:hover { border-color: var(--celeste-borde); color: var(--texto); }
+.imp-parte.activa { border-color: var(--celeste); background: var(--celeste-fondo); }
+.imp-parte-nombre { font-weight: 700; display: flex; gap: .45rem; align-items: center; }
+.imp-parte-nombre .bi { color: var(--celeste); }
+.imp-parte-total { font-family: var(--fuente-titulos); font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
+.imp-parte-detalle { font-size: .8rem; color: var(--texto-suave); }
+
+/* Las categorías de la parte elegida */
+.imp-categorias-cabecera {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .35rem;
+}
+.imp-categorias-cabecera .form-control { max-width: 260px; }
+.imp-categorias-tabla { max-height: 420px; overflow-y: auto; }
+.imp-categorias-tabla thead th { position: sticky; top: 0; background: var(--capa); z-index: 1; }
+.imp-categorias .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.imp-categorias tr.activa td { background: var(--celeste-fondo); }
+.imp-categorias tr.activa a { font-weight: 700; }
+
+/* Estás trabajando con… */
+.imp-trabajo-cabecera {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+.imp-trabajo-sobretitulo {
+    margin: 0;
+    font-size: .75rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--celeste);
+    font-weight: 700;
+}
+.imp-pasos {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: .75rem;
+}
+.imp-paso {
+    display: flex;
+    gap: .85rem;
+    padding: 1rem;
+    border-radius: 14px;
+    background: var(--capa-baja);
+    border: 1px solid var(--borde);
+    min-width: 0;
+}
+.imp-paso-numero {
+    flex: none;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    background: var(--celeste-fondo);
+    border: 1px solid var(--celeste-borde);
+    color: var(--celeste);
+}
+.imp-paso.hecho .imp-paso-numero { background: var(--celeste); color: var(--capa-baja); }
+.imp-paso-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .5rem; }
+.imp-paso-titulo { font-size: 1rem; font-weight: 700; margin: 0; }
+.imp-paso-ayuda { font-size: .82rem; color: var(--texto-suave); margin: 0; }
+.imp-paso-acciones { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.imp-paso .contadores li { flex: 1 1 40%; padding: .45rem .6rem; }
+.imp-trabajo-pie {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--borde);
+}
+.imp-descartar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+
+/* ¿Dónde va? (paso 3; static/js/importacion_destino.js) */
+.imp-va-hoy {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    font-size: .85rem;
+}
+.imp-va-hoy .chip { font-size: .7rem; padding: .05rem .45rem; }
+.imp-donde-form { display: flex; flex-direction: column; gap: .6rem; }
+.imp-donde-form select optgroup { font-style: normal; }
+.imp-donde-resumen { margin: 0; font-size: .85rem; font-weight: 600; color: var(--celeste); }
+.imp-donde-resumen:empty { display: none; }
+
+/* La lista, uno por uno */
+.imp-lista-titulo { font-size: 1.1rem; font-weight: 700; margin: 1.5rem 0 .75rem; }

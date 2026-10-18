@@ -249,3 +249,52 @@ class BotonTv extends StatelessWidget {
     );
   }
 }
+
+/// Dónde estaba el foco en una lista de canales: cuál y en qué lugar. El foco
+/// "inicial" de la lista (el `autofocus`) es ese; y si ya no está (no andaba y
+/// se escondió: NoAnda), el que quedó en su lugar. Así, al volver de un canal
+/// que no andaba, el foco queda al lado y no salta al primero de arriba (la
+/// pantalla de la TV lleva el foco al inicial cuando lo elegido desaparece).
+class LugarDelFoco {
+  /// La lista (una categoría, o '' = todas) y el canal (id) y su lugar en ella.
+  String? _lista;
+  int? _id;
+  int _lugar = 0;
+
+  /// Envuelve una tarjeta para anotar cuándo recibe el foco.
+  Widget anotar({required String lista, required int id, required int lugar, required Widget child}) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onFocusChange: (enfocado) {
+      if (!enfocado) return;
+      _lista = lista;
+      _id = id;
+      _lugar = lugar;
+    },
+    child: child,
+  );
+
+  /// Si el [lugar] de [ids] (la lista [lista]) es el inicial. [primera]: si
+  /// esta lista es la primera de la pantalla (sin nada anotado que se vea, el
+  /// inicial es su primer elemento). [listas]: las que se ven ahora.
+  bool esInicial({
+    required String lista,
+    required List<int> ids,
+    required int lugar,
+    required bool primera,
+    required Iterable<String> listas,
+  }) {
+    if (_lista == null || !listas.contains(_lista)) return primera && lugar == 0;
+    if (lista != _lista || ids.isEmpty) return false;
+    final donde = ids.indexOf(_id ?? -1);
+    return lugar == (donde >= 0 ? donde : _lugar.clamp(0, ids.length - 1));
+  }
+
+  /// Si el canal anotado de [lista] ya no está en [ids] (se escondió), el que
+  /// quedó en su lugar (y pasa a ser el anotado). null = sigue estando.
+  int? reemplazo({required String lista, required List<int> ids}) {
+    if (_lista != lista || _id == null || ids.isEmpty || ids.contains(_id)) return null;
+    _id = ids[_lugar.clamp(0, ids.length - 1)];
+    return _id;
+  }
+}

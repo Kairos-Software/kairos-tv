@@ -8,6 +8,8 @@
 ///   elegido de esa categoría, o al primero.
 ///   OK: pantalla completa (con zapping por esta misma lista).
 ///   Los números del control saltan al canal con ese número.
+///   Al volver de un canal el foco sigue en él; si no andaba y se escondió,
+///   en el que quedó en su lugar ([LugarDelFoco]).
 library;
 
 import 'dart:async';
@@ -46,8 +48,52 @@ class _GuiaTvState extends State<GuiaTv> {
   /// El último canal elegido (para volver a él con Derecha).
   int? _ultimoCanal;
 
+  final _lugar = LugarDelFoco();
+
+  /// Lo que no anda se saca de la lista enseguida (y el foco pasa al de al lado).
+  Catalogo? _catalogo;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final catalogo = DatosScope.of(context).catalogo;
+    if (identical(catalogo, _catalogo)) return;
+    _catalogo?.removeListener(_alCambiarElCatalogo);
+    _catalogo = catalogo..addListener(_alCambiarElCatalogo);
+  }
+
+  void _alCambiarElCatalogo() {
+    if (!mounted) return;
+    setState(() {});
+    final otro = _lugar.reemplazo(lista: _categoria ?? '', ids: [for (final c in _canales(_catalogo!)) c.id]);
+    if (otro != null) _enfocarAlVolver(otro);
+  }
+
+  /// El canal elegido se escondió (no andaba), seguramente con el canal
+  /// encima: apenas se vuelve a la guía, el foco va al que quedó en su lugar
+  /// (si no, volvía al anterior). Solo si el foco está en la lista de canales.
+  Timer? _esperaVolver;
+
+  void _enfocarAlVolver(int id) {
+    _esperaVolver?.cancel();
+    _esperaVolver = Timer.periodic(const Duration(milliseconds: 250), (reloj) {
+      if (!mounted) return reloj.cancel();
+      if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+      reloj.cancel();
+      final actual = FocusManager.instance.primaryFocus;
+      final enLaLista = actual is FocusScopeNode || _nodosDeCanales.containsValue(actual);
+      final nodo = _nodosDeCanales[id];
+      if (enLaLista && nodo?.context != null) nodo!.requestFocus();
+    });
+  }
+
+  List<Canal> _canales(Catalogo catalogo) =>
+      _categoria == null ? catalogo.canales : catalogo.canales.where((c) => c.categoria == _categoria).toList();
+
   @override
   void dispose() {
+    _catalogo?.removeListener(_alCambiarElCatalogo);
+    _esperaVolver?.cancel();
     _lista.dispose();
     _numeroListo?.cancel();
     for (final nodo in [..._nodosDeCategorias.values, ..._nodosDeCanales.values]) {
@@ -120,9 +166,7 @@ class _GuiaTvState extends State<GuiaTv> {
     final datos = DatosScope.of(context);
     final catalogo = datos.catalogo;
     final biblioteca = datos.biblioteca;
-    final canales = _categoria == null
-        ? catalogo.canales
-        : catalogo.canales.where((c) => c.categoria == _categoria).toList();
+    final canales = _canales(catalogo);
 
     return Focus(
       // Solo escucha los números del control. No puede tener el foco: si no, Derecha desde las
@@ -270,17 +314,29 @@ class _GuiaTvState extends State<GuiaTv> {
                                   itemBuilder: (context, i) {
                                     final canal = canales[i];
                                     final clave = Biblioteca.claveDe(canal);
+                                    final lista = _categoria ?? '';
                                     return Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 8),
-                                      child: FilaCanalTv(
-                                        canal: canal,
-                                        nodo: _nodoDeCanal(canal),
-                                        numero: catalogo.numeroDe(canal),
-                                        autofocus: i == 0,
-                                        favorito: biblioteca.estaEnMiLista(clave),
-                                        ayuda: 'OK · Pantalla completa',
-                                        alOk: () => verCanalTv(context, canal, lista: canales),
-                                        alOkLargo: () => alternarFavoritoTv(context, clave),
+                                      child: _lugar.anotar(
+                                        lista: lista,
+                                        id: canal.id,
+                                        lugar: i,
+                                        child: FilaCanalTv(
+                                          canal: canal,
+                                          nodo: _nodoDeCanal(canal),
+                                          numero: catalogo.numeroDe(canal),
+                                          autofocus: _lugar.esInicial(
+                                            lista: lista,
+                                            ids: [for (final c in canales) c.id],
+                                            lugar: i,
+                                            primera: true,
+                                            listas: [lista],
+                                          ),
+                                          favorito: biblioteca.estaEnMiLista(clave),
+                                          ayuda: 'OK · Pantalla completa',
+                                          alOk: () => verCanalTv(context, canal, lista: canales),
+                                          alOkLargo: () => alternarFavoritoTv(context, clave),
+                                        ),
                                       ),
                                     );
                                   },

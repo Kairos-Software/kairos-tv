@@ -29,7 +29,6 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -71,10 +70,13 @@ def inicio(request):
             raise PermissionDenied
         form = ImportarListaForm(request.POST, request.FILES)
         if form.is_valid():
-            # Solo analiza (segundos). La verificación la va pidiendo la
-            # pantalla de la importación, de a tandas.
-            importacion = servicios.crear_importacion(
+            # Solo analiza (segundos). Una lista grande ni eso: la pantalla de
+            # la importación la lee de a tandas, y después se elige qué probar.
+            # La verificación también la va pidiendo la pantalla, de a tandas.
+            importacion = servicios.preparar_importacion(
                 form.texto, form.cleaned_data['archivo'].name, request.user, **form.opciones())
+            if importacion.por_leer:
+                return redirect(importacion_url(importacion))
             return redirect(f'{importacion_url(importacion)}?empezar=1')
 
     return render(request, 'canales/inicio.html', {
@@ -144,17 +146,24 @@ PESTANIAS_DE_LA_IMPORTACION = [
 @requiere_permiso('ver_canales')
 def importacion(request, pk):
     importacion = get_object_or_404(Importacion.objects.select_related('usuario'), pk=pk)
+    if importacion.por_leer:
+        # Una lista grande, todavía leyéndose: solo la barra de avance (la pantalla la va leyendo)
+        return render(request, 'canales/importacion_leyendo.html', {
+            'importacion': importacion, 'lectura': servicios.lectura(importacion),
+            'puede_importar': chequear_permiso(request.user, 'importar_canales'),
+        })
+    # La parte con la que se trabaja (En vivo / Películas / Series, una categoría, lo buscado):
+    # probar, cargar y descartar se hacen sobre ella
+    seleccion = servicios.Seleccion.de(request.GET)
     filtros = {
-        'texto': request.GET.get('q', '').strip(),
+        'texto': seleccion.texto,
         'estado': request.GET.get('estado', ''),
         'causa': request.GET.get('causa', ''),
         'idioma': request.GET.get('idioma', ''),
-        'contenido': request.GET.get('contenido', ''),
+        'contenido': seleccion.contenido,
+        'categoria': seleccion.categoria,
     }
-    entradas = importacion.entradas.select_related('canal')
-    if filtros['texto']:
-        entradas = entradas.filter(Q(nombre__icontains=filtros['texto']) | Q(nombre_original__icontains=filtros['texto'])
-                                   | Q(categoria__icontains=filtros['texto']))
+    entradas = seleccion.aplicar(importacion.entradas.select_related('canal'))
     if filtros['estado'] in EntradaImportada.Estado.values:
         entradas = entradas.filter(estado=filtros['estado'])
     if filtros['causa'] in EntradaImportada.Causa.values:
@@ -163,23 +172,36 @@ def importacion(request, pk):
         entradas = entradas.filter(idioma='')
     elif filtros['idioma'] in ('es', 'otro'):
         entradas = entradas.filter(idioma=filtros['idioma'])
-    if filtros['contenido'] in EntradaImportada.Contenido.values:
-        entradas = entradas.filter(contenido=filtros['contenido'])
 
-    avance = servicios.progreso(importacion)
+    avance = servicios.progreso(importacion, seleccion)
+    parte = avance['en_la_seleccion']
     # Las pestañas de arriba de la lista: qué pasó con cada uno, con cuántos hay. Las vacías no se muestran,
     # salvo "Pasaron": es la que se mira antes de cargar, y tiene que estar aunque todavía no se haya probado nada.
     # Cambian solo el estado: la búsqueda, el idioma y el contenido elegidos se mantienen.
     sin_estado = request.GET.copy()
     for clave in ('estado', 'causa', 'pagina'):
         sin_estado.pop(clave, None)
-    pestanias = [(estado, texto, avance[clave]) for estado, texto, clave in PESTANIAS_DE_LA_IMPORTACION
-                 if avance[clave] or estado == EntradaImportada.Estado.APTA]
+    pestanias = [(estado, texto, parte[clave]) for estado, texto, clave in PESTANIAS_DE_LA_IMPORTACION
+                 if parte[clave] or estado == EntradaImportada.Estado.APTA]
+    por_contenido = servicios.por_contenido(importacion)
+    # De la parte elegida, sus categorías (con una sola parte, como una lista de canales, directo esas)
+    de_las_categorias = seleccion.contenido or (por_contenido[0][0] if len(por_contenido) == 1 else '')
     pagina = Paginator(entradas, ENTRADAS_POR_PAGINA).get_page(request.GET.get('pagina'))
     se_pueden_elegir = [EntradaImportada.Estado.APTA, *servicios.SE_PUEDEN_CARGAR_IGUAL]
+    puede_importar = chequear_permiso(request.user, 'importar_canales')
     return render(request, 'canales/importacion.html', {
+        **(_donde_va(importacion, seleccion) if puede_importar and seleccion.contenido else {}),
         'importacion': importacion,
         'avance': avance,
+        'parte': parte,
+        'seleccion': seleccion,
+        'datos_de_la_seleccion': urlencode(seleccion.como_datos()),
+        'que_es': servicios.que_es(seleccion),
+        'por_contenido': por_contenido,
+        'categorias': servicios.categorias_de(importacion, de_las_categorias) if de_las_categorias else [],
+        'contenido_de_las_categorias': de_las_categorias,
+        'nombre_de_la_parte': secciones.nombre(de_las_categorias) if de_las_categorias else '',
+        'sin_categoria': servicios.SIN_CATEGORIA,
         'pestanias': pestanias,
         'sin_estado': sin_estado.urlencode(),
         # Elegir una causa es mirar dentro de "No pasaron la prueba"
@@ -195,10 +217,89 @@ def importacion(request, pk):
         'parametros': _parametros_sin_pagina(request),
         'causas': EntradaImportada.Causa.choices,
         'contenidos': EntradaImportada.Contenido.choices,
-        'puede_importar': chequear_permiso(request.user, 'importar_canales'),
+        'puede_importar': puede_importar,
         'empezar': request.GET.get('empezar') == '1',
         'tamanio_lote': servicios.TAMANIO_LOTE,
+        'falta_probar': servicios.falta_probar(importacion, seleccion),
     })
+
+
+def _donde_va(importacion, seleccion):
+    """Para el paso "¿Dónde va?": adónde iría hoy, y las categorías (y series) del panel para elegir."""
+    arbol = consultas.arbol_de_series() if seleccion.contenido == Contenido.SERIE else None
+    series_del_panel = ({s['nombre'].lower() for c in arbol['categorias'] for s in c['series']}
+                        if arbol else None)
+    return {
+        'como_va': servicios.como_va(importacion, seleccion, series_del_panel),
+        'categorias_del_panel': Categoria.objects.filter(contenido=seleccion.contenido).order_by('nombre'),
+        'arbol_de_series': arbol,
+        # "Recordarlo" solo tiene sentido con una categoría entera de la lista (no lo buscado)
+        'se_puede_recordar': (seleccion.categoria and seleccion.categoria != servicios.SIN_CATEGORIA
+                              and not seleccion.texto),
+    }
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_destino(request, pk):
+    """¿Dónde va?: la categoría (y en Series, la serie) de lo elegido que falta cargar."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    seleccion = servicios.Seleccion.de(request.POST)
+    categoria = request.POST.get('categoria_nueva', '') if request.POST.get('destino_categoria') == '+nueva' \
+        else request.POST.get('destino_categoria', '')
+    serie = request.POST.get('serie_nueva', '') if request.POST.get('destino_serie') == '+nueva' \
+        else request.POST.get('destino_serie', '')
+    temporada = request.POST.get('temporada', '').strip()
+    try:
+        cantidad, quedo, recordado = servicios.ubicar(
+            importacion, seleccion, categoria=categoria, serie=serie,
+            temporada=int(temporada) if temporada.isdigit() else None,
+            recordar=request.POST.get('recordar') == 'on', usuario=request.user)
+    except organizar.NoSePuede as error:
+        messages.error(request, str(error))
+        return redirect(f'{importacion_url(importacion)}?{urlencode(seleccion.como_datos())}#donde-va')
+    destino = ' › '.join(p for p in (quedo.categoria, quedo.texto if serie else '')
+                         if p and p != servicios.SIN_CATEGORIA)
+    texto = f'Listo: {cantidad:,} van a «{destino}». Entran ahí cuando los cargues.'.replace(',', '.')
+    if recordado:
+        texto += f' La próxima lista que traiga «{seleccion.categoria}» también va a «{quedo.categoria}».'
+    messages.success(request, texto)
+    return redirect(f'{importacion_url(importacion)}?{urlencode(quedo.como_datos())}#trabajo')
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_leer(request, pk):
+    """Lee la próxima tanda de una lista grande y responde cuánto va (JSON). La pantalla la llama en bucle."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    clave = f'importacion:{importacion.pk}'
+    esperar = _esperar_turno(clave, f'Leyendo la lista «{importacion.archivo}»', request,
+                             importacion_url(importacion), servicios.lectura(importacion))
+    if esperar:
+        return esperar
+    lectura = servicios.leer_lote(importacion)
+    if lectura['terminada']:
+        trabajos.terminar(clave)
+    else:
+        trabajos.avance(clave, lectura['porcentaje'],
+                        f'{lectura["leidas"]:,} de {lectura["total"]:,} leídos'.replace(',', '.'))
+    return JsonResponse(lectura)
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_descartar(request, pk):
+    """No me interesa esta parte: lo de la selección que todavía no se cargó queda descartado."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    seleccion = servicios.Seleccion.de(request.POST)
+    cantidad = servicios.descartar(importacion, seleccion, request.user)
+    if cantidad:
+        messages.success(request, f'Listo: {cantidad:,} de «{servicios.que_es(seleccion)}» quedaron descartados: '
+                                  f'no se van a probar ni cargar. Si te arrepentís, están en «Descartados» y se '
+                                  f'pueden «Cargar igual».'.replace(',', '.'))
+    else:
+        messages.info(request, 'No había nada para descartar acá.')
+    return redirect(f'{importacion_url(importacion)}?{urlencode(seleccion.como_datos())}#trabajo')
 
 
 def _esperar_turno(clave, titulo, request, url, avance):
@@ -224,7 +325,7 @@ def importacion_lote(request, pk):
     if esperar:
         return esperar
     verificar = partial(verificar_varias, a_fondo=True) if importacion.a_fondo else verificar_varias
-    avance = servicios.procesar_lote(importacion, verificar)
+    avance = servicios.procesar_lote(importacion, verificar, seleccion=servicios.Seleccion.de(request.POST))
     if avance['terminada']:
         trabajos.terminar(clave)
     else:
@@ -243,13 +344,14 @@ def importacion_cargar(request, pk):
                              importacion_url(importacion), {**servicios.progreso(importacion), 'canales_nuevos': 0})
     if esperar:
         return esperar
-    avance = servicios.cargar_lote(importacion)
-    if not avance['aptas'] or avance['pendientes'] > 0:
+    avance = servicios.cargar_lote(importacion, seleccion=servicios.Seleccion.de(request.POST))
+    parte = avance['en_la_seleccion']
+    if not parte['aptas'] or parte['pendientes'] > 0:
         trabajos.terminar(clave)
     else:
-        hechas = avance['agregadas']
-        trabajos.avance(clave, round(100 * hechas / max(1, hechas + avance['aptas'])),
-                        f'{hechas:,} cargados, faltan {avance["aptas"]:,}'.replace(',', '.'))
+        hechas = parte['agregadas']
+        trabajos.avance(clave, round(100 * hechas / max(1, hechas + parte['aptas'])),
+                        f'{hechas:,} cargados, faltan {parte["aptas"]:,}'.replace(',', '.'))
     return JsonResponse(avance)
 
 

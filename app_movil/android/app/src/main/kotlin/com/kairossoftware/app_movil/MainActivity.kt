@@ -72,6 +72,12 @@ class MainActivity : FlutterActivity() {
         pantallaTele?.alVolver()
     }
 
+    /** Sale de la app: que la tele siga mostrando solo la app (PantallaTele.alSalir). */
+    override fun onPause() {
+        super.onPause()
+        pantallaTele?.alSalir()
+    }
+
     /**
      * "Atrás" en el Inicio del celular cierra la app. Con una tele conectada,
      * en cambio, la manda al fondo: si se cerrara, la tele dejaría de mostrar
@@ -136,7 +142,11 @@ class MainActivity : FlutterActivity() {
          * El canal "kairos/dispositivo" de [motor]: el del celular y también el
          * de la tele (PantallaTele.kt), que es otro motor de Flutter en el mismo aparato.
          */
-        fun prepararCanalDelAparato(actividad: Activity, motor: FlutterEngine) {
+        fun prepararCanalDelAparato(
+            actividad: Activity,
+            motor: FlutterEngine,
+            densidadDeVistas: () -> Double = { actividad.resources.displayMetrics.density.toDouble() },
+        ) {
             MethodChannel(motor.dartExecutor.binaryMessenger, "kairos/dispositivo").setMethodCallHandler { llamada, resultado ->
                 when (llamada.method) {
                     "datos" -> {
@@ -150,9 +160,10 @@ class MainActivity : FlutterActivity() {
                             "version" to actividad.packageManager.getPackageInfo(actividad.packageName, 0).versionName,
                             "carpetaTemporal" to File(actividad.cacheDir, "actualizaciones").apply { mkdirs() }.absolutePath,
                             "codecs" to codecsDeVideo(),
-                            // Con la que Flutter mide las vistas de Android dentro de la app (YouTube):
-                            // la de la pantalla de la actividad (en la tele del celular, la del celular)
-                            "densidadDeVistas" to actividad.resources.displayMetrics.density.toDouble(),
+                            // Con la que dibujan las vistas de Android dentro de la app (YouTube): la de
+                            // la pantalla de la actividad; en la tele del celular, la de la tele si se
+                            // pudo (PantallaTele.prestarLaTeleAYoutube)
+                            "densidadDeVistas" to densidadDeVistas(),
                         ))
                     }
                     "instalar" -> {

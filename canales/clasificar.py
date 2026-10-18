@@ -16,6 +16,7 @@ la verificación, que mira lo que responde el servidor.
 
 import re
 import unicodedata
+from functools import lru_cache
 from urllib.parse import urlsplit
 
 # ── Idioma y país ────────────────────────────────────────────────────
@@ -80,10 +81,17 @@ def _pais_por_prefijo(texto):
     return ''
 
 
+# Armadas una sola vez (antes se buscaban en cada entrada: con una lista de
+# 268 000 entradas, subirla tardaba minutos).
+_PATRONES_DE_PAIS = [(re.compile(rf'\b{re.escape(nombre)}\b'), codigo) for nombre, codigo in _NOMBRES_DE_PAIS.items()]
+_PATRON_ESPANOL = re.compile(rf'\b(?:{"|".join(_PALABRAS_ESPANOL)})\b')
+_PATRON_OTRO_IDIOMA = re.compile(rf'\b(?:{"|".join(_PALABRAS_OTRO_IDIOMA)})\b')
+
+
 def _pais_por_palabras(texto):
     simple = sin_acentos(texto)
-    for nombre, codigo in _NOMBRES_DE_PAIS.items():
-        if re.search(rf'\b{re.escape(nombre)}\b', simple):
+    for patron, codigo in _PATRONES_DE_PAIS:
+        if patron.search(simple):
             return codigo
     return ''
 
@@ -99,11 +107,21 @@ def _pais_por_tvg_id(tvg_id):
 
 def _idioma_por_palabras(texto):
     palabras = sin_acentos(texto)
-    if any(re.search(rf'\b{p}\b', palabras) for p in _PALABRAS_ESPANOL):
+    if _PATRON_ESPANOL.search(palabras):
         return 'es'
-    if any(re.search(rf'\b{p}\b', palabras) for p in _PALABRAS_OTRO_IDIOMA):
+    if _PATRON_OTRO_IDIOMA.search(palabras):
         return 'otro'
     return ''
+
+
+@lru_cache(maxsize=4096)
+def _segun_la_categoria(categoria):
+    """(idioma, país) que dice la categoría, o None. Se recuerda: en una lista cada una se repite miles de veces."""
+    pais = _pais_por_prefijo(categoria) or _pais_por_palabras(categoria)
+    if pais:
+        return _idioma_de_pais(pais), pais
+    idioma = _idioma_por_palabras(categoria)
+    return (idioma, '') if idioma else None
 
 
 def idioma_y_pais(nombre='', categoria='', pais='', tvg_id='', idioma=''):
@@ -124,12 +142,9 @@ def idioma_y_pais(nombre='', categoria='', pais='', tvg_id='', idioma=''):
     pais = (pais or '').upper()[:2]
     if pais:
         return _idioma_de_pais(pais), pais
-    pais = _pais_por_prefijo(categoria) or _pais_por_palabras(categoria)
-    if pais:
-        return _idioma_de_pais(pais), pais
-    por_categoria = _idioma_por_palabras(categoria)
+    por_categoria = _segun_la_categoria(categoria or '')
     if por_categoria:
-        return por_categoria, ''
+        return por_categoria
     pais = _pais_por_prefijo(nombre) or _pais_por_tvg_id(tvg_id)
     if pais:
         return _idioma_de_pais(pais), pais

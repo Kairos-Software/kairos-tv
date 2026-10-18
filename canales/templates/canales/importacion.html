@@ -1,10 +1,15 @@
 {% extends "base.html" %}
 {% load static canales_extras %}
 {% comment %}
-    Una lista importada, en dos pasos:
-      1. La prueba: la barra de avance mientras se prueba de a tandas. Lo que
-         pasa queda "apta"; lo que no, con el motivo (y agrupado por causa).
-      2. Cargar las aptas: recién ahí entran a la app.
+    Una lista importada, de arriba abajo:
+      - Qué trae: Toda la lista / En vivo / Películas / Series, con cuántos
+        pasaron, se cargaron y faltan probar. Tocar una es trabajar solo con ella.
+      - Las categorías de la parte elegida (tocar una, lo mismo).
+      - "Estás trabajando con…" (servicios.Seleccion): 1 Probar (de a tandas),
+        2 Revisar (cuántos pasaron, no pasaron...), 3 ¿Dónde va? (a qué
+        categoría y, en Series, a qué serie; opcional), 4 Cargar a la app
+        (recién ahí entran) y "No quiero esto: descartar". Así una lista de
+        268 000 entradas se trabaja de a partes: probar todo junto llevaría días.
     Abajo, cada entrada de la lista con lo que pasó y por qué, su idioma,
     país, formato, la calidad que encontró la prueba y la categoría, en
     pestañas por lo que pasó ("Pasaron", "No pasaron"...). Cada entrada es
@@ -41,96 +46,271 @@
 {% endblock %}
 
 {% block contenido %}
-<div class="importacion-flujo mb-4">
-<section class="tarjeta importacion-paso" id="progreso">
-    {% csrf_token %}
-    <h2 class="tarjeta-titulo">1. La prueba</h2>
-    <div class="avance mb-3">
-        <div class="avance-barra" role="progressbar" aria-label="Avance de la prueba" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ avance.porcentaje }}">
-            <div class="avance-relleno" style="width: {{ avance.porcentaje }}%"></div>
-        </div>
-        <div class="avance-texto">
-            <strong data-texto="porcentaje">{{ avance.porcentaje }} % completado</strong>
-            <span data-texto="detalle">{{ avance.verificadas }} de {{ avance.para_verificar }} probados{% if avance.pendientes %} · faltan {{ avance.pendientes }}{% endif %}</span>
-        </div>
+{# 1. Qué trae la lista, por partes. Tocar una es trabajar solo con ella (probarla, cargarla, descartarla). #}
+<section class="tarjeta imp-partes" aria-labelledby="imp-partes-titulo">
+    <h2 class="tarjeta-titulo" id="imp-partes-titulo">Qué trae esta lista</h2>
+    <div class="imp-partes-grilla">
+        <a href="?#trabajo" class="imp-parte{% if seleccion.vacia %} activa{% endif %}"{% if seleccion.vacia %} aria-current="true"{% endif %}>
+            <span class="imp-parte-nombre"><i class="bi bi-collection" aria-hidden="true"></i> Toda la lista</span>
+            <span class="imp-parte-total">{{ importacion.total }}</span>
+            <span class="imp-parte-detalle">{{ avance.aptas }} pasaron · {{ avance.agregadas }} cargados · {{ avance.pendientes }} sin probar</span>
+        </a>
+        {% for clave, nombre, cuentas in por_contenido %}
+        <a href="?contenido={{ clave }}#trabajo" class="imp-parte{% if seleccion.contenido == clave %} activa{% endif %}"{% if seleccion.contenido == clave %} aria-current="true"{% endif %}>
+            <span class="imp-parte-nombre"><i class="bi {% if clave == 'vivo' %}bi-broadcast{% elif clave == 'pelicula' %}bi-film{% elif clave == 'serie' %}bi-collection-play{% else %}bi-grid{% endif %}" aria-hidden="true"></i> {{ nombre }}</span>
+            <span class="imp-parte-total">{{ cuentas.total }}</span>
+            <span class="imp-parte-detalle">{{ cuentas.aptas }} pasaron · {{ cuentas.agregadas }} cargados · {{ cuentas.pendientes }} sin probar</span>
+        </a>
+        {% endfor %}
     </div>
-    <ul class="contadores mb-3" aria-live="polite">
-        <li><a href="?estado=apta#entradas"><b data-contador="aptas">{{ avance.aptas }}</b> pasaron (falta cargar)</a></li>
-        <li><a href="?estado=agregada#entradas"><b data-contador="agregadas">{{ avance.agregadas }}</b> cargados</a></li>
-        <li><a href="?estado=rechazada#entradas"><b data-contador="rechazadas">{{ avance.rechazadas }}</b> no pasaron la prueba</a></li>
-        <li><a href="?estado=caida#entradas"><b data-contador="caidas">{{ avance.caidas }}</b> no responden</a></li>
-        <li><a href="?estado=descartada#entradas"><b data-contador="descartadas">{{ avance.descartadas }}</b> descartados</a></li>
-        <li><a href="?estado=repetida#entradas"><b data-contador="repetidas">{{ avance.repetidas }}</b> ya estaban</a></li>
-        <li><a href="?estado=pendiente#entradas"><b data-contador="pendientes">{{ avance.pendientes }}</b> por probar</a></li>
-    </ul>
-
-    {% if por_causa %}
-    <div class="mb-3">
-        <p class="small texto-suave mb-2">Por qué no pasaron la prueba:</p>
-        <div class="d-flex flex-wrap gap-2">
-            {% for causa, texto, cantidad in por_causa %}
-            <a href="?causa={{ causa }}#entradas" class="chip chip-rechazada{% if filtros.causa == causa %} activo{% endif %}">{{ texto }}: {{ cantidad }}</a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-
-    {% if puede_importar %}
-    <div class="d-flex flex-wrap align-items-center gap-2">
-        {% if avance.pendientes %}
-        <button type="button" class="btn btn-primary" data-accion="correr">
-            <i class="bi bi-play-fill" aria-hidden="true"></i> <span>{% if avance.verificadas %}Continuar{% else %}Empezar a probar{% endif %}</span>
-        </button>
-        <span class="texto-suave small" data-texto="estado">Se prueban de a {{ tamanio_lote }}. Todavía no se carga nada. Si cerrás la página se pausa, y después seguís desde acá.</span>
-        {% else %}
-            {% if avance.caidas or avance.rechazadas %}
-            <form method="post" action="{% url 'canales:importacion_reintentar' importacion.pk %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-outline-secondary" title="Las que no respondieron, llegaron lentas o se cortaron (a veces es algo del momento)">
-                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Volver a probar las que fallaron
-                </button>
-            </form>
-            {% endif %}
-            <form method="post" action="{% url 'canales:importacion_borrar' importacion.pk %}" class="ms-auto"
-                  onsubmit="return confirm('¿Borrar este informe? Lo que ya se cargó sigue cargado; las aptas sin cargar se pierden.');">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-link text-danger">
-                    <i class="bi bi-trash" aria-hidden="true"></i> Borrar informe
-                </button>
-            </form>
-        {% endif %}
-    </div>
+    {% if por_contenido|length > 1 and not seleccion.contenido %}
+    <p class="texto-suave small mb-0 mt-3"><i class="bi bi-hand-index" aria-hidden="true"></i> Elegí una parte para ver sus categorías y trabajar de a poco: probar todo junto puede llevar días.</p>
     {% endif %}
 </section>
 
-{% if not avance.pendientes and avance.aptas or not avance.pendientes and importacion.cargada %}
-<section class="tarjeta importacion-paso" id="carga">
-    <h2 class="tarjeta-titulo">2. Cargar las aptas</h2>
-    {% if avance.aptas %}
-    <p class="texto-suave">Pasaron la prueba <strong data-texto="aptas">{{ avance.aptas }}</strong>. Revisalas abajo, en la pestaña «Pasaron», y si están bien, cargalas: recién ahí entran a la app. Si un canal ya existe, la dirección se suma como fuente alternativa.</p>
-    <div class="d-flex flex-wrap align-items-center gap-2">
-        {% if estado_elegido != 'apta' %}
-        <a href="?estado=apta#entradas" class="btn btn-outline-secondary"><i class="bi bi-eye" aria-hidden="true"></i> Ver las {{ avance.aptas }} que pasaron</a>
-        {% endif %}
-        {% if puede_importar %}
-        <button type="button" class="btn btn-primary" data-accion="cargar">
-            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> <span>Cargar las {{ avance.aptas }} que pasaron</span>
-        </button>
-        <span class="texto-suave small" data-texto="estado-carga"></span>
+{# 2. Las categorías de la parte elegida: tocar una es trabajar solo con ella #}
+{% if categorias %}
+<section class="tarjeta imp-categorias" aria-labelledby="imp-categorias-titulo">
+    <div class="imp-categorias-cabecera">
+        <h2 class="tarjeta-titulo mb-0" id="imp-categorias-titulo">Categorías de {{ nombre_de_la_parte }} <span class="texto-suave">({{ categorias|length }})</span></h2>
+        {% if categorias|length > 8 %}
+        <input type="search" class="form-control form-control-sm" placeholder="Buscar una categoría" aria-label="Buscar una categoría" data-filtrar-categorias>
         {% endif %}
     </div>
-    {% else %}
-    <p class="mb-0"><i class="bi bi-check-circle" aria-hidden="true"></i> Listo: se cargaron {{ avance.agregadas }} el {{ importacion.cargada|date:"j/m/Y H:i" }}.</p>
-    {% endif %}
+    <p class="texto-suave small">Tocá una para trabajar solo con ella: probarla, cargarla o descartarla.</p>
+    <div class="table-responsive imp-categorias-tabla">
+        <table class="table tabla mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">Categoría</th>
+                    <th scope="col" class="num">En la lista</th>
+                    <th scope="col" class="num">Sin probar</th>
+                    <th scope="col" class="num">Pasaron</th>
+                    <th scope="col" class="num">No pasaron</th>
+                    <th scope="col" class="num">Cargados</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in categorias %}
+                <tr{% if seleccion.categoria == c.clave %} class="activa"{% endif %} data-nombre="{{ c.nombre|lower }}">
+                    <td><a href="?contenido={{ contenido_de_las_categorias }}&amp;categoria={{ c.clave|urlencode }}#trabajo">{{ c.nombre }}</a></td>
+                    <td class="num">{{ c.total }}</td>
+                    <td class="num">{{ c.pendientes|default:"—" }}</td>
+                    <td class="num{% if c.aptas %} estado-bien{% endif %}">{{ c.aptas|default:"—" }}</td>
+                    <td class="num">{{ c.no_pasaron|default:"—" }}</td>
+                    <td class="num">{{ c.agregadas|default:"—" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 {% endif %}
-</div>
 
+{# 3. Lo que se está trabajando, en tres pasos: probar, revisar, cargar (o descartarlo todo) #}
+<section class="tarjeta imp-trabajo" id="trabajo" aria-labelledby="imp-trabajo-titulo">
+    {% csrf_token %}
+    <div class="imp-trabajo-cabecera">
+        <div>
+            <p class="imp-trabajo-sobretitulo">Estás trabajando con</p>
+            <h2 class="tarjeta-titulo mb-0" id="imp-trabajo-titulo">{{ que_es|capfirst }} <span class="texto-suave">· {{ parte.total }} elemento{{ parte.total|pluralize }}</span></h2>
+        </div>
+        {% if not seleccion.vacia %}<a href="?#trabajo" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Volver a toda la lista</a>{% endif %}
+    </div>
+
+    <ol class="imp-pasos">
+        <li class="imp-paso{% if not parte.pendientes %} hecho{% endif %}" id="progreso">
+            <span class="imp-paso-numero" aria-hidden="true">{% if parte.pendientes %}1{% else %}<i class="bi bi-check-lg"></i>{% endif %}</span>
+            <div class="imp-paso-cuerpo">
+                <h3 class="imp-paso-titulo">Probar</h3>
+                <p class="imp-paso-ayuda">Se fija cuáles andan de verdad. Todavía no se carga nada.</p>
+                <div class="avance">
+                    <div class="avance-barra" role="progressbar" aria-label="Avance de la prueba" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ parte.porcentaje }}">
+                        <div class="avance-relleno" style="width: {{ parte.porcentaje }}%"></div>
+                    </div>
+                    <div class="avance-texto">
+                        <strong data-texto="porcentaje">{{ parte.porcentaje }} % probado</strong>
+                        <span data-texto="detalle">{% if parte.pendientes %}faltan {{ parte.pendientes }}{% else %}listo{% endif %}</span>
+                    </div>
+                </div>
+                {% if puede_importar and parte.pendientes %}
+                <div class="imp-paso-acciones">
+                    <button type="button" class="btn btn-primary" data-accion="correr">
+                        <i class="bi bi-play-fill" aria-hidden="true"></i> <span>Probar {% if parte.pendientes == 1 %}el que falta{% else %}los {{ parte.pendientes }} que faltan{% endif %}</span>
+                    </button>
+                    <span class="texto-suave small" data-texto="estado">Se prueban de a {{ tamanio_lote }}. Si cerrás la página se pausa, y después seguís desde acá.</span>
+                </div>
+                {% endif %}
+            </div>
+        </li>
+
+        <li class="imp-paso">
+            <span class="imp-paso-numero" aria-hidden="true">2</span>
+            <div class="imp-paso-cuerpo">
+                <h3 class="imp-paso-titulo">Revisar</h3>
+                <p class="imp-paso-ayuda">Tocá un número para ver cuáles son (abajo, en la lista).</p>
+                <ul class="contadores mb-0" aria-live="polite">
+                    <li><a href="?{{ datos_de_la_seleccion }}&amp;estado=apta#entradas"><b data-contador="aptas">{{ parte.aptas }}</b> pasaron</a></li>
+                    <li><a href="?{{ datos_de_la_seleccion }}&amp;estado=rechazada#entradas"><b data-contador="rechazadas">{{ parte.rechazadas }}</b> no pasaron la prueba</a></li>
+                    <li><a href="?{{ datos_de_la_seleccion }}&amp;estado=caida#entradas"><b data-contador="caidas">{{ parte.caidas }}</b> no responden</a></li>
+                    <li><a href="?{{ datos_de_la_seleccion }}&amp;estado=agregada#entradas"><b data-contador="agregadas">{{ parte.agregadas }}</b> cargados</a></li>
+                    <li><a href="?{{ datos_de_la_seleccion }}&amp;estado=descartada#entradas"><b data-contador="descartadas">{{ parte.descartadas }}</b> descartados</a></li>
+                    <li><a href="?{{ datos_de_la_seleccion }}&amp;estado=repetida#entradas"><b data-contador="repetidas">{{ parte.repetidas }}</b> ya estaban</a></li>
+                </ul>
+                {% if por_causa and seleccion.vacia %}
+                <div class="mt-3">
+                    <p class="small texto-suave mb-2">Por qué no pasaron la prueba:</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for causa, texto, cantidad in por_causa %}
+                        <a href="?causa={{ causa }}#entradas" class="chip chip-rechazada{% if filtros.causa == causa %} activo{% endif %}">{{ texto }}: {{ cantidad }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </li>
+
+        {% if puede_importar %}
+        {# ¿Dónde va? (servicios.como_va / servicios.ubicar): la categoría y, en Series, la serie. Opcional. #}
+        <li class="imp-paso imp-donde" id="donde-va">
+            <span class="imp-paso-numero" aria-hidden="true">3</span>
+            <div class="imp-paso-cuerpo">
+                <h3 class="imp-paso-titulo">¿Dónde va?</h3>
+                {% if not seleccion.contenido %}
+                <p class="imp-paso-ayuda">Elegí arriba una parte (En vivo, Películas o Series) o una categoría, y acá elegís a qué categoría del panel va, o a qué serie.</p>
+                {% elif not como_va.total %}
+                <p class="imp-paso-ayuda">Acá ya no queda nada sin cargar. Lo que ya se cargó se mueve desde <a href="{% url 'canales:organizar' %}?contenido={{ seleccion.contenido }}">Organizar contenido</a>.</p>
+                {% else %}
+                <p class="imp-paso-ayuda">Opcional: si no elegís nada, va como viene en la lista. Hoy iría así:</p>
+                <ul class="imp-va-hoy">
+                    {% for c in como_va.categorias|slice:":3" %}
+                    <li><b>{{ c.cantidad }}</b> a
+                        {% if c.va_a %}«{{ c.va_a }}» <span class="chip chip-si">ya existe</span>{% if c.va_a|lower != c.nombre|lower %} <span class="texto-suave">(ahí juntaste «{{ c.nombre }}»)</span>{% endif %}
+                        {% elif c.nombre == 'Sin categoría' %}ninguna categoría <span class="texto-suave">(en la app, «Otros»)</span>
+                        {% else %}«{{ c.nombre }}» <span class="chip">nueva</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                    {% if como_va.categorias|length > 3 %}<li class="texto-suave">… y {{ como_va.categorias|length|add:"-3" }} categoría{{ como_va.categorias|length|add:"-3"|pluralize }} más. En total se crearían {{ como_va.nuevas }} nueva{{ como_va.nuevas|pluralize }}.</li>{% endif %}
+                    {% if como_va.series %}<li><b>{{ como_va.series.total }}</b> serie{{ como_va.series.total|pluralize }}: {{ como_va.series.existen }} ya está{{ como_va.series.existen|pluralize:"n" }} en el panel (sus capítulos se suman ahí, en su categoría) y el resto son nuevas.</li>{% endif %}
+                </ul>
+                <form method="post" action="{% url 'canales:importacion_destino' importacion.pk %}" class="imp-donde-form" data-donde-va>
+                    {% csrf_token %}
+                    <input type="hidden" name="contenido" value="{{ seleccion.contenido }}">
+                    <input type="hidden" name="categoria" value="{{ seleccion.categoria }}">
+                    <input type="hidden" name="q" value="{{ seleccion.texto }}">
+                    <div>
+                        <label class="form-label small mb-1" for="destino-categoria">Categoría</label>
+                        <select id="destino-categoria" name="destino_categoria" class="form-select form-select-sm">
+                            <option value="">Como viene en la lista</option>
+                            {% if categorias_del_panel %}
+                            <optgroup label="Las de {{ nombre_de_la_parte }} en el panel">
+                                {% for c in categorias_del_panel %}<option value="{{ c.nombre }}">{{ c.nombre }}</option>{% endfor %}
+                            </optgroup>
+                            {% endif %}
+                            <option value="+nueva">＋ Una categoría nueva…</option>
+                        </select>
+                        <input type="text" name="categoria_nueva" class="form-control form-control-sm mt-1" maxlength="80" placeholder="Nombre de la categoría nueva" aria-label="Nombre de la categoría nueva" hidden>
+                    </div>
+                    {% if arbol_de_series %}
+                    <div>
+                        <label class="form-label small mb-1" for="destino-serie">Serie</label>
+                        <select id="destino-serie" name="destino_serie" class="form-select form-select-sm">
+                            <option value="">Cada una con su nombre (como viene)</option>
+                            {% for c in arbol_de_series.categorias %}{% if c.series %}
+                            <optgroup label="{{ c.nombre|default:'Sin categoría' }}">
+                                {% for s in c.series %}<option value="{{ s.nombre }}" data-categoria="{{ c.nombre }}">{{ s.nombre }}</option>{% endfor %}
+                            </optgroup>
+                            {% endif %}{% endfor %}
+                            <option value="+nueva">＋ Una serie nueva…</option>
+                        </select>
+                        <input type="text" name="serie_nueva" class="form-control form-control-sm mt-1" maxlength="90" placeholder="Nombre de la serie nueva" aria-label="Nombre de la serie nueva" hidden>
+                    </div>
+                    <div data-solo-con-serie hidden>
+                        <label class="form-label small mb-1" for="destino-temporada">Temporada</label>
+                        <input type="number" id="destino-temporada" name="temporada" class="form-control form-control-sm" min="1" max="99" placeholder="La que trae cada capítulo">
+                        <p class="imp-paso-ayuda mt-1">Vacío: cada capítulo queda en la temporada y con el número que trae. Si la serie ya tiene ese capítulo, se suma como otra fuente.</p>
+                    </div>
+                    {% endif %}
+                    {% if se_puede_recordar %}
+                    <div class="form-check" data-recordar hidden>
+                        <input class="form-check-input" type="checkbox" name="recordar" id="destino-recordar" checked>
+                        <label class="form-check-label small" for="destino-recordar">Recordarlo: la próxima lista que traiga «{{ seleccion.categoria }}» también va ahí</label>
+                    </div>
+                    {% endif %}
+                    <p class="imp-donde-resumen" data-resumen aria-live="polite"></p>
+                    <div class="imp-paso-acciones">
+                        <button type="submit" class="btn btn-sm btn-outline-primary" disabled><i class="bi bi-signpost-split" aria-hidden="true"></i> Mandarlo ahí</button>
+                        <span class="texto-suave small">Todavía no se carga: entra ahí con «Cargar».</span>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </li>
+        {% endif %}
+
+        <li class="imp-paso{% if not parte.aptas and parte.agregadas %} hecho{% endif %}" id="carga">
+            <span class="imp-paso-numero" aria-hidden="true">{% if not parte.aptas and parte.agregadas %}<i class="bi bi-check-lg"></i>{% elif puede_importar %}4{% else %}3{% endif %}</span>
+            <div class="imp-paso-cuerpo">
+                <h3 class="imp-paso-titulo">Cargar a la app</h3>
+                <p class="imp-paso-ayuda">Recién acá entran a la app. Si un canal ya existe, la dirección se suma como fuente alternativa.</p>
+                {% if parte.aptas %}
+                    {% if puede_importar %}
+                    <div class="imp-paso-acciones">
+                        <button type="button" class="btn btn-primary" data-accion="cargar"{% if falta_probar %} disabled{% endif %}>
+                            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> <span>Cargar {% if parte.aptas == 1 %}el que pasó{% else %}los {{ parte.aptas }} que pasaron{% endif %}</span>
+                        </button>
+                        {% if parte.aptas > 10 %}<a href="?{{ datos_de_la_seleccion }}&amp;estado=apta#entradas" class="btn btn-outline-secondary"><i class="bi bi-eye" aria-hidden="true"></i> Verlos antes</a>{% endif %}
+                        <span class="texto-suave small" data-texto="estado-carga">{% if falta_probar %}Primero terminá de probar (paso 1): falta{{ parte.pendientes|pluralize:"n" }} {{ parte.pendientes }}.{% endif %}</span>
+                    </div>
+                    {% endif %}
+                {% elif parte.agregadas %}
+                <p class="estado-bien mb-0"><i class="bi bi-check-circle" aria-hidden="true"></i> Ya se cargaron {{ parte.agregadas }}.</p>
+                {% else %}
+                <p class="texto-suave mb-0">Todavía no hay nada que haya pasado la prueba.</p>
+                {% endif %}
+            </div>
+        </li>
+    </ol>
+
+    {% if puede_importar %}
+    <div class="imp-trabajo-pie">
+        {% if parte.pendientes or parte.aptas %}
+        <form method="post" action="{% url 'canales:importacion_descartar' importacion.pk %}" class="imp-descartar"
+              onsubmit="return confirm('¿Descartar {{ parte.pendientes|add:parte.aptas }} de «{{ que_es|escapejs }}»? No se van a probar ni cargar. Si te arrepentís, quedan en «Descartados».');">
+            {% csrf_token %}
+            <input type="hidden" name="contenido" value="{{ seleccion.contenido }}">
+            <input type="hidden" name="categoria" value="{{ seleccion.categoria }}">
+            <input type="hidden" name="q" value="{{ seleccion.texto }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle" aria-hidden="true"></i> No quiero esto: descartar {{ parte.pendientes|add:parte.aptas }}</button>
+            <span class="texto-suave small">Lo que no te interesa (o no tenés derechos para pasar): no se prueba ni se carga.</span>
+        </form>
+        {% endif %}
+        {% if seleccion.vacia and not avance.pendientes and avance.caidas or seleccion.vacia and not avance.pendientes and avance.rechazadas %}
+        <form method="post" action="{% url 'canales:importacion_reintentar' importacion.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Las que no respondieron, llegaron lentas o se cortaron (a veces es algo del momento)">
+                <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Volver a probar las que fallaron
+            </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'canales:importacion_borrar' importacion.pk %}" class="ms-auto"
+              onsubmit="return confirm('¿Borrar este informe? Lo que ya se cargó sigue cargado; lo que pasó y no se cargó se pierde.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-link text-danger"><i class="bi bi-trash" aria-hidden="true"></i> Borrar informe</button>
+        </form>
+    </div>
+    {% endif %}
+</section>
+
+<h2 class="imp-lista-titulo" id="lista">La lista, uno por uno{% if not seleccion.vacia %} <span class="texto-suave">({{ que_es }})</span>{% endif %}</h2>
 <form method="get" class="filtros" role="search">
+    {# La parte elegida arriba (En vivo / una categoría) se mantiene al buscar #}
+    {% if seleccion.contenido %}<input type="hidden" name="contenido" value="{{ seleccion.contenido }}">{% endif %}
+    {% if seleccion.categoria %}<input type="hidden" name="categoria" value="{{ seleccion.categoria }}">{% endif %}
     <div class="filtros-buscar">
         <i class="bi bi-search" aria-hidden="true"></i>
         <label for="q" class="visually-hidden">Buscar</label>
-        <input type="search" id="q" name="q" value="{{ filtros.texto }}" class="form-control" placeholder="Nombre o categoría">
+        <input type="search" id="q" name="q" value="{{ filtros.texto }}" class="form-control" placeholder="Buscar por nombre (ej: Telefe, Betty)">
     </div>
     {# Qué pasó se elige con las pestañas de abajo: al filtrar, se queda en la misma #}
     {% if filtros.estado %}<input type="hidden" name="estado" value="{{ filtros.estado }}">{% endif %}
@@ -143,38 +323,22 @@
             {% endfor %}
         </select>
     </div>
-    <details class="filtros-mas">
-        <summary class="btn btn-outline-secondary">
-            <i class="bi bi-sliders" aria-hidden="true"></i> Más filtros
-            {% if filtros.idioma or filtros.contenido %}<span class="filtro-activo" aria-label="Hay filtros adicionales activos"></span>{% endif %}
-        </summary>
-        <div class="filtros-mas-panel">
-            <div>
-                <label for="idioma" class="form-label">Idioma</label>
-                <select id="idioma" name="idioma" class="form-select">
-                    <option value="">Todos los idiomas</option>
-                    <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
-                    <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
-                    <option value="sin_dato" {% if filtros.idioma == 'sin_dato' %}selected{% endif %}>No se sabe</option>
-                </select>
-            </div>
-            <div>
-                <label for="contenido" class="form-label">Contenido</label>
-                <select id="contenido" name="contenido" class="form-select">
-                    <option value="">En vivo, películas y series</option>
-                    {% for valor, texto in contenidos %}
-                    <option value="{{ valor }}" {% if filtros.contenido == valor %}selected{% endif %}>{{ texto }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-    </details>
-    <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
-    {% if hay_filtros %}<a href="{% url 'canales:importacion' importacion.pk %}" class="btn btn-link">Limpiar</a>{% endif %}
+    <div>
+        <label for="idioma" class="visually-hidden">Idioma</label>
+        <select id="idioma" name="idioma" class="form-select">
+            <option value="">Todos los idiomas</option>
+            <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
+            <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
+            <option value="sin_dato" {% if filtros.idioma == 'sin_dato' %}selected{% endif %}>No se sabe</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Buscar</button>
+    {% if filtros.texto or filtros.causa or filtros.idioma %}<a href="?{% if seleccion.contenido %}contenido={{ seleccion.contenido }}{% endif %}{% if seleccion.categoria %}&amp;categoria={{ seleccion.categoria|urlencode }}{% endif %}#lista" class="btn btn-link">Limpiar búsqueda</a>{% endif %}
 </form>
+<p class="small texto-suave mb-3">Al buscar, los pasos de arriba (probar, cargar, descartar) pasan a ser solo de lo que encontraste.</p>
 
 <nav class="pestanias pestanias-entradas mb-3" id="entradas" aria-label="Qué pasó con cada uno">
-    <a href="?{{ sin_estado }}#entradas" {% if not estado_elegido %}class="activa" aria-current="page"{% endif %}>Todos <span class="pestania-numero">{{ importacion.total }}</span></a>
+    <a href="?{{ sin_estado }}#entradas" {% if not estado_elegido %}class="activa" aria-current="page"{% endif %}>Todos <span class="pestania-numero">{{ parte.total }}</span></a>
     {% for estado, texto, cantidad in pestanias %}
     <a href="?{% if sin_estado %}{{ sin_estado }}&amp;{% endif %}estado={{ estado }}#entradas" {% if estado_elegido == estado %}class="activa" aria-current="page"{% endif %}>{{ texto }} <span class="pestania-numero">{{ cantidad }}</span></a>
     {% endfor %}
@@ -247,9 +411,9 @@
 <div class="tarjeta">
     <div class="vacio">
         <i class="bi bi-funnel" aria-hidden="true"></i>
-        {% if estado_elegido == 'apta' and avance.pendientes %}
-        <p>Todavía faltan probar {{ avance.pendientes }}. Tocá «{% if avance.verificadas %}Continuar{% else %}Empezar a probar{% endif %}» arriba: lo que pase la prueba va apareciendo acá, y al terminar la página se abre sola en esta pestaña.</p>
-        {% elif estado_elegido == 'apta' and avance.agregadas %}
+        {% if estado_elegido == 'apta' and parte.pendientes %}
+        <p>Todavía faltan probar {{ parte.pendientes }}. Tocá «Probar» arriba (paso 1): lo que pase la prueba va apareciendo acá, y al terminar la página se abre sola en esta pestaña.</p>
+        {% elif estado_elegido == 'apta' and parte.agregadas %}
         <p>Ya se cargó todo lo que pasó la prueba: está en la pestaña «Cargados».</p>
         {% elif hay_filtros %}
         <p>Ningún canal de esta lista coincide con los filtros.</p>
@@ -297,96 +461,102 @@
 })();
 </script>
 {% endif %}
-{% if puede_importar and avance.pendientes or puede_importar and avance.aptas %}
-<script src="{% static 'js/tandas.js' %}"></script>
+{% if categorias|length > 8 %}
+<script>
+// Buscar una categoría en la tabla (sin recargar)
+(function () {
+    var campo = document.querySelector('[data-filtrar-categorias]');
+    var filas = document.querySelectorAll('.imp-categorias tbody tr');
+    campo.addEventListener('input', function () {
+        var buscado = campo.value.trim().toLowerCase();
+        filas.forEach(function (fila) { fila.hidden = buscado && fila.dataset.nombre.indexOf(buscado) < 0; });
+    });
+})();
+</script>
 {% endif %}
-{% if puede_importar and avance.pendientes %}
+{% if puede_importar and parte.pendientes or puede_importar and parte.aptas %}
+<script src="{% static 'js/tandas.js' %}"></script>
 <script>
 (function () {
-    var caja = document.getElementById('progreso');
-    var boton = caja.querySelector('[data-accion=correr]');
-    var avance = caja.querySelector('.avance');
-    var barra = caja.querySelector('.avance-barra');
-    var relleno = caja.querySelector('.avance-relleno');
-    var porcentaje = caja.querySelector('[data-texto=porcentaje]');
-    var detalle = caja.querySelector('[data-texto=detalle]');
-    var estado = caja.querySelector('[data-texto=estado]');
-    var verificadas = {{ avance.verificadas }};
-    var inicio = null, verificadasAlEmpezar = verificadas;
+    // Probar y cargar trabajan sobre lo elegido arriba (En vivo, una categoría, lo buscado)
+    var seleccion = {contenido: '{{ seleccion.contenido|escapejs }}', categoria: '{{ seleccion.categoria|escapejs }}',
+                     q: '{{ seleccion.texto|escapejs }}'};
+    var datos = function () { return seleccion; };
+    var aca = window.location.pathname + '?{{ datos_de_la_seleccion|escapejs }}';
+    var caja = document.getElementById('trabajo');
 
     function pintar(r) {
-        relleno.style.width = r.porcentaje + '%';
-        barra.setAttribute('aria-valuenow', r.porcentaje);
-        porcentaje.textContent = r.porcentaje + ' % completado';
-        var texto = Tandas.numero(r.verificadas) + ' de ' + Tandas.numero(r.para_verificar) + ' probados';
-        // Cuánto falta, según lo que vienen tardando las tandas de ahora
-        var hechas = r.verificadas - verificadasAlEmpezar;
-        if (inicio && hechas > 0 && r.pendientes) {
-            var porCanal = (Date.now() - inicio) / 1000 / hechas;
-            texto += ' · faltan ' + Tandas.numero(r.pendientes) + ' (unos ' + Tandas.duracion(porCanal * r.pendientes) + ')';
-        }
-        detalle.textContent = texto;
-        ['aptas', 'agregadas', 'rechazadas', 'caidas', 'descartadas', 'repetidas', 'pendientes'].forEach(function (clave) {
-            caja.querySelector('[data-contador=' + clave + ']').textContent = Tandas.numero(r[clave]);
+        var parte = r.en_la_seleccion;
+        var relleno = caja.querySelector('.avance-relleno');
+        relleno.style.width = parte.porcentaje + '%';
+        caja.querySelector('.avance-barra').setAttribute('aria-valuenow', parte.porcentaje);
+        caja.querySelector('[data-texto=porcentaje]').textContent = parte.porcentaje + ' % probado';
+        caja.querySelector('[data-texto=detalle]').textContent = parte.pendientes ? 'faltan ' + Tandas.numero(parte.pendientes) : 'listo';
+        ['aptas', 'rechazadas', 'caidas', 'agregadas', 'descartadas', 'repetidas'].forEach(function (clave) {
+            var contador = caja.querySelector('[data-contador=' + clave + ']');
+            if (contador) contador.textContent = Tandas.numero(parte[clave]);
         });
     }
 
-    var tarea = Tandas({
-        url: '{% url "canales:importacion_lote" importacion.pk %}',
-        termino: function (r) { return r.terminada; },
-        alAvanzar: function (r) {
-            verificadas = r.verificadas;
-            pintar(r);
-            if (r.ocupada) estado.textContent = 'Esta lista ya se está probando en otra pestaña: esperando…';
-        },
-        alTerminar: function (r) {
-            estado.textContent = 'Terminó la prueba. Actualizando…';
-            // Sin ?empezar=1, y mostrando las que pasaron (lo que se va a cargar)
-            window.location.href = window.location.pathname + (r.aptas ? '?estado=apta#carga' : '#carga');
-        },
-        alCambiar: function (corriendo) {
-            if (corriendo) { inicio = Date.now(); verificadasAlEmpezar = verificadas; }
-            avance.classList.toggle('trabajando', corriendo);
-            boton.querySelector('span').textContent = corriendo ? 'Pausar' : 'Continuar';
-            boton.querySelector('i').className = corriendo ? 'bi bi-pause-fill' : 'bi bi-play-fill';
-            boton.classList.toggle('btn-primary', !corriendo);
-            boton.classList.toggle('btn-outline-secondary', corriendo);
-            if (corriendo) estado.textContent = 'Probando… no hace falta quedarse mirando, pero no cierres esta página.';
-            else if (!estado.dataset.error) estado.textContent = 'En pausa. Lo que ya se probó quedó guardado.';
-        },
-        alError: function (mensaje) { estado.dataset.error = '1'; estado.textContent = mensaje; },
-    });
-    boton.addEventListener('click', function () {
-        delete estado.dataset.error;
-        tarea.corriendo() ? tarea.pausar() : tarea.empezar();
-    });
-    {% if empezar %}tarea.empezar();{% endif %}
-})();
-</script>
-{% elif puede_importar and avance.aptas %}
-<script>
-(function () {
-    var caja = document.getElementById('carga');
-    var boton = caja.querySelector('[data-accion=cargar]');
-    var estado = caja.querySelector('[data-texto=estado-carga]');
-    var total = {{ avance.aptas }};
-    var tarea = Tandas({
-        url: '{% url "canales:importacion_cargar" importacion.pk %}',
-        // Si alguien la puso a probar de nuevo (otra pestaña), no se carga hasta que termine
-        termino: function (r) { return !r.aptas || r.pendientes > 0; },
-        alAvanzar: function (r) {
-            estado.textContent = r.ocupada ? 'Otra pestaña está trabajando con esta lista: esperando…'
-                : 'Cargando… ' + Tandas.numero(total - r.aptas) + ' de ' + Tandas.numero(total) + '. No cierres esta página.';
-        },
-        alTerminar: function () {
-            estado.textContent = 'Listo. Actualizando…';
-            window.location.href = window.location.pathname + '#carga';
-        },
-        alCambiar: function (corriendo) { boton.disabled = corriendo; },
-        alError: function (mensaje) { estado.textContent = mensaje; },
-    });
-    boton.addEventListener('click', function () { tarea.empezar(); });
+    var probar = caja.querySelector('[data-accion=correr]');
+    if (probar) {
+        var estado = caja.querySelector('[data-texto=estado]');
+        var prueba = Tandas({
+            url: '{% url "canales:importacion_lote" importacion.pk %}',
+            datos: datos,
+            termino: function (r) { return r.terminada; },
+            alAvanzar: function (r) {
+                pintar(r);
+                if (r.ocupada) estado.textContent = 'Otra pestaña está trabajando con esta lista: esperando…';
+            },
+            alTerminar: function (r) {
+                estado.textContent = 'Terminó la prueba. Actualizando…';
+                // Mostrando las que pasaron (lo que se va a cargar)
+                window.location.href = aca + (r.en_la_seleccion.aptas ? '&estado=apta#carga' : '#carga');
+            },
+            alCambiar: function (corriendo) {
+                caja.querySelector('.avance').classList.toggle('trabajando', corriendo);
+                probar.querySelector('span').textContent = corriendo ? 'Pausar' : 'Seguir probando';
+                probar.querySelector('i').className = corriendo ? 'bi bi-pause-fill' : 'bi bi-play-fill';
+                probar.classList.toggle('btn-primary', !corriendo);
+                probar.classList.toggle('btn-outline-secondary', corriendo);
+                if (corriendo) estado.textContent = 'Probando… no hace falta quedarse mirando, pero no cierres esta página.';
+                else if (!estado.dataset.error) estado.textContent = 'En pausa. Lo que ya se probó quedó guardado.';
+            },
+            alError: function (mensaje) { estado.dataset.error = '1'; estado.textContent = mensaje; },
+        });
+        probar.addEventListener('click', function () {
+            delete estado.dataset.error;
+            prueba.corriendo() ? prueba.pausar() : prueba.empezar();
+        });
+        {% if empezar %}prueba.empezar();{% endif %}
+    }
+
+    var cargar = caja.querySelector('[data-accion=cargar]');
+    if (cargar && !cargar.disabled) {
+        var estadoCarga = caja.querySelector('[data-texto=estado-carga]');
+        var total = {{ parte.aptas }};
+        var carga = Tandas({
+            url: '{% url "canales:importacion_cargar" importacion.pk %}',
+            datos: datos,
+            // Si alguien la puso a probar de nuevo (otra pestaña), no se carga hasta que termine
+            termino: function (r) { return !r.en_la_seleccion.aptas || r.en_la_seleccion.pendientes > 0; },
+            alAvanzar: function (r) {
+                estadoCarga.textContent = r.ocupada ? 'Otra pestaña está trabajando con esta lista: esperando…'
+                    : 'Cargando… ' + Tandas.numero(total - r.en_la_seleccion.aptas) + ' de ' + Tandas.numero(total) + '. No cierres esta página.';
+            },
+            alTerminar: function () {
+                estadoCarga.textContent = 'Listo. Actualizando…';
+                window.location.href = aca + '#carga';
+            },
+            alCambiar: function (corriendo) { cargar.disabled = corriendo; },
+            alError: function (mensaje) { estadoCarga.textContent = mensaje; },
+        });
+        cargar.addEventListener('click', function () { carga.empezar(); });
+    }
 })();
 </script>
 {% endif %}
+{% if como_va.total %}<script src="{% static 'js/importacion_destino.js' %}"></script>{% endif %}
+<link rel="stylesheet" href="{% static 'css/importacion_partes.css' %}">
 {% endblock %}

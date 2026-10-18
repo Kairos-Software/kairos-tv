@@ -52,7 +52,7 @@ La API para la app está en `api/v1/canales.py` (`GET /api/v1/canales/?formatos=
 ## Importar una lista (desde el panel)
 
 Menú **Kairos TV → Contenido → Importar una lista**. Acepta `.m3u`, `.m3u8`
-o un `.zip` que la contenga (hasta 20 MB). Es en tres pasos, para que una
+o un `.zip` que la contenga (hasta 150 MB; una de 268 000 entradas tarda ~1,5 min en entrar). Es en tres pasos, para que una
 lista de miles de canales no sature el servidor y para que **solo entre lo
 que está bien** (no la lista entera: se descarta la basura de cada lista):
 
@@ -71,8 +71,57 @@ que está bien** (no la lista entera: se descarta la basura de cada lista):
    prueba", con el motivo y agrupado por causa ("Audio en otro idioma: 600").
    "Volver a probar las que fallaron" reintenta las que no respondieron,
    llegaron lentas o se cortaron (a veces es algo del momento).
-3. **Cargar las aptas.** Un botón "Cargar las N aptas" (de a 200, con
+3. **Cargar las aptas.** Un botón "Cargar los N que pasaron" (de a 200, con
    avance). Recién ahí entran a la app.
+
+### Una lista grande: por partes (desde el 18/10/2026)
+
+Una lista completa de un proveedor (en vivo + películas + series: 268 000
+entradas, 75 MB) no se puede probar entera de una (llevaría días) y en un
+servidor chico ni siquiera se puede leer de una (gunicorn corta a los 5 min).
+
+- **Se lee de a tandas.** Con más de `servicios.LEER_DE_UNA` (20 000) entradas,
+  al subirla solo se guarda (en `privado/listas/`, fuera de `media/`: tiene
+  usuarios y contraseñas) y la pantalla `importacion_leyendo.html` la lee de a
+  15 000 con una barra (`importacion_leer` → `servicios.leer_lote`). No arranca
+  a probar sola: después se elige qué.
+- **Se trabaja por partes** (`servicios.Seleccion`: En vivo / Películas /
+  Series, una categoría, lo buscado). La pantalla muestra, de arriba abajo:
+  "Qué trae esta lista" (una tarjeta por parte con cuántos pasaron, se
+  cargaron y faltan probar), las **categorías** de la parte elegida (tabla con
+  buscador) y "Estás trabajando con…" en cuatro pasos: **1 Probar**, **2
+  Revisar**, **3 ¿Dónde va?** (ver abajo), **4 Cargar a la app**, más **"No quiero esto: descartar"**
+  (`importacion_descartar` → `servicios.descartar`: lo que no interesa, o no
+  se tienen derechos para pasar). Probar, cargar y descartar son solo de esa
+  parte: se puede cargar una categoría apenas se terminó de probar, aunque
+  falte el resto. Las series de esa parte se revisan (¿está el capítulo 1?)
+  al terminar de probarla.
+
+### ¿Dónde va? (desde el 18/10/2026)
+
+En el paso 3 de una parte elegida se ve **adónde iría hoy** (`servicios.como_va`:
+cada categoría de la lista, si ya existe en el panel —o se juntó ahí— o si se
+crearía nueva, y en Series cuántas series ya están) y se elige, antes de cargar
+(`importacion_destino` → `servicios.ubicar`; `static/js/importacion_destino.js`):
+
+- **Categoría:** una del panel o una nueva. Con una categoría entera de la
+  lista, "Recordarlo" la deja como otro nombre de la elegida
+  (`organizar.recordar_nombre`): la próxima lista que la traiga va directo ahí.
+- **Serie** (solo Series): una que ya existe o una nueva. Los capítulos se
+  renombran a esa serie con el número y la temporada que traen (o todos a una
+  temporada); los que no traen número, o lo repiten, siguen después del
+  último. Una serie que ya existe va en **su** categoría. Si con el nombre
+  nuevo la serie queda completa (el capítulo 1 está en el panel), lo que no
+  había pasado por "serie incompleta" vuelve a pasar.
+
+Se anota en cada entrada que falta cargar; lo ya cargado se mueve desde
+Organizar contenido. Además, al cargar (con o sin "¿Dónde va?"):
+
+- un capítulo se reconoce también por **serie + temporada + número**, como lo
+  agrupa la app: si la serie ya lo tiene, la dirección se suma como fuente
+  alternativa en vez de quedar repetido (`_IndiceDeCanales.buscar`);
+- los capítulos nuevos de una serie que ya está en el panel van a la
+  **categoría de esa serie** (una serie va en una sola categoría).
 
 ### La prueba a fondo (recomendada, viene marcada)
 

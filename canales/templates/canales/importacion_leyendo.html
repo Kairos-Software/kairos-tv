@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+    Una lista grande (más de servicios.LEER_DE_UNA entradas) recién subida: se lee de a tandas desde acá
+    (views.importacion_leer -> servicios.leer_lote), así ningún pedido tarda demasiado aunque el servidor sea
+    chico. Al terminar se abre la importación (canales/importacion.html) para elegir qué probar.
+{% endcomment %}
+
+{% block titulo %}{{ importacion.archivo }} · Contenido{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado">
+    <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
+    <h1 class="pagina-titulo">{{ importacion.archivo }}</h1>
+    <p class="pagina-bajada">Es una lista grande ({{ lectura.total }} elementos): primero se lee entera y después elegís qué probar y qué cargar. Todavía no se carga nada.</p>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<section class="tarjeta" id="lectura">
+    {% csrf_token %}
+    <h2 class="tarjeta-titulo">Leyendo la lista…</h2>
+    <div class="avance mb-3">
+        <div class="avance-barra" role="progressbar" aria-label="Avance de la lectura" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ lectura.porcentaje }}">
+            <div class="avance-relleno" style="width: {{ lectura.porcentaje }}%"></div>
+        </div>
+        <div class="avance-texto">
+            <strong data-texto="porcentaje">{{ lectura.porcentaje }} %</strong>
+            <span data-texto="detalle">{{ lectura.leidas }} de {{ lectura.total }} leídos</span>
+        </div>
+    </div>
+    {% if puede_importar %}
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <button type="button" class="btn btn-outline-secondary" data-accion="leer"><i class="bi bi-pause-fill" aria-hidden="true"></i> <span>Pausar</span></button>
+        <span class="texto-suave small" data-texto="estado">Tarda un par de minutos. No cierres esta página (si la cerrás, se pausa y seguís desde acá).</span>
+    </div>
+    {% else %}
+    <p class="texto-suave small mb-0">La está leyendo quien la subió.</p>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if puede_importar %}
+<script src="{% static 'js/tandas.js' %}"></script>
+<script>
+(function () {
+    var caja = document.getElementById('lectura');
+    var boton = caja.querySelector('[data-accion=leer]');
+    var relleno = caja.querySelector('.avance-relleno');
+    var barra = caja.querySelector('.avance-barra');
+    var estado = caja.querySelector('[data-texto=estado]');
+    var tarea = Tandas({
+        url: '{% url "canales:importacion_leer" importacion.pk %}',
+        termino: function (r) { return r.terminada; },
+        alAvanzar: function (r) {
+            relleno.style.width = r.porcentaje + '%';
+            barra.setAttribute('aria-valuenow', r.porcentaje);
+            caja.querySelector('[data-texto=porcentaje]').textContent = r.porcentaje + ' %';
+            caja.querySelector('[data-texto=detalle]').textContent =
+                Tandas.numero(r.leidas) + ' de ' + Tandas.numero(r.total) + ' leídos';
+            if (r.ocupada) estado.textContent = 'Se está leyendo en otra pestaña: esperando…';
+        },
+        alTerminar: function () {
+            estado.textContent = 'Listo. Abriendo…';
+            window.location.reload();
+        },
+        alCambiar: function (corriendo) {
+            boton.querySelector('span').textContent = corriendo ? 'Pausar' : 'Seguir leyendo';
+            boton.querySelector('i').className = corriendo ? 'bi bi-pause-fill' : 'bi bi-play-fill';
+            if (!corriendo && !estado.dataset.error) estado.textContent = 'En pausa. Lo leído quedó guardado.';
+        },
+        alError: function (mensaje) { estado.dataset.error = '1'; estado.textContent = mensaje; },
+    });
+    boton.addEventListener('click', function () {
+        delete estado.dataset.error;
+        tarea.corriendo() ? tarea.pausar() : tarea.empezar();
+    });
+    tarea.empezar();
+})();
+</script>
+{% endif %}
+{% endblock %}

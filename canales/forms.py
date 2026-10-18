@@ -9,9 +9,10 @@ from . import organizar, secciones
 from .m3u import leer_m3u
 from .models import Canal, Categoria, Contenido, Fuente, Seccion
 
-# Una lista con películas y series (miles de entradas) puede pesar varios MB.
+# Una lista completa de un proveedor (en vivo + películas + series: más de
+# 250 000 entradas) pesa 70-80 MB. Hasta 20 MB (octubre 2026) no entraba.
 # OJO: nginx también tiene que aceptarlo (client_max_body_size en despliegue/nginx).
-TAMANIO_MAXIMO = 20 * 1024 * 1024
+TAMANIO_MAXIMO = 150 * 1024 * 1024
 
 
 def _texto_del_archivo(archivo):
@@ -279,7 +280,8 @@ class ImportarListaForm(EstiloBootstrapMixin, forms.Form):
         if not archivo.name.lower().endswith(('.m3u', '.m3u8', '.zip')):
             raise forms.ValidationError('Tiene que ser un archivo .m3u, .m3u8 o .zip.')
         if archivo.size > TAMANIO_MAXIMO:
-            raise forms.ValidationError('El archivo pesa más de 20 MB.')
+            raise forms.ValidationError(f'El archivo pesa más de {TAMANIO_MAXIMO // (1024 * 1024)} MB. '
+                                        f'Comprimilo en un .zip (una lista baja a la décima parte).')
         texto = _texto_del_archivo(archivo)
         if not leer_m3u(texto):
             raise forms.ValidationError('No se encontró ningún canal en el archivo. ¿Es una lista M3U?')

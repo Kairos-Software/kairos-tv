@@ -44,3 +44,6 @@ secrets/
 *.crt
 *.csr
 *.pem
+
+# Listas M3U a medio leer (canales/servicios.py: tienen usuarios y contraseñas)
+privado/

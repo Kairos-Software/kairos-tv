@@ -135,7 +135,8 @@ cp despliegue/nginx/kairostv.conf /opt/nginx/conf/conf.d/kairostv.conf
 /opt/nginx/sbin/nginx -t && /opt/nginx/sbin/nginx -s reload
 ```
 Ejemplo: en octubre 2026 se agregó `client_max_body_size 25m;` para poder subir
-listas M3U grandes desde el panel (sin eso nginx corta en 1 MB con error 413).
+listas M3U grandes desde el panel (sin eso nginx corta en 1 MB con error 413), y el
+18/10/2026 se subió a `160m` (el panel acepta listas de hasta 150 MB).
 
 ## nginx arranca solo (desde el 17/10/2026)
 

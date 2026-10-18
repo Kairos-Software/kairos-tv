@@ -23,10 +23,14 @@ directo: así los tests pasan una de mentira y no salen a internet.
 La real es `canales.verificacion.verificar_varias(fuentes, cabeceras=..., hasta=...)`.
 """
 
+import itertools
+import json
 import time
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import DatabaseError, transaction
 from django.db.models import Count, F, Max, Q
@@ -38,8 +42,9 @@ from actividad.registro import registrar
 from . import clasificar, organizar, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
 from .consultas import fuentes_usables
-from .m3u import leer_m3u, normalizar
-from .models import OCULTA_POR, Canal, Contenido, EntradaImportada, Fuente, Importacion, medidas_de_calidad
+from .m3u import EntradaM3U, leer_m3u, normalizar
+from .models import (OCULTA_POR, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
+                     medidas_de_calidad)
 from .verificacion import NOMBRES_DE_CODECS, Resultado
 
 # De a cuántas se verifican, y cuánto puede tardar como máximo una tanda en
@@ -142,17 +147,44 @@ def crear_importacion(texto, archivo='', usuario=None, solo_espanol=False, desca
     Una lista exportada de acá (trae kairos-seccion) queda `de_kairos`.
     """
     leidas = leer_m3u(texto)
-    importacion = Importacion.objects.create(
+    importacion = _nueva_importacion(leidas, archivo, usuario, solo_espanol=solo_espanol,
+                                     descartar_sin_logo=descartar_sin_logo, descartar_vod=descartar_vod,
+                                     descartar_adultos=descartar_adultos, a_fondo=a_fondo, seccion=seccion)
+    pendientes = _guardar_entradas(importacion, leidas, 1, categoria, set(Fuente.objects.values_list('url', flat=True)))
+    importacion.total, importacion.para_verificar = len(leidas), pendientes
+    _terminar_de_leer(importacion)
+    return importacion
+
+
+def _nueva_importacion(leidas, archivo='', usuario=None, **opciones):
+    return Importacion.objects.create(
         archivo=archivo[:150], usuario=usuario if getattr(usuario, 'pk', None) else None,
-        solo_espanol=solo_espanol, descartar_sin_logo=descartar_sin_logo, descartar_vod=descartar_vod,
-        descartar_adultos=descartar_adultos, a_fondo=a_fondo, seccion=seccion,
-        de_kairos=any(entrada.seccion for entrada in leidas),
+        de_kairos=any(entrada.seccion for entrada in leidas), **opciones,
     )
-    ya_guardadas = set(Fuente.objects.values_list('url', flat=True))
+
+
+def _terminar_de_leer(importacion):
+    """Ya están todas las entradas: si no hay nada para probar, terminó; y queda anotado."""
+    if not importacion.para_verificar:
+        importacion.terminada = timezone.now()
+    importacion.save(update_fields=['total', 'para_verificar', 'terminada', 'por_leer'])
+    registrar(importacion.usuario, Accion.CREAR,
+              f'Subió la lista de canales "{importacion.archivo}": {importacion.total} canal(es), '
+              f'{importacion.para_verificar} para verificar.', modulo='canales')
+
+
+def _guardar_entradas(importacion, leidas, desde, categoria, ya_guardadas, vistas=None):
+    """
+    Guarda `leidas` como EntradaImportada desde la posición `desde`, con lo que
+    se sabe de cada una (ver crear_importacion). `ya_guardadas`: las direcciones
+    ya cargadas; `vistas`: las que ya aparecieron antes en esta lista. Devuelve
+    cuántas quedaron pendientes de probar.
+    """
+    seccion = importacion.seccion
     validas = {clave for clave, _ in secciones.todas()}
-    vistas = set()
+    vistas = set() if vistas is None else vistas
     entradas = []
-    for posicion, entrada in enumerate(leidas, start=1):
+    for posicion, entrada in enumerate(leidas, start=desde):
         nombre = clasificar.limpiar_nombre(entrada.nombre)
         idioma, pais = clasificar.idioma_y_pais(entrada.nombre, entrada.categoria, entrada.pais,
                                                 entrada.tvg_id, entrada.idioma)
@@ -184,16 +216,83 @@ def crear_importacion(texto, archivo='', usuario=None, solo_espanol=False, desca
             estado=estado, motivo=motivo,
         ))
     EntradaImportada.objects.bulk_create(entradas, batch_size=1000)
+    return sum(1 for e in entradas if e.estado == Estado.PENDIENTE)
 
-    importacion.total = len(entradas)
-    importacion.para_verificar = sum(1 for e in entradas if e.estado == Estado.PENDIENTE)
-    if not importacion.para_verificar:
-        importacion.terminada = timezone.now()
-    importacion.save(update_fields=['total', 'para_verificar', 'terminada'])
-    registrar(usuario, Accion.CREAR,
-              f'Subió la lista de canales "{archivo}": {importacion.total} canal(es), '
-              f'{importacion.para_verificar} para verificar.', modulo='canales')
+
+# ── Una lista grande: se lee de a tandas ─────────────────────────────
+
+# Hasta tantas entradas se leen al subirla (unos segundos). Una más grande
+# (una lista completa de un proveedor: 268 000 entradas) tardaba más de un
+# minuto en una PC; en un servidor chico, más de los 5 minutos que espera
+# gunicorn. Esas se guardan aparte y la pantalla las va leyendo de a tandas.
+LEER_DE_UNA = 20_000
+LEER_POR_TANDA = 15_000
+
+# Las listas a medio leer (tienen usuarios y contraseñas: NO van en media/, que se publica)
+CARPETA_DE_LISTAS = settings.BASE_DIR / 'privado' / 'listas'
+
+
+def preparar_importacion(texto, archivo='', usuario=None, categoria='', **opciones):
+    """
+    Como crear_importacion (mismas opciones), pero si la lista es grande no la
+    lee entera ahora: la deja guardada para leerla de a tandas (leer_lote).
+    """
+    leidas = leer_m3u(texto)
+    if len(leidas) <= LEER_DE_UNA:
+        return crear_importacion(texto, archivo, usuario, categoria=categoria, **opciones)
+    importacion = _nueva_importacion(leidas, archivo, usuario, total=len(leidas), por_leer=len(leidas), **opciones)
+    CARPETA_DE_LISTAS.mkdir(parents=True, exist_ok=True)
+    with _lista_guardada(importacion).open('w', encoding='utf-8') as guardada:
+        guardada.write(json.dumps({'categoria': categoria}) + '\n')
+        for entrada in leidas:
+            guardada.write(json.dumps(asdict(entrada), ensure_ascii=False) + '\n')
     return importacion
+
+
+def _lista_guardada(importacion):
+    return CARPETA_DE_LISTAS / f'importacion-{importacion.pk}.jsonl'
+
+
+def leer_lote(importacion, tamanio=LEER_POR_TANDA):
+    """Lee la próxima tanda de una lista grande (preparar_importacion). Devuelve cómo va (ver `lectura`)."""
+    with transaction.atomic():
+        if not _bloquear(importacion):
+            return {**lectura(importacion), 'ocupada': True}
+        importacion.refresh_from_db()
+        if not importacion.por_leer:
+            return lectura(importacion)
+        hechas = importacion.total - importacion.por_leer
+        try:
+            with _lista_guardada(importacion).open(encoding='utf-8') as guardada:
+                categoria = json.loads(guardada.readline()).get('categoria', '')
+                leidas = [EntradaM3U(**json.loads(linea))
+                          for linea in itertools.islice(guardada, hechas, hechas + tamanio)]
+        except FileNotFoundError:
+            leidas, categoria = [], ''
+        if leidas:
+            importacion.para_verificar += _guardar_entradas(
+                importacion, leidas, hechas + 1, categoria, set(Fuente.objects.values_list('url', flat=True)),
+                set(importacion.entradas.values_list('url', flat=True)))
+        # Sin el archivo (se borró a mano), lo leído hasta acá es la lista
+        importacion.por_leer = importacion.por_leer - len(leidas) if leidas else 0
+        if importacion.por_leer:
+            importacion.save(update_fields=['para_verificar', 'por_leer'])
+        else:
+            importacion.total = hechas + len(leidas)
+            _lista_guardada(importacion).unlink(missing_ok=True)
+            _terminar_de_leer(importacion)
+    return lectura(importacion)
+
+
+def lectura(importacion):
+    """Cuánto se leyó de una lista grande."""
+    leidas = importacion.total - importacion.por_leer
+    return {
+        'total': importacion.total,
+        'leidas': leidas,
+        'porcentaje': 100 if not importacion.total else round(100 * leidas / importacion.total),
+        'terminada': not importacion.por_leer,
+    }
 
 
 def _donde_esta(video, nombre, contenido, activo):
@@ -491,21 +590,56 @@ class _IndiceDeCanales:
     tienen país y no coincide, se toman como canales distintos (la ESPN de
     España no es la de Argentina). Una película nunca se junta con un canal
     en vivo del mismo nombre.
+
+    Un capítulo también se reconoce por su serie, temporada y número, como lo
+    agrupa la app: "Boruto S01 E05" = "Boruto S01 E05 El regreso". Así, al
+    mandar capítulos a una serie que ya existe, el que ya estaba suma una
+    fuente en vez de quedar repetido. Y de cada serie se sabe en qué categoría
+    está (la de la mayoría de sus capítulos): los capítulos nuevos van ahí.
     """
 
     def __init__(self):
         self.por_nombre = {}
+        self.por_capitulo = {}
+        self.categorias_de_serie = {}
+        self._categorias = {}
         for canal in Canal.objects.all():
             self.agregar(canal)
 
+    @staticmethod
+    def _serie(nombre):
+        """(clave de la serie, temporada, número) como la app (sin mayúsculas, con acentos)."""
+        serie, temporada, numero, _ = clasificar.episodio(nombre)
+        return serie.lower(), temporada, numero
+
     def agregar(self, canal):
         self.por_nombre.setdefault((normalizar(canal.nombre), canal.contenido), []).append(canal)
+        if canal.contenido == Contenido.SERIE:
+            serie, temporada, numero = self._serie(canal.nombre)
+            if numero is not None:
+                self.por_capitulo.setdefault((serie, temporada, numero), canal)
+            votos = self.categorias_de_serie.setdefault(serie, {})
+            votos[canal.categoria_id] = votos.get(canal.categoria_id, 0) + 1
 
     def buscar(self, nombre, pais='', contenido=Canal.contenido.field.default):
         for canal in self.por_nombre.get((normalizar(nombre), contenido), []):
             if not (canal.pais and pais and canal.pais != pais):
                 return canal
+        if contenido == Contenido.SERIE:
+            serie, temporada, numero = self._serie(nombre)
+            if numero is not None:
+                return self.por_capitulo.get((serie, temporada, numero))
         return None
+
+    def categoria_de_la_serie(self, nombre):
+        """La categoría (Categoria) de la serie de ese capítulo, si ya está en el panel y tiene una; si no, None."""
+        votos = self.categorias_de_serie.get(self._serie(nombre)[0])
+        if not votos:
+            return None
+        pk = max(votos, key=votos.get)
+        if pk and pk not in self._categorias:
+            self._categorias[pk] = Categoria.objects.filter(pk=pk).first()
+        return self._categorias.get(pk)
 
 
 def _resultado_guardado(entrada):
@@ -520,8 +654,11 @@ def _agregar(entrada, resultado, indice, categorias, origen, usuario, ahora):
     canal = indice.buscar(entrada.nombre, entrada.pais, entrada.contenido)
     nuevo = canal is None
     if nuevo:
-        # Respeta lo que se ordenó en el panel: si "Argentina" se juntó en "Noticias", va a "Noticias"
-        categoria = organizar.categoria_por_nombre(entrada.categoria, entrada.contenido, categorias, usuario)
+        # Un capítulo de una serie que ya está en el panel va a la categoría de esa serie (una serie va en UNA)
+        categoria = indice.categoria_de_la_serie(entrada.nombre) if entrada.contenido == Contenido.SERIE else None
+        # Si no, respeta lo que se ordenó en el panel: si "Argentina" se juntó en "Noticias", va a "Noticias"
+        categoria = categoria or organizar.categoria_por_nombre(entrada.categoria, entrada.contenido, categorias,
+                                                                usuario)
         canal = Canal(nombre=entrada.nombre, numero=entrada.numero, logo=entrada.logo, categoria=categoria,
                       tvg_id=entrada.tvg_id, pais=entrada.pais, idioma=entrada.idioma, contenido=entrada.contenido)
         canal.marcar_autor(usuario)
@@ -566,11 +703,52 @@ CAMPOS_DE_LA_PRUEBA = ['estado', 'motivo', 'causa', 'canal', 'tipo', 'codec', 'c
                        'user_agent', 'idioma']
 
 
-def procesar_lote(importacion, verificar=None, tamanio=TAMANIO_LOTE, segundos=SEGUNDOS_POR_LOTE):
+SIN_CATEGORIA = '~'
+
+
+@dataclass(frozen=True)
+class Seleccion:
     """
-    Prueba las próximas `tamanio` entradas pendientes: las que pasan quedan
-    "aptas" (todavía no se cargan: ver cargar_lote); las que no, "no
-    responde" o "no pasó la prueba", con el motivo. Sin `verificar`, quedan
+    La parte de una lista con la que se está trabajando: En vivo, Películas o
+    Series (`contenido`), una categoría (SIN_CATEGORIA = las que no tienen) y lo
+    que se buscó. Vacía = toda la lista. Probar, cargar y descartar se hacen
+    sobre ella: en una lista de 268 000 entradas no se prueba todo de una.
+    """
+    contenido: str = ''
+    categoria: str = ''
+    texto: str = ''
+
+    @classmethod
+    def de(cls, datos):
+        """La de los parámetros de la pantalla (?contenido=&categoria=&q=)."""
+        return cls(datos.get('contenido', '').strip(), datos.get('categoria', '').strip(), datos.get('q', '').strip())
+
+    @property
+    def vacia(self):
+        return not (self.contenido or self.categoria or self.texto)
+
+    def aplicar(self, entradas):
+        if self.contenido:
+            entradas = entradas.filter(contenido=self.contenido)
+        if self.categoria:
+            entradas = entradas.filter(categoria='' if self.categoria == SIN_CATEGORIA else self.categoria)
+        if self.texto:
+            entradas = entradas.filter(Q(nombre__icontains=self.texto) | Q(nombre_original__icontains=self.texto)
+                                       | Q(categoria__icontains=self.texto))
+        return entradas
+
+    def como_datos(self):
+        return {'contenido': self.contenido, 'categoria': self.categoria, 'q': self.texto}
+
+
+TODA = Seleccion()
+
+
+def procesar_lote(importacion, verificar=None, tamanio=TAMANIO_LOTE, segundos=SEGUNDOS_POR_LOTE, seleccion=TODA):
+    """
+    Prueba las próximas `tamanio` entradas pendientes (de `seleccion`): las que
+    pasan quedan "aptas" (todavía no se cargan: ver cargar_lote); las que no,
+    "no responde" o "no pasó la prueba", con el motivo. Sin `verificar`, quedan
     aptas sin probar. Devuelve el avance (ver `progreso`).
 
     Si otra pestaña ya está procesando esta misma importación, no hace nada
@@ -578,9 +756,12 @@ def procesar_lote(importacion, verificar=None, tamanio=TAMANIO_LOTE, segundos=SE
     """
     with transaction.atomic():
         if not _bloquear(importacion):
-            return {**progreso(importacion), 'ocupada': True}
+            return {**progreso(importacion, seleccion), 'ocupada': True}
+        if importacion.por_leer:
+            return progreso(importacion, seleccion)
 
-        pendientes = list(importacion.entradas.filter(estado=Estado.PENDIENTE).order_by('posicion')[:tamanio])
+        pendientes = list(seleccion.aplicar(importacion.entradas.filter(estado=Estado.PENDIENTE))
+                          .order_by('posicion')[:tamanio])
         indice = _IndiceDeCanales()
         a_verificar = []
         for entrada in pendientes:
@@ -631,23 +812,36 @@ def procesar_lote(importacion, verificar=None, tamanio=TAMANIO_LOTE, segundos=SE
                       f'Terminó de probar "{importacion.archivo}": {avance["aptas"]} apta(s), '
                       f'{avance["rechazadas"]} no pasaron la prueba, {avance["caidas"]} no responden, '
                       f'{avance["descartadas"]} descartada(s), {avance["repetidas"]} ya estaban.', modulo='canales')
-    return progreso(importacion)
+        elif pendientes and not seleccion.aplicar(importacion.entradas.filter(estado=Estado.PENDIENTE)).exists():
+            # Terminó de probar esta parte (una categoría...): sus series ya se pueden revisar y cargar
+            _revisar_series(importacion)
+    return progreso(importacion, seleccion)
 
 
-def cargar_lote(importacion, tamanio=TAMANIO_CARGA):
+def falta_probar(importacion, seleccion):
     """
-    Carga las próximas `tamanio` aptas: crea el canal (si no existe) o suma
-    la dirección como fuente alternativa. Devuelve el avance, más cuántos
-    canales nuevos se crearon en esta tanda.
+    Si todavía hay que probar algo antes de cargar `seleccion`. Las series se
+    revisan (¿está el capítulo 1?) al terminar de probar su parte. Lo que se
+    trajo como UNA serie de YouTube se numera recién al terminar toda la lista.
+    """
+    if importacion.serie:
+        seleccion = TODA
+    return seleccion.aplicar(importacion.entradas.filter(estado=Estado.PENDIENTE)).exists()
+
+
+def cargar_lote(importacion, tamanio=TAMANIO_CARGA, seleccion=TODA):
+    """
+    Carga las próximas `tamanio` aptas (de `seleccion`): crea el canal (si no
+    existe) o suma la dirección como fuente alternativa. Devuelve el avance,
+    más cuántos canales nuevos se crearon en esta tanda.
     """
     canales_nuevos = 0
-    if importacion.entradas.filter(estado=Estado.PENDIENTE).exists():
-        # Recién al terminar de probar se revisan las series y se numeran los capítulos
-        return {**progreso(importacion), 'canales_nuevos': 0}
+    if importacion.por_leer or falta_probar(importacion, seleccion):
+        return {**progreso(importacion, seleccion), 'canales_nuevos': 0}
     with transaction.atomic():
         if not _bloquear(importacion):
-            return {**progreso(importacion), 'ocupada': True, 'canales_nuevos': 0}
-        aptas = list(importacion.entradas.filter(estado=Estado.APTA).order_by('posicion')[:tamanio])
+            return {**progreso(importacion, seleccion), 'ocupada': True, 'canales_nuevos': 0}
+        aptas = list(seleccion.aplicar(importacion.entradas.filter(estado=Estado.APTA)).order_by('posicion')[:tamanio])
         indice = _IndiceDeCanales()
         categorias = organizar.indice_de_categorias()
         ahora = timezone.now()
@@ -663,13 +857,221 @@ def cargar_lote(importacion, tamanio=TAMANIO_CARGA):
                                            importacion.archivo, importacion.usuario, ahora)
         EntradaImportada.objects.bulk_update(aptas, ['estado', 'motivo', 'canal', 'tipo'])
 
-        if aptas and not importacion.entradas.filter(estado=Estado.APTA).exists():
+        quedan = importacion.entradas.filter(estado__in=[Estado.APTA, Estado.PENDIENTE]).exists()
+        if aptas and not quedan:
             importacion.cargada = ahora
             importacion.save(update_fields=['cargada'])
             avance = progreso(importacion)
             registrar(importacion.usuario, Accion.CREAR,
                       f'Cargó las aptas de "{importacion.archivo}": {avance["agregadas"]} en total.', modulo='canales')
-    return {**progreso(importacion), 'canales_nuevos': canales_nuevos}
+        elif aptas and not seleccion.aplicar(importacion.entradas.filter(estado=Estado.APTA)).exists():
+            registrar(importacion.usuario, Accion.CREAR,
+                      f'Cargó una parte de "{importacion.archivo}" ({que_es(seleccion)}).', modulo='canales')
+    return {**progreso(importacion, seleccion), 'canales_nuevos': canales_nuevos}
+
+
+def que_es(seleccion):
+    """'Series › Novelas Mexicanas', para el registro de actividad."""
+    partes = [secciones.nombre(seleccion.contenido) if seleccion.contenido else '',
+              'sin categoría' if seleccion.categoria == SIN_CATEGORIA else seleccion.categoria,
+              f'«{seleccion.texto}»' if seleccion.texto else '']
+    return ' › '.join(p for p in partes if p) or 'toda la lista'
+
+
+def descartar(importacion, seleccion, usuario=None):
+    """
+    "No me interesa esta parte": lo de `seleccion` que todavía no se cargó (por
+    probar o que pasó) queda descartado y no se prueba ni se carga. Se puede
+    volver atrás con "Cargar igual". Devuelve cuántas.
+    """
+    elegidas = seleccion.aplicar(importacion.entradas.filter(estado__in=[Estado.PENDIENTE, Estado.APTA]))
+    sin_probar = elegidas.filter(estado=Estado.PENDIENTE).count()
+    cantidad = elegidas.update(estado=Estado.DESCARTADA, causa='', motivo='Descartada a mano: no se quiso esta parte.')
+    if cantidad:
+        importacion.para_verificar = max(0, importacion.para_verificar - sin_probar)
+        importacion.save(update_fields=['para_verificar'])
+        registrar(usuario, Accion.EDITAR, f'Descartó {cantidad} de "{importacion.archivo}" ({que_es(seleccion)}).',
+                  modulo='canales')
+    return cantidad
+
+
+# ── "¿Dónde va?": la categoría y la serie, antes de cargar ───────────
+
+# Lo que todavía no se cargó (lo cargado se mueve desde Organizar contenido)
+SE_PUEDE_UBICAR = [Estado.PENDIENTE, Estado.APTA, Estado.RECHAZADA, Estado.CAIDA, Estado.DESCARTADA]
+
+# Hasta cuántas entradas se cuentan las series de la parte elegida (para no recorrer 200 000 en cada página)
+MAXIMO_PARA_CONTAR_SERIES = 30000
+
+
+def sin_ubicar(importacion, seleccion):
+    return seleccion.aplicar(importacion.entradas.filter(estado__in=SE_PUEDE_UBICAR))
+
+
+def como_va(importacion, seleccion, series_del_panel=None):
+    """
+    Adónde iría hoy lo de `seleccion` que falta cargar, para mostrarlo antes de
+    cargar ("¿Dónde va?"):
+      {'total': 120,
+       'categorias': [{'nombre': 'SERIES CARTOON', 'cantidad': 80, 'va_a': 'Infantiles' | '' (= nueva)}, ...],
+       'nuevas': 1,                      cuántas de esas categorías se crearían
+       'series': {'total': 12, 'existen': 3} | None  (solo en Series)}
+    series_del_panel: las claves (en minúscula) de las series que ya hay; sin
+    ellas se buscan.
+    """
+    entradas = sin_ubicar(importacion, seleccion)
+    indice = organizar.indice_de_categorias()
+    categorias = []
+    for nombre, cantidad in (entradas.order_by().values_list('categoria').annotate(cantidad=Count('pk'))
+                             .order_by('-cantidad', 'categoria')):
+        existente = organizar.categoria_existente(nombre, seleccion.contenido, indice) if nombre else None
+        categorias.append({'nombre': nombre or 'Sin categoría', 'cantidad': cantidad,
+                           'va_a': existente.nombre if existente else ''})
+    total = sum(c['cantidad'] for c in categorias)
+    series = None
+    if seleccion.contenido == Contenido.SERIE and 0 < total <= MAXIMO_PARA_CONTAR_SERIES:
+        if series_del_panel is None:
+            series_del_panel = {clasificar.episodio(n)[0].lower() for n in
+                                Canal.objects.filter(contenido=Contenido.SERIE).values_list('nombre', flat=True)}
+        de_la_lista = {clasificar.episodio(n)[0].lower() for n in entradas.values_list('nombre', flat=True)}
+        series = {'total': len(de_la_lista), 'existen': len(de_la_lista & series_del_panel)}
+    return {'total': total, 'categorias': categorias,
+            'nuevas': sum(1 for c in categorias if not c['va_a'] and c['nombre'] != 'Sin categoría'),
+            'series': series}
+
+
+def ubicar(importacion, seleccion, categoria='', serie='', temporada=None, recordar=False, usuario=None):
+    """
+    "¿Dónde va?": lo de `seleccion` que falta cargar va a la categoría
+    `categoria` (una que ya existe o una nueva) y, en Series, a la serie `serie`
+    (existente o nueva): cada capítulo con el número y la temporada que trae
+    (o todos en `temporada`). Los que no traen número siguen después del
+    último. Queda anotado en cada entrada y entra así con "Cargar".
+
+    Una serie que ya existe va en SU categoría (organizar.categoria_para_la_serie).
+    recordar: (una categoría entera de la lista, sin serie) la próxima lista que
+    la traiga también va ahí.
+
+    Devuelve (cuántas cambiaron, la Seleccion donde quedaron, si se recordó) o
+    NoSePuede.
+    """
+    NoSePuede = organizar.NoSePuede
+    contenido = seleccion.contenido
+    if not contenido:
+        raise NoSePuede('Primero elegí una parte de la lista (En vivo, Películas o Series).')
+    categoria = organizar._limpio(categoria)
+    if serie and contenido != Contenido.SERIE:
+        raise NoSePuede('Solo los capítulos de Series van a una serie.')
+    if not (categoria or serie):
+        raise NoSePuede('Elegí la categoría o la serie donde va.')
+    entradas = list(sin_ubicar(importacion, seleccion).order_by('posicion'))
+    if not entradas:
+        raise NoSePuede('Acá no queda nada sin cargar. Lo que ya se cargó se mueve desde Organizar contenido.')
+    existente = organizar.categoria_existente(categoria, contenido) if categoria else None
+    if existente:
+        categoria = existente.nombre   # escrita como en el panel
+
+    if serie:
+        serie = organizar.nombre_de_serie_valido(serie)
+        temporada = max(1, min(int(temporada), 99)) if temporada else None
+        categoria = (organizar.categoria_para_la_serie(serie, categoria) or categoria
+                     or Counter(e.categoria for e in entradas).most_common(1)[0][0])
+        _a_la_serie(entradas, serie, temporada)
+
+    revisar_series = False
+    for entrada in entradas:
+        if categoria:
+            entrada.categoria = categoria[:80]
+        if serie and entrada.estado == Estado.RECHAZADA and entrada.causa == Causa.SERIE_INCOMPLETA:
+            # Con el nombre nuevo puede estar completa (la serie del panel tiene el capítulo 1): se revisa de nuevo
+            entrada.estado, entrada.causa = Estado.APTA, ''
+            entrada.motivo = _motivo_apta(_resultado_guardado(entrada))[:200]
+            revisar_series = True
+    EntradaImportada.objects.bulk_update(entradas, ['nombre', 'categoria', 'estado', 'causa', 'motivo'],
+                                         batch_size=1000)
+
+    quedo = Seleccion(contenido, categoria or seleccion.categoria, serie or seleccion.texto)
+    if revisar_series and not falta_probar(importacion, quedo):
+        _revisar_series(importacion)
+    recordado = False
+    if (recordar and categoria and not serie and not seleccion.texto
+            and seleccion.categoria and seleccion.categoria != SIN_CATEGORIA):
+        destino = organizar.categoria_por_nombre(categoria, contenido, usuario=usuario)
+        recordado = organizar.recordar_nombre(destino, seleccion.categoria)
+    destino = ' › '.join(p for p in (categoria, serie, f'temporada {temporada}' if temporada else '') if p)
+    registrar(usuario, Accion.EDITAR, f'En "{importacion.archivo}", {que_es(seleccion)} va a {destino} '
+                                      f'({len(entradas)}){" y lo recuerda" if recordado else ""}.', modulo='canales')
+    return len(entradas), quedo, recordado
+
+
+def _a_la_serie(entradas, serie, temporada=None):
+    """Les cambia el nombre a capítulos de `serie` ("Boruto S01 E05 Título"), con su temporada y número."""
+    al_final = []   # los que no traen número, o lo repiten (todos a una temporada: la 1 y la 2 traen un "E05")
+    usados = {}
+    for entrada in entradas:
+        _, de_temporada, numero, _ = clasificar.episodio(entrada.nombre)
+        lugar = temporada or de_temporada
+        titulo = organizar.titulo_del_capitulo(entrada.nombre, serie)
+        if numero is None or numero in usados.get(lugar, ()):
+            al_final.append((entrada, lugar, titulo))
+            continue
+        usados.setdefault(lugar, set()).add(numero)
+        entrada.nombre = organizar.nombre_de_capitulo(serie, lugar, numero, titulo)
+    con_lo_del_panel = set()
+    for entrada, lugar, titulo in al_final:
+        if lugar not in con_lo_del_panel:   # siguen después del último, sea de la lista o del panel
+            usados.setdefault(lugar, set()).add(organizar.ultimo_capitulo(serie, lugar))
+            con_lo_del_panel.add(lugar)
+        numero = max(usados[lugar]) + 1
+        usados[lugar].add(numero)
+        entrada.nombre = organizar.nombre_de_capitulo(serie, lugar, numero, titulo)
+
+
+def _por_estado(entradas):
+    """{'pendientes': 3, 'aptas': 1, ...} (los mismos nombres que `progreso`), 'total' y 'no_pasaron'."""
+    return _por_estado_de(entradas.order_by().values_list('estado').annotate(cantidad=Count('pk')))
+
+
+def por_contenido(importacion):
+    """
+    Qué trae la lista, por En vivo / Películas / Series (siempre en ese orden) y
+    las secciones nuevas: [(clave, nombre, {cuántas en cada estado})].
+    """
+    filas = {}
+    for contenido, estado, cantidad in (importacion.entradas.order_by().values_list('contenido', 'estado')
+                                        .annotate(cantidad=Count('pk'))):
+        filas.setdefault(contenido, []).append((estado, cantidad))
+    return sorted(((contenido, secciones.nombre(contenido), _por_estado_de(cuentas))
+                   for contenido, cuentas in filas.items()), key=lambda fila: (_ORDEN_DE_LAS_PARTES.get(fila[0], 9),
+                                                                              -fila[2]['total']))
+
+
+_ORDEN_DE_LAS_PARTES = {Contenido.VIVO: 0, Contenido.PELICULA: 1, Contenido.SERIE: 2}
+
+
+def categorias_de(importacion, contenido):
+    """Las categorías de una parte de la lista con cuántas hay en cada estado, de la más grande a la más chica."""
+    filas = {}
+    for categoria, estado, cantidad in (importacion.entradas.filter(contenido=contenido).order_by()
+                                        .values_list('categoria', 'estado').annotate(cantidad=Count('pk'))):
+        filas.setdefault(categoria, []).append((estado, cantidad))
+    return sorted(({'nombre': categoria or 'Sin categoría', 'clave': categoria or SIN_CATEGORIA,
+                    **_por_estado_de(cuentas)} for categoria, cuentas in filas.items()),
+                  key=lambda fila: (-fila['total'], fila['nombre'].casefold()))
+
+
+def _por_estado_de(cuentas):
+    nombres = {Estado.PENDIENTE: 'pendientes', Estado.APTA: 'aptas', Estado.AGREGADA: 'agregadas',
+               Estado.RECHAZADA: 'rechazadas', Estado.CAIDA: 'caidas', Estado.DESCARTADA: 'descartadas',
+               Estado.REPETIDA: 'repetidas'}
+    resultado = dict.fromkeys(nombres.values(), 0)
+    for estado, cantidad in cuentas:
+        resultado[nombres.get(estado, 'descartadas')] += cantidad
+    # Lo que se prueba (o se probó): todo menos lo descartado y lo que ya estaba
+    probables = sum(resultado[clave] for clave in ('pendientes', 'aptas', 'agregadas', 'rechazadas', 'caidas'))
+    return {**resultado, 'total': sum(resultado.values()),
+            'no_pasaron': resultado['rechazadas'] + resultado['caidas'],
+            'porcentaje': 100 if not probables else round(100 * (probables - resultado['pendientes']) / probables)}
 
 
 # Lo que se puede cambiar a mano antes de cargar (ver cargar_igual / no_cargar)
@@ -711,8 +1113,24 @@ def no_cargar(importacion, entradas, usuario=None):
     return len(elegidas)
 
 
-def progreso(importacion):
-    """Cuántas hay en cada estado y el porcentaje de avance (sobre las que había que verificar)."""
+def progreso(importacion, seleccion=TODA):
+    """
+    Cuántas hay en cada estado y el porcentaje de avance (sobre las que había
+    que verificar). Con una `seleccion`, además 'en_la_seleccion' (cuántas de
+    esa parte en cada estado) y 'terminada' es si ya se probó esa parte.
+    """
+    avance = _progreso(importacion)
+    if seleccion.vacia:
+        estados = ('pendientes', 'aptas', 'agregadas', 'rechazadas', 'caidas', 'descartadas', 'repetidas')
+        parte = {clave: avance[clave] for clave in estados}
+        parte.update(total=importacion.total - importacion.por_leer, no_pasaron=avance['rechazadas'] + avance['caidas'],
+                     porcentaje=avance['porcentaje'])
+    else:
+        parte = _por_estado(seleccion.aplicar(importacion.entradas.all()))
+    return {**avance, 'en_la_seleccion': parte, 'terminada': parte['pendientes'] == 0}
+
+
+def _progreso(importacion):
     por_estado = dict(importacion.entradas.order_by().values_list('estado').annotate(cantidad=Count('pk')))
     pendientes = por_estado.get(Estado.PENDIENTE, 0)
     base = max(importacion.para_verificar, pendientes)
