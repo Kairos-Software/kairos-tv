@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+    Separar en otra serie lo que vino mezclado en una ("Yu-Gi-Oh" con los de GX y 5D's): los capítulos cuyo
+    título dice lo buscado, todos tildados (se destilda lo que no va), el nombre de la otra serie (sugerido, o
+    una que ya existe) y "Separar" (views.serie_separar -> organizar.mover_a_otra_serie).
+{% endcomment %}
+
+{% block titulo %}Separar en otra serie · {{ nombre }}{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado">
+    <a href="{{ pagina_de_la_serie }}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ nombre }}</a>
+    <h1 class="pagina-titulo">Separar en otra serie</h1>
+    <p class="pagina-bajada">Los capítulos de «{{ nombre }}» que dicen <strong>«{{ dice }}»</strong> pasan a una serie aparte. Destildá los que no van; no cambia nada hasta que toques <strong>Separar</strong>.</p>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<form method="get" class="tarjeta separar-buscar">
+    <input type="hidden" name="nombre" value="{{ nombre }}">
+    <label for="separar-dice" class="form-label mb-0">Buscar otra cosa en los títulos</label>
+    <div class="separar-fila">
+        <input type="search" name="dice" id="separar-dice" class="form-control" maxlength="40" value="{{ dice }}" required>
+        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search" aria-hidden="true"></i> Buscar</button>
+    </div>
+</form>
+
+{% if not encontrados %}
+<div class="tarjeta">
+    <p class="mb-2">Ningún título de «{{ nombre }}» dice «{{ dice }}».</p>
+    <p class="texto-suave small mb-0">Probá con menos letras (ej: «5D» en vez de «5D's») o como está escrito en YouTube.</p>
+</div>
+{% else %}
+<form method="post" class="separar" data-separar>
+    {% csrf_token %}
+    <input type="hidden" name="nombre" value="{{ nombre }}">
+    <section class="tarjeta separar-destino" aria-labelledby="separar-a-donde">
+        <h2 class="tarjeta-titulo" id="separar-a-donde">¿A qué serie pasan?</h2>
+        <div class="separar-fila">
+            <div class="separar-campo">
+                <label for="separar-serie" class="form-label">Nombre de la serie</label>
+                <input type="text" name="a_serie" id="separar-serie" class="form-control" maxlength="90" value="{{ sugerido }}" list="separar-series" required>
+                <datalist id="separar-series">{% for serie in series %}<option value="{{ serie }}">{% endfor %}</datalist>
+                <small class="texto-suave">Si escribís una que ya existe, se suman al final de esa. Si es nueva, queda en la misma categoría que «{{ nombre }}».</small>
+            </div>
+            <div class="separar-campo separar-temporada">
+                <label for="separar-temporada" class="form-label">Temporada</label>
+                <input type="number" name="temporada_destino" id="separar-temporada" class="form-control" min="1" max="99" value="1">
+            </div>
+        </div>
+        <p class="mb-0 separar-resumen"><strong data-separar-cuenta>{{ encontrados|length }}</strong> de {{ total }} capítulos pasan, en este orden. En «{{ nombre }}» quedan los demás, numerados sin huecos.</p>
+        <div class="separar-acciones">
+            <button type="submit" class="btn btn-primary" data-separar-boton><i class="bi bi-scissors" aria-hidden="true"></i> Separar</button>
+            <a href="{{ pagina_de_la_serie }}" class="btn btn-link">Cancelar</a>
+        </div>
+    </section>
+
+    <section class="tarjeta" aria-labelledby="separar-cuales">
+        <div class="separar-cabecera">
+            <h2 class="tarjeta-titulo mb-0" id="separar-cuales">Los que dicen «{{ dice }}»</h2>
+            <span class="separar-todos">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-separar-todos="1">Tildar todos</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-separar-todos="0">Destildar todos</button>
+            </span>
+        </div>
+        <ul class="separar-lista">
+            {% for canal, temporada, numero, titulo in encontrados %}
+            <li>
+                <label class="separar-cap">
+                    <input type="checkbox" class="form-check-input" name="elegido" value="{{ canal.pk }}" checked>
+                    <span class="dato texto-suave">T{{ temporada }}{% if numero %} E{{ numero }}{% endif %}</span>
+                    <span>{{ titulo }}</span>
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+</form>
+<script src="{% static 'js/separar_serie.js' %}"></script>
+{% endif %}
+<link rel="stylesheet" href="{% static 'css/separar_serie.css' %}">
+{% endblock %}

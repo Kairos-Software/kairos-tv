@@ -26,6 +26,7 @@ urlpatterns = [
     path('series/editar/', views.serie_editar, name='serie_editar'),
     path('series/arbol/', views.series_arbol, name='series_arbol'),
     path('series/temporada/', views.serie_temporada, name='serie_temporada'),
+    path('series/separar/', views.serie_separar, name='serie_separar'),
     path('series/por-titulos/', views.serie_por_titulos, name='serie_por_titulos'),
     path('series/eliminar-capitulos/', views.serie_eliminar_capitulos, name='serie_eliminar_capitulos'),
     path('canal/<int:pk>/editar/', views.canal_editar, name='canal_editar'),

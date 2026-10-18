@@ -205,6 +205,17 @@ elegir otra se explica en vez de partirla en dos). Donde se deciden:
   número exacto del título; avisa si la temporada 1 no arrancaría en el 1). "Agregar
   capítulos a la temporada N desde YouTube" abre Traer de YouTube con la
   serie, su categoría y esa temporada ya elegidas.
+- **Separar en otra serie** lo que vino mezclado en una: un canal de YouTube
+  "Yu-Gi-Oh" con los capítulos de GX y 5D's, "Dragon Ball" con Z y GT. En la
+  página de la serie, "¿Tiene otras series mezcladas?": se escribe lo que dicen
+  sus títulos ("GX") y `/canales/series/separar/` (`serie_separar.html`) muestra
+  los que lo dicen, todos tildados (se destilda lo que no va), con el nombre
+  sugerido según cómo empiezan los títulos ("Yu-Gi-Oh! GX Episodio 5" → "Yu-Gi-Oh!
+  GX", `organizar.nombre_sugerido`) y la temporada. "Separar" los pasa
+  (`organizar.mover_a_otra_serie`): a una serie nueva (queda en la misma
+  categoría) o a una que existe (se suman al final, en su categoría); los que
+  quedan se renumeran sin huecos y vuelve a la serie para seguir separando. A
+  mano: en la barra de los tildados de una temporada, "o a otra serie".
 
 **Quitar** = el canal deja de verse en la app (no se borra). Se puede quitar
 uno, los elegidos o todos los que coinciden con el filtro, con un motivo.

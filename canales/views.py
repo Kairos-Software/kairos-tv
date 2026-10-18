@@ -780,6 +780,7 @@ def serie_detalle(request):
         'puede_editar': chequear_permiso(request.user, 'importar_canales'),
         'categorias_de_series': Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre'),
         'temporada_nueva': (max(numeros) + 1) if numeros else 1,
+        'otras_series': [n for n in _nombres_de_series() if n.casefold() != serie.nombre.casefold()],
         'agregar_de_youtube': f"{reverse('canales:youtube')}?{urlencode({'serie': serie.nombre})}",
     })
 
@@ -880,6 +881,59 @@ def serie_temporada(request):
         messages.warning(request, 'Ojo: la temporada 1 quedó vacía. La app muestra la serie recién cuando tiene '
                                   'su temporada 1: pasá capítulos a la 1 (o renumerá las temporadas).')
     return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}#temporada-{destino}")
+
+
+def _nombres_de_series():
+    """Todas las series (para elegir a cuál pasar capítulos: la lista que se despliega al escribir)."""
+    return sorted({serie['nombre'] for categoria in consultas.arbol_de_series()['categorias']
+                   for serie in categoria['series']}, key=str.casefold)
+
+
+@requiere_permiso('importar_canales')
+def serie_separar(request):
+    """
+    Separar en OTRA serie lo que vino mezclado ("Yu-Gi-Oh" con los de GX): GET con `dice` muestra los
+    capítulos cuyo título lo dice (todos tildados) y el nombre sugerido; POST los pasa (también desde la barra
+    de una temporada, con los tildados a mano). Vuelve a la serie de origen para seguir separando.
+    """
+    datos = request.POST if request.method == 'POST' else request.GET
+    nombre = datos.get('nombre', '').strip()
+    pagina = f"{reverse('canales:serie_detalle')}?nombre={quote(nombre)}"
+    if request.method == 'POST':
+        if not datos.get('a_serie', '').strip():
+            messages.error(request, 'Escribí a qué serie pasan los capítulos elegidos.')
+            return redirect(pagina)
+        try:
+            cantidad, destino = organizar.mover_a_otra_serie(
+                nombre, datos.getlist('elegido'), datos['a_serie'], datos.get('temporada_destino') or 1,
+                request.user)
+        except organizar.NoSePuede as error:
+            messages.error(request, str(error))
+            return redirect(pagina)
+        if not organizar.capitulos_de([nombre]).exists():
+            messages.success(request, f'Listo: los {cantidad} capítulos pasaron a «{destino}». Eran todos: '
+                                      f'«{nombre}» ya no está.')
+            return redirect(f"{reverse('canales:serie_detalle')}?nombre={quote(destino)}")
+        messages.success(request, f'Listo: {cantidad} capítulo(s) pasaron a la serie «{destino}» (está en Series, '
+                                  f'con su nombre). Acá quedan los demás, renumerados sin huecos.')
+        if not organizar.ultimo_capitulo(nombre, 1):
+            messages.warning(request, 'Ojo: acá la temporada 1 quedó vacía. La app muestra la serie recién cuando '
+                                      'tiene su temporada 1.')
+        return redirect(pagina)
+
+    dice = ' '.join(datos.get('dice', '').split())
+    if not dice:
+        messages.error(request, 'Escribí qué dicen los títulos de los capítulos que querés separar (ej: GX).')
+        return redirect(pagina)
+    encontrados = organizar.capitulos_que_dicen(nombre, dice)
+    if not encontrados and not organizar.capitulos_de([nombre]).exists():
+        raise Http404('No se encontró la serie.')
+    return render(request, 'canales/serie_separar.html', {
+        'nombre': nombre, 'dice': dice, 'encontrados': encontrados, 'pagina_de_la_serie': pagina,
+        'sugerido': organizar.nombre_sugerido([titulo for _, _, _, titulo in encontrados], dice, nombre),
+        'series': [n for n in _nombres_de_series() if n.casefold() != nombre.casefold()],
+        'total': organizar.capitulos_de([nombre]).count(),
+    })
 
 
 def _como_esta_el_orden(capitulos, temporada):

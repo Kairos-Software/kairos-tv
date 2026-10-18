@@ -63,6 +63,17 @@
         <button type="submit" class="btn btn-primary"><i class="bi bi-check2" aria-hidden="true"></i> Guardar categoría y nombre</button>
     </div>
 </form>
+{# Separar lo que vino mezclado (GX y 5D's dentro de "Yu-Gi-Oh"): views.serie_separar muestra cuáles antes de pasarlos #}
+<form method="get" action="{% url 'canales:serie_separar' %}" class="tarjeta serie-separar">
+    <input type="hidden" name="nombre" value="{{ serie.nombre }}">
+    <p class="serie-separar-titulo"><i class="bi bi-scissors" aria-hidden="true"></i> ¿Tiene otras series mezcladas?</p>
+    <small class="texto-suave">Ej: «Yu-Gi-Oh» con los de GX y 5D's, o «Dragon Ball» con Z y GT. Escribí lo que dicen sus títulos: vas a ver cuáles son (podés destildar) y pasan a una serie aparte.</small>
+    <div class="separar-fila">
+        <input type="search" name="dice" class="form-control" maxlength="40" placeholder="Los títulos dicen… (ej: GX)" aria-label="Lo que dicen los títulos" required>
+        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search" aria-hidden="true"></i> Ver cuáles</button>
+    </div>
+</form>
+<datalist id="otras-series">{% for otra in otras_series %}<option value="{{ otra }}">{% endfor %}</datalist>
 {% endif %}
 <div class="temporadas-lista">
     {% for numero, capitulos, orden in serie.temporadas_ordenadas %}
@@ -91,7 +102,7 @@
             {% endif %}
             <p class="orden-ayuda">
                 {% if capitulos|length > 1 %}<i class="bi bi-grip-vertical" aria-hidden="true"></i> Para cambiar el orden, <strong>arrastrá</strong> un capítulo de los puntitos o usá las <strong>flechas</strong>. Después tocá <strong>Guardar orden</strong>.{% endif %}
-                Para pasar capítulos a otra temporada o eliminarlos, <strong>tildalos</strong> (con Shift elegís varios seguidos).
+                Para pasar capítulos a otra temporada, a otra serie o eliminarlos, <strong>tildalos</strong> (con Shift elegís varios seguidos).
                 <a href="{{ agregar_de_youtube }}&amp;temporada={{ numero }}" class="temporada-agregar"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar capítulos a la temporada {{ numero }} desde YouTube</a>
             </p>
             <div class="temporada-mover" data-mover-barra hidden>
@@ -106,6 +117,11 @@
                 <button type="submit" class="btn btn-sm btn-outline-danger" formaction="{% url 'canales:serie_eliminar_capitulos' %}"
                         data-confirmar="¿Eliminar los capítulos elegidos? Desaparecen del panel y de la app (se recuperan en «Eliminados»). Los que quedan en la temporada {{ numero }} se renumeran sin huecos."><i class="bi bi-trash" aria-hidden="true"></i> Eliminarlos</button>
                 <span class="texto-suave small">Los que quedan en la {{ numero }} se renumeran sin huecos.</span>
+                <span class="temporada-a-serie">
+                    <label for="a-serie-{{ numero }}">o a otra serie:</label>
+                    <input type="text" name="a_serie" id="a-serie-{{ numero }}" class="form-control form-control-sm" maxlength="90" list="otras-series" placeholder="Nombre (una que existe o nueva)" data-a-serie>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" formaction="{% url 'canales:serie_separar' %}" data-a-serie-boton>Pasar a esa serie</button>
+                </span>
             </div>
         {% endif %}
         <ol class="cap-lista">
@@ -180,6 +196,7 @@
 </div>
 {% if puede_editar %}
 <script src="{% static 'js/ordenar_capitulos.js' %}"></script>
+<script src="{% static 'js/separar_serie.js' %}"></script>
 <script>
 // Elegir capítulos para pasarlos a otra temporada: aparece la barra "N elegidos, pasarlos a…".
 // Con Shift se eligen todos los del medio (desde el último que se tocó).
@@ -221,4 +238,5 @@ document.querySelectorAll('form[data-orden]').forEach(function (form) {
 {% endif %}
 <link rel="stylesheet" href="{% static 'css/ordenar_capitulos.css' %}">
 <link rel="stylesheet" href="{% static 'css/destino_serie.css' %}">
+<link rel="stylesheet" href="{% static 'css/separar_serie.css' %}">
 {% endblock %}

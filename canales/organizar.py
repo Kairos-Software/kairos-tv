@@ -711,6 +711,109 @@ def eliminar_capitulos(nombre_serie, pks, usuario=None):
     return cantidad
 
 
+def _en_orden_de_la_serie(partes):
+    """Para ordenar capítulos como los muestra la app: temporada, número (los sin número al final)."""
+
+    def clave(canal):
+        _, temporada, numero, _ = partes[canal.pk]
+        return temporada, numero is None, numero or 0, canal.nombre
+    return clave
+
+
+def capitulos_que_dicen(nombre_serie, texto):
+    """
+    Los capítulos de la serie cuyo título dice `texto` (sin importar mayúsculas
+    ni acentos), en el orden de la serie: para separar lo que vino mezclado
+    ("Yu-Gi-Oh" con los de GX y 5D's). Cada uno: (canal, temporada, número, título).
+    """
+    buscado = clasificar.sin_acentos(' '.join(texto.split()))
+    if not buscado:
+        return []
+    capitulos = list(capitulos_de([nombre_serie]))
+    partes = {canal.pk: clasificar.episodio(canal.nombre) for canal in capitulos}
+    return [(canal, partes[canal.pk][1], partes[canal.pk][2], partes[canal.pk][3] or canal.nombre)
+            for canal in sorted(capitulos, key=_en_orden_de_la_serie(partes))
+            if buscado in clasificar.sin_acentos(partes[canal.pk][3] or canal.nombre)]
+
+
+def nombre_sugerido(titulos, texto, nombre_serie=''):
+    """
+    El nombre para la serie aparte, sacado de cómo empiezan los títulos hasta la
+    palabra que dice `texto`: "Yu-Gi-Oh! GX Episodio 5" con "gx" -> "Yu-Gi-Oh! GX".
+    Si los títulos no empiezan así ("Capítulo 5 - ..."), "<serie> <texto>".
+    """
+    buscado = clasificar.sin_acentos(' '.join(texto.split()))
+    candidatos = Counter()
+    for titulo in titulos:
+        donde = clasificar.sin_acentos(titulo).find(buscado)
+        if donde < 0 or len(clasificar.sin_acentos(titulo)) != len(titulo):
+            continue
+        fin = donde + len(buscado)
+        while fin < len(titulo) and not titulo[fin].isspace():
+            fin += 1
+        candidato = titulo[:fin].strip(' -:|.,')
+        if len(candidato) > 50 or re.match(r'(?i)(cap|ep|temporada|t\d|s\d|\d)', clasificar.sin_acentos(candidato)):
+            continue
+        try:
+            candidatos[nombre_de_serie_valido(candidato)] += 1
+        except NoSePuede:
+            continue
+    if candidatos:
+        return candidatos.most_common(1)[0][0]
+    return _limpio(f'{nombre_serie} {" ".join(texto.split())}'.strip(), 90)
+
+
+@transaction.atomic
+def mover_a_otra_serie(nombre_serie, pks, destino, temporada=1, usuario=None):
+    """
+    Pasa esos capítulos a OTRA serie (una que ya existe o una nueva): para
+    separar lo que vino mezclado en una ("Yu-Gi-Oh" -> "Yu-Gi-Oh! GX"). Van a
+    esa temporada de la otra serie, al final y en el orden en que estaban. Si
+    la serie es nueva, queda en la misma categoría; si ya existía, en la suya.
+    Las temporadas de donde salieron se renumeran sin huecos.
+    Devuelve (cuántos pasaron, el nombre de la otra serie como quedó).
+    """
+    destino = nombre_de_serie_valido(destino)
+    if _clave(destino) == _clave(nombre_serie):
+        raise NoSePuede('Esa es esta misma serie. Para pasarlos a otra temporada de acá, usá «pasarlos a» '
+                        'la temporada.')
+    try:
+        temporada, pks = int(temporada), {int(pk) for pk in pks}
+    except (TypeError, ValueError):
+        raise NoSePuede('Lo que llegó no se entiende: volvé a cargar la página.') from None
+    if not 1 <= temporada <= 99:
+        raise NoSePuede('La temporada tiene que ser del 1 al 99.')
+    capitulos = list(capitulos_de([nombre_serie]))
+    partes = {canal.pk: clasificar.episodio(canal.nombre) for canal in capitulos}
+    elegidos = sorted((c for c in capitulos if c.pk in pks), key=_en_orden_de_la_serie(partes))
+    if not elegidos:
+        raise NoSePuede('Elegí al menos un capítulo de esta serie.')
+    existe, suya = categoria_de_la_serie(destino)
+    if existe:
+        destino = next(iter(capitulos_de([destino])), None)
+        destino = clasificar.episodio(destino.nombre)[0]   # como está escrita en sus capítulos
+        categoria = suya
+    else:
+        categoria = categoria_de_la_serie(nombre_serie)[1]
+    siguiente = ultimo_capitulo(destino, temporada)
+    ahora = timezone.now()
+    for canal in elegidos:
+        siguiente += 1
+        canal.nombre = nombre_de_capitulo(destino, temporada, siguiente, partes[canal.pk][3])
+        canal.categoria = categoria
+        canal.modificado = ahora
+        canal.marcar_autor(usuario)
+    Canal.objects.bulk_update(elegidos, ['nombre', 'categoria', 'modificado', 'modificado_por'])
+    quedan = [c for c in capitulos if c.pk not in pks]
+    _renumerar_sin_huecos(quedan, {partes[c.pk][1] for c in elegidos}, usuario)
+    if not quedan:
+        # Se fue entera: es como cambiarle el nombre (la portada va con ella, si la otra no tenía)
+        imagenes.mover_portada(nombre_serie, destino)
+    registrar(usuario, Accion.EDITAR, f'Pasó {len(elegidos)} capítulo(s) de "{nombre_serie}" a la serie '
+                                      f'"{destino}" (temporada {temporada}).', modulo='canales')
+    return len(elegidos), destino
+
+
 def _renumerar_sin_huecos(capitulos, temporadas, usuario=None, ya_cambiados=None):
     """
     Deja esas temporadas numeradas 1, 2, 3... en el orden en que estaban (cada
