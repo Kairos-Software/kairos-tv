@@ -1427,9 +1427,30 @@ def quitar_canales(canales, motivo='', usuario=None):
 
 
 def mostrar_canales(canales, usuario=None):
-    """Deshace "quitar": vuelven a la app (si tienen alguna fuente que ande)."""
-    cantidad = canales.filter(activo=False).update(activo=True, motivo_quitado='', modificado=timezone.now(),
-                                                    modificado_por=usuario if getattr(usuario, 'pk', None) else None)
+    """
+    "Volver a mostrar": lo elegido vuelve a la app, no se viera por lo que no se viera:
+      - quitado (a mano o por la limpieza) → vuelve;
+      - fuentes escondidas por fallar en los aparatos → se dejan de esconder y se
+        olvidan esas fallas (otra oportunidad entera);
+      - fuentes caídas → quedan "sin verificar": la app las intenta, y la
+        verificación automática las vuelve a probar.
+    Las fuentes apagadas a mano no se tocan (se prenden desde Editar).
+    Devuelve cuántos canales cambiaron.
+    """
+    pks = set(canales.values_list('pk', flat=True))
+    ahora = timezone.now()
+    quien = usuario if getattr(usuario, 'pk', None) else None
+    quitados = set(Canal.objects.filter(pk__in=pks, activo=False).values_list('pk', flat=True))
+    Canal.objects.filter(pk__in=quitados).update(activo=True, motivo_quitado='', modificado=ahora,
+                                                 modificado_por=quien)
+    escondidas = Fuente.objects.filter(canal__in=pks, activa=True).filter(
+        Q(oculta_hasta__gt=ahora) | Q(estado=Fuente.Estado.CAIDA))
+    con_fuentes = set(escondidas.values_list('canal', flat=True))
+    escondidas.filter(oculta_hasta__isnull=False).update(
+        oculta_desde=None, oculta_hasta=None, veces_oculta=0, avisos_de_aparatos=0, primer_aviso=None,
+        falla_en_aparatos='')
+    escondidas.filter(estado=Fuente.Estado.CAIDA).update(estado=Fuente.Estado.SIN_VERIFICAR)
+    cantidad = len(quitados | con_fuentes)
     if cantidad:
         registrar(usuario, Accion.EDITAR, f'Volvió a mostrar {cantidad} canal(es) en la app.', modulo='canales')
     return cantidad

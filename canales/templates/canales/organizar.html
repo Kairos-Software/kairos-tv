@@ -497,7 +497,7 @@
                 </div>
                 <div class="espejo-barra-fila" data-accion="mostrar" hidden>
                     <button type="submit" class="btn btn-sm btn-primary" {% if contenido == 'serie' %}name="accion" value="mostrar"{% else %}formaction="{% url 'canales:catalogo_mostrar' %}"{% endif %}>Volver a mostrar</button>
-                    <span class="espejo-ayuda">Los quitados vuelven a la app (si tienen alguna señal que ande).</span>
+                    <span class="espejo-ayuda">Vuelven a la app: los quitados, y los que no se veían por señales caídas o escondidas por fallar en los aparatos (se prueban de nuevo).</span>
                 </div>
                 <div class="espejo-barra-fila" data-accion="eliminar" hidden>
                     <button type="submit" class="btn btn-sm btn-danger" formaction="{% url 'canales:organizar_eliminar' %}"

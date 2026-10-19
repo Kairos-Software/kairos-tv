@@ -1135,10 +1135,15 @@ def catalogo_quitar(request):
 def catalogo_mostrar(request):
     cantidad = servicios.mostrar_canales(_canales_elegidos(request), request.user)
     if cantidad:
-        messages.success(request, f'{cantidad} canal(es) vuelven a la app (si tienen alguna fuente que ande).')
+        messages.success(request, f'{cantidad} vuelven a la app. Sus señales caídas o escondidas se prueban de nuevo '
+                                  f'en los aparatos.')
     else:
-        messages.info(request, 'No había ningún canal quitado entre los elegidos.')
+        messages.info(request, _NADA_PARA_MOSTRAR)
     return _volver_al_catalogo(request)
+
+
+_NADA_PARA_MOSTRAR = ('Lo elegido ya se podía ver: no estaba quitado ni tenía señales caídas o escondidas. Si tiene '
+                      'las fuentes apagadas a mano, se prenden desde Editar.')
 
 
 def _seccion_pedida(request):
@@ -1256,8 +1261,10 @@ def series_acciones(request):
                              else 'Ya estaban quitadas.')
         elif request.POST.get('accion') == 'mostrar':
             cantidad = servicios.mostrar_canales(capitulos, request.user)
-            messages.success(request, f'{cantidad} capítulo(s) vuelven a la app.' if cantidad
-                             else 'No había ninguna quitada.')
+            if cantidad:
+                messages.success(request, f'{cantidad} capítulo(s) vuelven a la app.')
+            else:
+                messages.info(request, _NADA_PARA_MOSTRAR)
     except organizar.NoSePuede as error:
         messages.error(request, str(error))
     return redirect(_volver(request, Contenido.SERIE))
