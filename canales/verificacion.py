@@ -569,17 +569,27 @@ def _verificar_rtsp(url):
 def _conviene_vlc_primero(url, tipo):
     """Los archivos directos de paneles IPTV suelen requerir un reproductor conocido."""
     ruta = urlsplit(url).path.lower()
-    return tipo == 'directo' or ruta.endswith(_EXTENSIONES_DE_VIDEO_DIRECTO)
+    return tipo == 'directo' or ruta.endswith(_EXTENSIONES_DE_VIDEO_DIRECTO) or _es_stream_de_xtream(url)
 
 
-def _es_vod_de_xtream(url):
-    """Un archivo /series/usuario/clave/id o /movie/usuario/clave/id de un panel Xtream."""
-    partes = [parte for parte in urlsplit(url).path.lower().split('/') if parte]
-    return len(partes) >= 4 and partes[0] in ('series', 'movie')
+def _es_stream_de_xtream(url):
+    """Una señal Xtream: /usuario/clave/id o /live|series|movie/usuario/clave/id.ext."""
+    direccion = urlsplit(url)
+    partes = [parte for parte in direccion.path.lower().split('/') if parte]
+    con_prefijo = bool(partes and partes[0] in ('live', 'series', 'movie'))
+    if con_prefijo:
+        partes = partes[1:]
+    if len(partes) != 3:
+        return False
+    identificador = partes[-1].rsplit('.', 1)[0]
+    # Sin /live/, la forma se parece a cualquier ruta web de tres partes. Los
+    # paneles que la usan (como iptvpremium:55577) se reconocen por su puerto.
+    return bool(partes[0] and partes[1] and identificador.isdigit()
+                and (con_prefijo or direccion.port is not None))
 
 
 _MENSAJE_XTREAM_SIN_VERIFICAR = (
-    'El proveedor no permite comprobar este video desde el servidor; se cargará sin verificar.'
+    'El proveedor no permite comprobar esta señal desde el servidor; se cargará sin verificar.'
 )
 
 
@@ -625,7 +635,7 @@ def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
         if resultado.rechazo and not user_agent:
             return _probar_video_directo(
                 url, _cabeceras_para_video_directo('', referer, a_fondo), a_fondo)
-        if resultado.error == 'No respondió a tiempo.' and _es_vod_de_xtream(url):
+        if resultado.error == 'No respondió a tiempo.' and _es_stream_de_xtream(url):
             # Algunos proveedores reproducen en VLC y en la app, pero bloquean
             # las IP de datacenter para impedir restreaming. El VPS no puede
             # afirmar que el archivo esté caído: se carga sin verificar y la
@@ -688,14 +698,14 @@ def verificar_varias(fuentes, cabeceras=None, hasta=None, a_fondo=False, cancela
             if hasta is not None and time.monotonic() >= hasta:
                 return None
             servidor = (urlsplit(url).hostname or '').lower()
-            if _es_vod_de_xtream(url):
+            if _es_stream_de_xtream(url):
                 with candado:
                     bloqueado = servidor in servidores_xtream_bloqueados
                 if bloqueado:
                     return _xtream_sin_verificar(cabeceras.get(url, ('', ''))[0])
             resultado = verificar_url(url, tipo, *cabeceras.get(url, ('', '')), a_fondo=a_fondo)
             if (resultado.estado == SIN_VERIFICAR and resultado.error == _MENSAJE_XTREAM_SIN_VERIFICAR
-                    and _es_vod_de_xtream(url)):
+                    and _es_stream_de_xtream(url)):
                 with candado:
                     servidores_xtream_bloqueados.add(servidor)
             return resultado

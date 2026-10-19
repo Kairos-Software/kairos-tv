@@ -162,6 +162,27 @@ class VerificarUrlTests(TestCase):
         self.assertIn('se cargará sin verificar', resultado.error)
         self.assertEqual(len(self.pedidos), 3)
 
+    def test_xtream_en_vivo_bloqueado_desde_el_vps_se_carga_sin_verificar(self):
+        timeout = urllib.error.URLError(TimeoutError())
+        url = 'http://panel:8080/usuario/clave/444969'
+        with self.respuestas({url: timeout}), mock.patch.object(verificacion, '_esperar'):
+            resultado = verificacion.verificar_url(url)
+        self.assertEqual((resultado.estado, resultado.tipo, resultado.user_agent),
+                         (SIN_VERIFICAR, 'directo', USER_AGENT_VLC))
+        self.assertEqual(len(self.pedidos), 3)
+        self.assertTrue(all(pedido[1]['User-Agent'] == USER_AGENT_VLC for pedido in self.pedidos))
+        self.assertTrue(all(pedido[1]['Range'] == 'bytes=0-65535' for pedido in self.pedidos))
+
+    def test_solo_reconoce_rutas_con_formato_xtream(self):
+        for url in (
+                'http://panel:8080/usuario/clave/444969',
+                'http://panel:8080/live/usuario/clave/444969.ts',
+                'http://panel:8080/series/usuario/clave/446961.mkv',
+                'http://panel:8080/movie/usuario/clave/123.mp4'):
+            self.assertTrue(verificacion._es_stream_de_xtream(url), url)
+        for url in ('https://sitio.com/videos/2026/123', 'https://cdn.com/video.mp4', 'https://x/a/b/no-numero'):
+            self.assertFalse(verificacion._es_stream_de_xtream(url), url)
+
     def test_un_mkv_comun_que_no_responde_sigue_caido(self):
         timeout = urllib.error.URLError(TimeoutError())
         url = 'https://cdn.ejemplo.com/pelicula.mkv'
@@ -257,6 +278,17 @@ class VerificarUrlTests(TestCase):
             tipo='directo', user_agent=USER_AGENT_VLC,
         )
         fuentes = {f'http://panel:8080/series/u/p/{numero}.mkv': 'directo' for numero in range(4)}
+        with mock.patch.object(verificacion, 'verificar_url', return_value=bloqueada) as verificar_url:
+            resultados = verificacion.verificar_varias(fuentes)
+        self.assertEqual(verificar_url.call_count, 1)
+        self.assertEqual({resultado.estado for resultado in resultados.values()}, {SIN_VERIFICAR})
+
+    def test_si_el_vps_esta_bloqueado_no_espera_por_cada_canal_xtream(self):
+        bloqueada = Resultado(
+            SIN_VERIFICAR, verificacion._MENSAJE_XTREAM_SIN_VERIFICAR,
+            tipo='directo', user_agent=USER_AGENT_VLC,
+        )
+        fuentes = {f'http://panel:8080/usuario/clave/{numero}': 'hls' for numero in range(444969, 444972)}
         with mock.patch.object(verificacion, 'verificar_url', return_value=bloqueada) as verificar_url:
             resultados = verificacion.verificar_varias(fuentes)
         self.assertEqual(verificar_url.call_count, 1)
@@ -394,6 +426,21 @@ class ImportarDeATandasTests(TestCase):
             avance = procesar_lote(importacion, verificacion.verificar_varias, tamanio=3, segundos=0)
         self.assertEqual((avance['aptas'], avance['caidas'], avance['rechazadas']), (3, 0, 0))
         self.assertEqual(set(importacion.entradas.values_list('user_agent', flat=True)), {USER_AGENT_VLC})
+
+    def test_importa_canales_xtream_en_vivo_aunque_el_vps_no_pueda_comprobarlos(self):
+        lista = '#EXTM3U\n' + ''.join(
+            f'#EXTINF:-1 group-title="ESPN",ESPN {numero}\n'
+            f'http://panel:55577/usuario/clave/{numero}\n'
+            for numero in range(444969, 444972)
+        )
+        importacion = crear_importacion(lista, 'espn.m3u')
+        timeout = urllib.error.URLError(TimeoutError())
+        with mock.patch.object(verificacion, '_descargar', side_effect=timeout), \
+                mock.patch.object(verificacion, '_esperar'):
+            avance = procesar_lote(importacion, verificacion.verificar_varias, tamanio=3, segundos=0)
+        self.assertEqual((avance['aptas'], avance['caidas'], avance['rechazadas']), (3, 0, 0))
+        self.assertEqual(set(importacion.entradas.values_list('tipo', 'user_agent')),
+                         {('directo', USER_AGENT_VLC)})
 
     def test_no_vuelve_a_verificar_lo_que_ya_estaba(self):
         importar_m3u(LISTA, verificar=verificador_falso)
