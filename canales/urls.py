@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_revisar
 
 app_name = 'canales'
 
@@ -46,4 +46,8 @@ urlpatterns = [
     path('series/acciones/', views.series_acciones, name='series_acciones'),
     path('categorias/', views.categorias, name='categorias'),
     path('secciones/', views.secciones_acciones, name='secciones'),
+    path('revisar/', views_revisar.revisar, name='revisar'),
+    path('revisar/decidir/', views_revisar.decidir, name='revisar_decidir'),
+    path('revisar/lista/', views_revisar.lista, name='revisar_lista'),
+    path('fuentes/<int:pk>/accion/', views_revisar.fuente_accion, name='fuente_accion'),
 ]

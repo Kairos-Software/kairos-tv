@@ -384,6 +384,7 @@ MOSTRAR = {
     'fuera': 'Lo que NO se ve (caído o quitado)',
     'caidos': 'No se ve porque sus señales no andan',
     'quitados': 'Quitado a mano',
+    'senales': 'Se ve, pero tiene señales que no andan',
     'destacados': 'Destacado en la TV (★)',
 }
 
@@ -400,6 +401,8 @@ def canales_filtrados(contenido='', mostrar='todo', texto='', origen='', sin_log
         canales = canales.filter(Q(activo=False) | Q(tiene_usable=False))
     elif mostrar == 'destacados':
         canales = canales.filter(destacado=True)
+    elif mostrar == 'senales':
+        canales = canales.filter(activo=True, tiene_usable=True, fuentes_fuera__gt=0)
     return canales
 
 
@@ -426,6 +429,8 @@ def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', orig
             items = [s for s in items if not alguno_activo(s)]
         elif mostrar == 'destacados':
             items = [s for s in items if any(c.canal.destacado for c in s.capitulos)]
+        elif mostrar == 'senales':
+            items = [s for s in items if s.completa and any(c.canal.fuentes_fuera for c in s.capitulos)]
         pares = [(s, s.categoria_id) for s in items]
     else:
         canales = canales_filtrados(contenido, mostrar, texto=texto, origen=origen, sin_logo=sin_logo, idioma=idioma)
@@ -507,6 +512,9 @@ def catalogo(texto='', categoria='', idioma='', estado='', sin_logo=False, orige
             fuentes_caidas=Count('fuentes', filter=Q(fuentes__estado=Fuente.Estado.CAIDA), distinct=True),
             tiene_usable=Exists(usables),
             fuentes_ocultas=Count('fuentes', filter=Q(fuentes__oculta_hasta__gt=timezone.now()), distinct=True),
+            # Las señales que la app no recibe: apagadas (a mano o retiradas por la limpieza), caídas u ocultas
+            fuentes_fuera=Count('fuentes', filter=Q(fuentes__activa=False) | Q(fuentes__estado=Fuente.Estado.CAIDA)
+                                | Q(fuentes__oculta_hasta__gt=timezone.now()), distinct=True),
         )
         .prefetch_related(Prefetch('fuentes', queryset=Fuente.objects.order_by('prioridad', 'pk')))
         .order_by(*ORDEN_DE_CATEGORIAS, 'orden', 'nombre')

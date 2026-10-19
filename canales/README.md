@@ -33,6 +33,9 @@ siguiente. Si una fuente se cae, el canal sigue andando.
 | `clasificar.py` | Base | Conclusiones sobre cada entrada: idioma y país, si es en vivo / película / serie, si es para adultos, el formato que parece y el nombre limpio (`ES: (HD REPUESTO) DAZN F1` → `DAZN F1`). `episodio()`: "Arrow S02 E05" → serie, temporada y capítulo (la misma regla que la app). |
 | `paginas.py` | Base | YouTube y páginas de video (Twitch, Dailymotion, Vimeo, Kick...) con **yt-dlp**: `verificar()` (¿hay video?) y `resolver()` (la dirección real en este momento). |
 | `verificacion.py` | Base | Prueba si una fuente responde y **qué formato es** mirando los bytes (como VLC): HLS, DASH, video directo (MPEG-TS/MP4/MKV) o RTSP. Si el servidor rechaza al "navegador", reintenta como VLC. Además averigua el **códec** del video (h264, h265, mpeg2...) por la lista HLS o los primeros bytes (`Fuente.codec`), y si es de **10 bits** (`h264_10` / `h265_10`, mirando el perfil: la mayoría de los TV box no leen H.264 de 10 bits y lo muestran con franjas verdes). La app lo compara con lo que sabe mostrar su aparato y no muestra lo que no puede ver. Máximo 2 pedidos a la vez al mismo servidor y un tiempo límite por tanda. |
+| `salud.py` | Base | **La salud con memoria** y la **limpieza automática** (ver "Salud de las fuentes" más abajo): cada fuente recuerda sus últimas pruebas (servidor y aparatos), cada fuente y canal queda en un estado (Anda, Inestable, Sin datos, Formato, Rechaza, Falla, Muerta) y `limpiar()` quita los canales que no anduvieron en una semana y devuelve los que revivieron. |
+| `bandeja.py` + `views_revisar.py` + `templates/canales/revisar.html` | Base / Panel | **Para revisar** (`/canales/revisar/`, botón en Contenido → Tu catálogo): ver "Salud de las fuentes" más abajo. |
+| `recorrido.py` | Base | El **modo revisión** de la app (`GET/POST /api/v1/canales/recorrido/`): qué fuentes le toca probar a un aparato que recorre los canales solo, y lo que encuentra va a la salud. Ver "Salud de las fuentes". |
 | `analisis.py` | Base | Qué trae un video mirando sus primeros bytes (MPEG-TS, MKV, MP4 y la lista HLS maestra): si tiene **sonido** y de qué tipo, el **idioma del audio**, la **resolución** (leyendo el SPS de H.264 / H.265), cuántos segundos de video hay en esos bytes y cuánto dura la película. Lo usa la prueba a fondo. |
 | `servicios.py` | Base | `crear_importacion()` (analiza la lista, rápido), `procesar_lote()` (prueba las próximas 50: quedan aptas o no, con el motivo), `juzgar()` (qué pasa la prueba), `cargar_lote()` (carga las aptas), `cargar_igual()` / `no_cargar()` (lo que se elige a mano antes de cargar; lo que no respondía entra sin verificar), `verificar_lote_de_fuentes()` (vuelve a probar las guardadas de a 50), `quitar_canales()` / `mostrar_canales()` e `importar_m3u()` (todo de una vez, para la consola). |
 | `consultas.py` | Base | `canales_disponibles(tipos)` (lo que ve la app, según los formatos que sabe reproducir), `resumen()` (los números sueltos son solo de en vivo; `por_contenido` trae en vivo, películas y series por separado), `series()` (los capítulos agrupados por serie y temporada, con cuántos ve la app; `Serie.completa` / `por_que_no_se_ve`: como la app, una serie se muestra desde que tiene visible el T1:E1, aunque sea su único capítulo), `catalogo(filtros)` y `por_que_no_se_ve(canal)`. |
@@ -43,7 +46,7 @@ siguiente. Si una fuente se cae, el canal sigue andando.
 | `templatetags/canales_extras.py` | Panel | Filtro `iniciales` (lo que muestra la app cuando un canal no tiene logo). |
 | `admin.py` | Técnica | Editar canales, fuentes y categorías puntuales desde `/admin/`. |
 | `management/commands/importar_m3u.py` | Técnica | `python manage.py importar_m3u <archivo> [--sin-verificar] [--a-fondo] [--solo-espanol] [--descartar-sin-logo] [--con-peliculas] [--con-adultos]` |
-| `management/commands/verificar_fuentes.py` | Técnica | `python manage.py verificar_fuentes` (para programarlo con cron en producción). De madrugada además mide (calidad y velocidad) una tanda de fuentes de los canales que tienen más de una, para que la app arranque por la mejor; `--medir` lo fuerza. Después de verificar, prepara los logos parejos que falten (`imagenes.emparejar_logos`). |
+| `management/commands/verificar_fuentes.py` | Técnica | `python manage.py verificar_fuentes` (para programarlo con cron en producción). De madrugada además mide (calidad y velocidad) una tanda de fuentes de los canales que tienen más de una, para que la app arranque por la mejor; `--medir` lo fuerza. Después de verificar, hace la **limpieza automática** (`salud.limpiar`) y prepara los logos parejos que falten (`imagenes.emparejar_logos`). |
 | `datos/canales_prueba.m3u8` | Datos | 3 canales públicos para probar (Canal 26, Telemax, TV Universidad). |
 | `tests/` | Técnica | Pruebas de las herramientas (probar un link, limpiar nombres), del lector, el clasificador, la verificación, las tandas, las pantallas y la API. |
 
@@ -132,6 +135,23 @@ Organizar contenido. Además, al cargar (con o sin "¿Dónde va?"):
   alternativa en vez de quedar repetido (`_IndiceDeCanales.buscar`);
 - los capítulos nuevos de una serie que ya está en el panel van a la
   **categoría de esa serie** (una serie va en una sola categoría).
+
+### Canales Xtream en vivo: el servidor no los da por caídos (desde el 19/10/2026)
+
+Un canal en vivo Xtream (`http://panel:puerto/usuario/clave/123` o
+`.../live/usuario/clave/123.ts`) se prueba **sin Range** (llega de corrido,
+como lo abre VLC). Si al VPS no le anda, queda **sin verificar** y la app lo
+recibe igual (`verificacion._caida_segura`). Solo queda **caído** si el panel
+dice que ese canal no existe (404, 410) o el servidor del panel ya no existe.
+
+El motivo: desde el VPS no se sabe. Muchos paneles bloquean las IP de
+servidores, y las cuentas suelen permitir **una sola conexión**: cuando la app
+pasa de una fuente a otra de la misma cuenta y avisa la falla, el servidor
+vuelve a probar la primera (`reverificar_por_aviso`) y choca con la conexión
+de la app. Antes eso la dejaba caída y la app dejaba de recibirla, aunque en
+VLC anduviera. Si en los aparatos tampoco anda, la esconden sus avisos
+(`registrar_falla_en_aparato`). Las películas y los capítulos Xtream siguen
+como antes.
 
 ### La prueba a fondo (recomendada, viene marcada)
 
@@ -351,7 +371,8 @@ llega, guarda el formato real en la fuente, y la app se lo pasa al reproductor.
 
 | Campo | Quién lo cambia | Para qué |
 |---|---|---|
-| `activa` | Una persona (admin) | Apagar una fuente a mano aunque funcione. |
+| `activa` | Una persona (admin), o la limpieza | Apagar una fuente a mano aunque funcione ("Quitar esta señal"). La limpieza también la apaga cuando la retira (`retirada`). |
+| `retirada` | La limpieza automática | Cuándo la retiró: no anduvo en 7 días y el canal tiene otras que sí. A diferencia de lo apagado a mano, vuelve sola si vuelve a andar. |
 | `estado` | La verificación automática | `funciona`, `caida` o `sin_verificar` (si YouTube no dejó verificar desde el servidor, o importada con `--sin-verificar`). |
 | `tipo` | La verificación automática | El formato real (ver la tabla de arriba). |
 | `codec` | La verificación automática | Códec de video (`h264`, `h265`, `mpeg2`...; `h264_10` / `h265_10` si es de 10 bits), o vacío si todavía no se sabe. En una lista HLS con varias calidades, el **más compatible** (`verificacion.CODECS_DEL_MAS_COMPATIBLE`): el reproductor elige una calidad que el aparato lee. La app esconde una fuente cuyo códec el aparato no lee: en ese aparato el canal no aparece aunque el panel diga "se ve" (el panel de detalles lo avisa, y en la TV lo muestra Mi cuenta → "Lo que no se ve en esta TV"). |
@@ -447,6 +468,125 @@ En la app, además, cada aparato recuerda la que mejor le anduvo
 (`FuentePreferida`) y, si la que está viendo se corta 3 veces en 3 minutos,
 pasa sola a otra.
 
+## Salud de las fuentes y limpieza automática (desde el 19/10/2026)
+
+Antes cada fuente se juzgaba por su **última** prueba: un corte de 5 minutos
+a las 3 de la mañana pesaba lo mismo que una fuente muerta hace un mes. Con
+más de 1000 canales de listas que no se sabe de dónde vienen, revisarlos a
+mano es imposible. Ahora cada fuente tiene **memoria** (`salud.py`):
+
+| Campo de `Fuente` | Qué guarda |
+|---|---|
+| `historial` | Sus últimas 20 pruebas, una letra cada una (la más nueva al final): `+` anduvo en el servidor, `*` se vio bien en un aparato, `-` falló en el servidor, `x` falló en un aparato, `f` un aparato no pudo leer el video, `?` el servidor no pudo saber. |
+| `anduvo` | La última vez que anduvo (el servidor la vio bien, o un aparato la miró al menos un minuto). |
+| `falla_desde` / `fallas_seguidas` | Desde cuándo falla **sin parar** y cuántas veces falló en ese tiempo. **Cualquier vez que anda, vuelven a cero.** |
+| `por_que_falla` | El motivo de la última falla: `no_existe`, `rechaza` (cuenta vencida, ocupada o bloqueada), `tiempo`, `conexion`, `formato` o `error`. |
+
+**De dónde salen las pruebas (todo automático):** la verificación del cron
+(cada 6 h), la que dispara un aviso de la app, y lo que cuentan los aparatos
+al ver una fuente (`/estabilidad/`, un minuto o más = anduvo) o al no poder
+(`/falla/`). Lo de los aparatos entra al historial como mucho una vez cada
+media hora por fuente: si cien personas miran el mismo canal, no tapa al
+servidor. Cuando el servidor **no puede saber** (los paneles Xtream bloquean
+al VPS) anota `?`, que no cuenta ni a favor ni en contra: ahí deciden los aparatos.
+
+**Los estados** (un canal está como su MEJOR fuente prendida):
+
+| Estado | Cuándo |
+|---|---|
+| Anda | Anduvo, y no falla seguido. |
+| Inestable | De sus últimas 12 pruebas, anduvo alguna y falló al menos 2 (1 de cada 4 o más): a veces sí, a veces no (hora pico, proveedor saturado). |
+| Sin datos | Nadie la vio todavía y el servidor no puede probarla. |
+| Formato | La señal anda, pero algunos aparatos no pueden leer el video (no es que el link falle: no cuenta para quitar). |
+| Rechaza | Está fallando y el servidor de la señal la rechaza (403, 401, página de error): cuenta vencida, ocupada o bloqueada. |
+| Falla | Está fallando, pero hace menos de una semana: puede ser un corte. |
+| Muerta | Falla **sin parar hace 7 días** (`DIAS_PARA_QUITAR`) y al menos **8 veces** (`FALLAS_PARA_QUITAR`: a distintas horas, no un solo corte). |
+
+**Limpieza automática** (`salud.limpiar`, la corre `verificar_fuentes` después
+de verificar, cada 6 h): un canal cuyas fuentes prendidas están **todas
+muertas** se quita de la app con el motivo ("Limpieza automática: ninguna
+fuente anduvo en 7 días (la dirección ya no existe)..."). **Nunca se borra
+nada**: el servidor lo sigue probando y, si alguna fuente vuelve a andar, el
+canal **vuelve solo**. Lo que se quitó a mano no lo toca. "Volver a mostrar"
+le da otra semana entera (`salud.olvidar_fallas`). Queda anotado en la
+Actividad qué se quitó y qué volvió.
+
+**Señales sueltas (desde el 19/10/2026):** si un canal sigue andando con
+otras señales, la que está muerta no lo tira: se **retira** sola
+(`salud.retirar_senales`, `Fuente.retirada`): queda apagada, la app ya no la
+recibe ni pierde tiempo probándola. El servidor (y el modo revisión) la sigue
+probando y, si vuelve a andar, **vuelve sola** (`salud.devolver_senales`).
+Si después mueren también las otras, se quita el canal entero, y vuelve con
+cualquiera que reviva. Lo apagado a mano no vuelve solo. Borrar es siempre a
+mano.
+
+**Cada señal, a mano** (Organizar contenido → Detalles; `views_revisar.fuente_accion`,
+`/canales/fuentes/<id>/accion/`), aunque el canal se vea:
+
+- **Probar ahora**: el servidor la prueba en el momento (si estaba retirada y anda, vuelve).
+- **Quitar esta señal**: la app deja de usarla (como apagarla a mano; no vuelve sola). No se borra.
+- **Volver a mostrar esta señal**: aparece si está apagada, retirada, caída,
+  oculta por los aparatos o fallando. Se prende, deja de estar escondida, si
+  estaba caída queda "sin verificar" y se le da otra semana entera.
+- **Borrar esta señal** (ya estaba): para siempre.
+
+En Organizar, **Mostrar → "Se ve, pero tiene señales que no andan"** lista
+esos canales, y su tarjeta dice "Se ve en la app · 2 de 4 señales". "Volver a
+mostrar" de un canal entero también devuelve sus señales retiradas.
+
+Las fuentes que hoy funcionan arrancaron con `anduvo` en su última
+verificación (migración 0026). Las caídas arrancan de cero: nada se quita por
+datos de antes; la primera limpieza posible es una semana después de desplegar.
+
+**Dónde se ve:** en Organizar contenido → panel de detalles, el canal tiene
+la fila **Salud** y cada señal su línea "Salud: Falla hace 2 días (no
+responde a tiempo). Si sigue así hasta el 26/10, se da por muerta. Últimas
+pruebas: ✓✓✗✗." La salida del cron (`/var/log/kairostv-cron.log`) dice cuántos
+quitó, cuántos volvieron y cuántos canales hay en cada estado.
+
+### Para revisar (la bandeja del panel)
+
+`/canales/revisar/` (Contenido → Tu catálogo → **Para revisar**; `bandeja.py`):
+SOLO lo que necesita una decisión, por sección (En vivo, Películas, Series...),
+con **lo más visto por los clientes en 30 días primero** y la acción ahí mismo:
+
+| Grupo | Acciones |
+|---|---|
+| El proveedor los rechaza | Quitar · Dejar así |
+| Fallan ahora (todavía no pasó la semana) | Probar de nuevo (el servidor, en el momento) · Quitar · Dejar así |
+| A veces andan y a veces no | Quitar · Dejar así |
+| Algunos aparatos no los pueden leer | Dejar así · Quitar |
+| Los quitó la limpieza | Volver a mostrar |
+| Señales retiradas (el canal sigue andando con otras) | Volver a mostrar · **Borrar las retiradas** (para siempre; las direcciones quedan en la Actividad) |
+
+Cada grupo muestra 10 (con "Ver los N") y tiene la acción para todos juntos.
+En Series cada caso es una serie (sus capítulos en ese estado). **Dejar así**
+(`Canal.revisado`) lo saca de la bandeja mientras siga en ese estado; si
+cambia, vuelve a aparecer. "Sin datos" no se lista (son muchos y no hay nada
+que decidir): los prueba el modo revisión.
+
+**Cómo está cada lista:** las fuentes de la sección según la lista de donde
+vinieron (andan, fallan, muertas, sin datos, apagadas), las más caídas
+primero; "Casi toda caída" desde el 50 % (con 10 fuentes o más). **Apagar
+todas** apaga todas las fuentes de esa lista (los canales con otra fuente
+buena siguen andando); **Volver a prender** lo deshace (prende también las que
+se habían apagado de a una). El nombre de la lista abre Organizar filtrado por ella.
+
+### El modo revisión (en la app)
+
+Un usuario del panel con permiso para cargar canales deja una TV o un celular
+**en una casa** recorriendo los canales solo (app 1.2.30: celular → Mi Espacio
+→ Revisar canales; TV → Mi cuenta). Es lo que el servidor no puede hacer con
+los Xtream: desde una casa entregan la señal. `recorrido.py` le da las
+próximas fuentes (en vivo primero; dentro de eso, lo quitado o retirado por
+la limpieza, lo que falla, lo nunca visto y lo demás; ni YouTube ni páginas, ni lo que un
+cliente vio andar en 12 h, ni lo que ya probó en 20 h) y anota lo que
+encontró en la salud (`Fuente.recorrida`). Si anda una fuente de un canal
+quitado por la limpieza, el canal vuelve en el momento; si el servidor la
+tenía caída (no la podía ver), pasa a "sin verificar" para que la app la
+intente. La app va de a una y suelta la conexión antes de la siguiente (ver
+`app_movil/lib/revision/README.md`).
+
 ## Formato M3U (resumen)
 
 ```
@@ -469,6 +609,5 @@ https://servidor/canal26/main.m3u8
 ## Pendiente (próximas etapas)
 
 - Qué canales ve cada cliente según su plan / créditos.
-- Verificación periódica automática (cron con `verificar_fuentes`).
 - Secciones de películas y series en la app (agrupar capítulos por serie y temporada).
 - Guía de programación (EPG) con el `tvg-id`.

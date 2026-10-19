@@ -3,6 +3,8 @@
 /// preferencias: volver al último canal al abrir, modo de video, "Lo que no
 /// se ve en esta TV" (qué esconde este aparato y por qué, con volver a
 /// mostrarlo o probarlo igual), favoritos, buscar actualizaciones y cerrar sesión.
+/// Un usuario del panel que puede cargar canales tiene además "Revisar
+/// canales" (el modo revisión, lib/revision/).
 library;
 
 import 'package:flutter/material.dart';
@@ -13,6 +15,7 @@ import '../aparato.dart';
 import '../movil/componentes.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
+import '../revision/pantalla_recorrido.dart';
 import '../sesion.dart';
 import 'estructura.dart';
 import 'foco.dart';
@@ -240,6 +243,18 @@ class CuentaTv extends StatelessWidget {
                             alOk: () => NavegacionTv.of(context).irA(SeccionTv.favoritos),
                           ),
                           const SizedBox(height: 14),
+                          if (!sesion.esCliente && (perfil?.puede('importar_canales') ?? false)) ...[
+                            BotonTv(
+                              texto: 'Revisar canales (modo revisión)',
+                              icono: Icons.fact_check_rounded,
+                              ancho: double.infinity,
+                              alOk: () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(builder: (_) => const PantallaRecorrido()),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
                           BotonTv(
                             texto: 'Buscar actualizaciones',
                             icono: Icons.system_update_rounded,

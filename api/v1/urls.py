@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from . import app, auth, biblioteca, canales, cliente, notificaciones, perfil, usuarios
+from . import app, auth, biblioteca, canales, cliente, notificaciones, perfil, recorrido, usuarios
 
 app_name = 'api_v1'
 
@@ -58,6 +58,7 @@ urlpatterns = [
     path('canales/fuentes/<int:pk>/estabilidad/', canales.estabilidad, name='fuente_estabilidad'),
     path('canales/visto/', canales.visto, name='canales_visto'),
     path('canales/fuentes/<int:pk>/resolver/', canales.resolver, name='fuente_resolver'),
+    path('canales/recorrido/', recorrido.recorrer, name='canales_recorrido'),
 
     # La última versión de la app (para avisar que hay una nueva)
     path('app/', app.ultima_version, name='app'),

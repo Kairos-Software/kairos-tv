@@ -171,7 +171,37 @@ class VerificarUrlTests(TestCase):
                          (SIN_VERIFICAR, 'directo', USER_AGENT_VLC))
         self.assertEqual(len(self.pedidos), 3)
         self.assertTrue(all(pedido[1]['User-Agent'] == USER_AGENT_VLC for pedido in self.pedidos))
-        self.assertTrue(all(pedido[1]['Range'] == 'bytes=0-65535' for pedido in self.pedidos))
+        # En vivo no hay "principio" que pedir: sin Range, como VLC
+        self.assertTrue(all('Range' not in pedido[1] for pedido in self.pedidos))
+
+    def test_xtream_en_vivo_que_rechaza_al_vps_se_carga_sin_verificar(self):
+        """
+        El canal anda en VLC y en la app, pero al VPS lo rechaza: bloquea las IP
+        de servidores, o la cuenta (de una sola conexión) la está usando la app
+        con otra fuente justo cuando el servidor vuelve a probar esta.
+        """
+        for url in ('http://panel:8080/usuario/clave/444969', 'http://panel:8080/live/usuario/clave/444969.ts'):
+            for respuesta in (urllib.error.HTTPError(url, 403, 'no', {}, None),
+                              urllib.error.HTTPError(url, 401, 'no', {}, None),
+                              urllib.error.HTTPError(url, 503, 'no', {}, None),
+                              ConnectionResetError(), b'<html>Max connections</html>'):
+                self.pedidos = []
+                with self.respuestas({url: respuesta}), mock.patch.object(verificacion, '_esperar'):
+                    resultado = verificacion.verificar_url(url)
+                self.assertEqual((resultado.estado, resultado.tipo), (SIN_VERIFICAR, 'directo'), (url, respuesta))
+
+    def test_xtream_en_vivo_que_ya_no_existe_queda_caido(self):
+        url = 'http://panel:8080/live/usuario/clave/444969.ts'
+        with self.respuestas({url: urllib.error.HTTPError(url, 404, 'no', {}, None)}):
+            resultado = verificacion.verificar_url(url)
+        self.assertEqual(resultado.estado, CAIDA)
+
+    def test_una_pelicula_xtream_rechazada_sigue_caida_y_pide_un_rango(self):
+        url = 'http://panel:8080/movie/usuario/clave/123.mp4'
+        with self.respuestas({url: urllib.error.HTTPError(url, 403, 'no', {}, None)}):
+            resultado = verificacion.verificar_url(url, 'directo')
+        self.assertEqual(resultado.estado, CAIDA)
+        self.assertEqual(self.pedidos[0][1]['Range'], 'bytes=0-65535')
 
     def test_solo_reconoce_rutas_con_formato_xtream(self):
         for url in (

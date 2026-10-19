@@ -45,7 +45,7 @@ from herramientas.excel import TIPO_XLSX
 from usuarios.decoradores import requiere_permiso
 from usuarios.permisos import chequear_permiso
 
-from . import consultas, estadisticas, exportar, imagenes, organizar, secciones, servicios, youtube
+from . import consultas, estadisticas, exportar, imagenes, organizar, salud, secciones, servicios, youtube
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
 from .forms import (CanalForm, CanalNuevoForm, EditarDesdeOrganizarForm, FuentesFormSet, ImportarListaForm,
                     ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
@@ -529,7 +529,8 @@ def _origenes_de(fuentes, importaciones, borrables=True):
     Para el detalle y la edición rápida: cada señal en el orden en que la
     prueba la app (`orden`), de dónde salió (lista, canal de YouTube, a mano),
     el link completo y sus datos técnicos: cómo está, calidad, códec, el
-    error, cuándo se probó, cómo anda en los aparatos y si está oculta.
+    error, cuándo se probó, cómo anda en los aparatos, si está oculta y su
+    salud (salud.py: cómo anduvo en sus últimas pruebas).
     `borrables`: se puede borrar de a una (en una serie no: cada origen junta
     las de muchos capítulos).
     """
@@ -540,6 +541,14 @@ def _origenes_de(fuentes, importaciones, borrables=True):
              'oculta': (f'Oculta hasta el {_fecha(f.oculta_hasta)} (después vuelve sola): {f.falla_en_aparatos}'
                         if f.oculta_por_aparatos else ''),
              'aviso_codec': _aviso_de_codec(f.codec),
+             'salud': salud.texto_de_fuente(f),
+             'salud_mal': salud.de_fuente(f) in (salud.Salud.FALLA, salud.Salud.RECHAZA, salud.Salud.MUERTA),
+             'retirada': (f'Retirada sola el {_fecha(f.retirada)}: no anduvo en {salud.DIAS_PARA_QUITAR} días y el '
+                          f'canal sigue con sus otras señales. Si vuelve a andar, vuelve sola.' if f.retirada and not f.activa
+                          else ''),
+             # Los botones de cada señal (Quitar / Volver a mostrar / Probar ahora: views_revisar.fuente_accion)
+             'se_puede_mostrar': (not f.activa or f.estado == Fuente.Estado.CAIDA or f.oculta_por_aparatos
+                                  or f.fallas_seguidas > 0),
              'borrable': borrables,
              'importacion': importaciones.get(f.origen, '')} for orden, f in enumerate(fuentes, start=1)]
 
@@ -564,6 +573,7 @@ def _datos_del_canal(canal, usuarios):
         ('Cargado', con_quien(canal.creado, canal.creado_por_id)),
         ('Último cambio', con_quien(canal.modificado, canal.modificado_por_id)),
         ('Por qué se quitó', '' if canal.activo else canal.motivo_quitado or 'Quitado a mano.'),
+        ('Salud', salud.texto_de_canal(canal.fuentes.all())),
     ]
     return [fila for fila in filas if fila[1]]
 
@@ -613,6 +623,7 @@ def _preparar_para_editar(pagina, contenido):
     parejos, rotos = imagenes.logos_parejos(logos), imagenes.logos_rotos(logos)
     for canal in pagina:
         canal.no_se_ve = consultas.por_que_no_se_ve(canal)
+        canal.senales_en_app = canal.fuentes_total - canal.fuentes_fuera   # "Se ve en la app · 2 de 4 señales"
         canal.logo_ver = imagenes.logo_para_mostrar(canal.logo, parejos)
         datos = _datos_del_canal(canal, usuarios)
         if canal.logo in rotos:

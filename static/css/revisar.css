@@ -1,0 +1,44 @@
+/* Contenido → Para revisar (canales/revisar.html): la bandeja con lo que necesita una decisión */
+
+.revisar-estados dd { margin-bottom: 0; }
+.revisar-estado-anda dd { color: var(--verde) !important; }
+.revisar-estado-inestable dd, .revisar-estado-formato dd { color: var(--dorado) !important; }
+.revisar-estado-rechaza dd, .revisar-estado-falla dd { color: var(--rubi-claro) !important; }
+
+.revisar-vacio { display: flex; align-items: center; gap: 1rem; }
+.revisar-vacio > i { font-size: 2rem; color: var(--verde); }
+
+.revisar-grupo { border-left: 3px solid var(--borde-fuerte); }
+.revisar-grupo-rechaza, .revisar-grupo-falla { border-left-color: var(--rubi); }
+.revisar-grupo-inestable, .revisar-grupo-formato { border-left-color: var(--dorado); }
+.revisar-grupo-quitados, .revisar-grupo-senales { border-left-color: var(--celeste); }
+
+.revisar-grupo-encabezado {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: .75rem;
+    margin-bottom: 1rem;
+}
+.revisar-grupo-encabezado > div { flex: 1 1 22rem; min-width: 0; }
+.revisar-todos { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+.revisar-casos { list-style: none; margin: 0; padding: 0; }
+.revisar-caso {
+    display: flex; align-items: flex-start; gap: .85rem;
+    padding: .8rem 0; border-top: 1px solid var(--borde);
+}
+.revisar-caso:first-child { border-top: 0; padding-top: 0; }
+.revisar-caso .logo-mini { flex: 0 0 auto; }
+.revisar-caso-cuerpo { flex: 1 1 auto; min-width: 0; }
+.revisar-caso-nombre { font-weight: 600; word-break: break-word; }
+.revisar-caso-meta { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .8rem; margin-top: .15rem; }
+.revisar-caso-meta span { word-break: break-word; }
+.revisar-visto { color: var(--celeste-claro); }
+.revisar-caso-detalle { font-size: .82rem; margin-top: .3rem; color: var(--texto-suave); word-break: break-word; }
+.revisar-caso-acciones { flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; max-width: 22rem; }
+
+.revisar-listas td { vertical-align: middle; }
+.revisar-listas form { display: inline-flex; gap: .35rem; margin: 0; }
+
+@media (max-width: 767.98px) {
+    .revisar-caso { flex-wrap: wrap; }
+    .revisar-caso-acciones { flex-basis: 100%; justify-content: flex-start; max-width: none; padding-left: 3.1rem; }
+}

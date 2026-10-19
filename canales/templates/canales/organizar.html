@@ -379,7 +379,7 @@
                         {% if contenido == 'serie' %}
                         <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% endif %}
                         {% else %}
-                        {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<span class="estado-mal" title="{{ item.no_se_ve }}">No se ve</span>{% else %}Se ve en la app{% endif %}
+                        {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<span class="estado-mal" title="{{ item.no_se_ve }}">No se ve</span>{% else %}Se ve en la app{% if item.fuentes_fuera %} · <span class="estado-mal" title="Las otras están caídas, ocultas, quitadas o retiradas: mirá Detalles">{{ item.senales_en_app }} de {{ item.fuentes_total }} señales</span>{% endif %}{% endif %}
                         {% endif %}
                     </span>
                     {% if puede_editar %}</label>{% else %}</div>{% endif %}
@@ -629,6 +629,11 @@
 {% if puede_editar %}
 <form method="post" id="form-borrar-senal" data-url="{% url 'canales:fuente_borrar' 0 %}" hidden>
     {% csrf_token %}
+    <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+</form>
+<form method="post" id="form-accion-senal" data-url="{% url 'canales:fuente_accion' 0 %}" hidden>
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="">
     <input type="hidden" name="volver" value="{{ request.get_full_path }}">
 </form>
 {% endif %}

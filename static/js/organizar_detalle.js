@@ -5,8 +5,10 @@
  * de ella: si se ve en la app (y si no, por qué), sus datos (sección,
  * categoría, idioma, quién la cargó y cuándo...) y cada señal en el orden en
  * que la prueba la app: de qué lista o link salió, el link completo (para
- * copiar), formato, estado, calidad, error, cómo anda en los aparatos y si
- * está oculta. Cada señal tiene "Borrar esta señal" (borra solo esa).
+ * copiar), formato, estado, calidad, error, cómo anda en los aparatos, si
+ * está oculta y su salud (cómo anduvo en sus últimas pruebas: canales/salud.py).
+ * Cada señal tiene sus botones: "Probar ahora", "Quitar esta señal" o "Volver a
+ * mostrar esta señal" (aunque el canal se vea con las otras) y "Borrar esta señal". Cada señal tiene "Borrar esta señal" (borra solo esa).
  * Muestra la última tarjeta que se tocó; los datos salen del data-datos del
  * botón Editar de la tarjeta (los arma views._preparar_para_editar).
  *
@@ -17,6 +19,7 @@
     'use strict';
 
     var formBorrar = document.getElementById('form-borrar-senal');
+    var formAccion = document.getElementById('form-accion-senal');
 
     function crear(etiqueta, clase, texto) {
         var elemento = document.createElement(etiqueta);
@@ -33,6 +36,26 @@
         if (!window.confirm(pregunta)) return;
         formBorrar.action = formBorrar.dataset.url.replace('/0/', '/' + senal.id + '/');
         formBorrar.submit();
+    }
+
+    /** Quitar, volver a mostrar o probar ahora UNA señal (canales/views_revisar.fuente_accion). */
+    function accion(senal, datos, cual) {
+        if (cual === 'quitar' && !window.confirm('¿Quitar la señal ' + senal.orden + ' (' + senal.origen + ') de «' +
+                datos.nombre + '»?\n\nLa app deja de usarla. No se borra: «Volver a mostrar esta señal» la devuelve.')) {
+            return;
+        }
+        formAccion.action = formAccion.dataset.url.replace('/0/', '/' + senal.id + '/');
+        formAccion.elements.accion.value = cual;
+        formAccion.submit();
+    }
+
+    function botonDeAccion(texto, icono, clase, alTocar) {
+        var boton = crear('button', 'btn btn-sm btn-outline-secondary' + (clase ? ' ' + clase : ''));
+        boton.type = 'button';
+        boton.innerHTML = '<i class="bi ' + icono + '" aria-hidden="true"></i> ';
+        boton.appendChild(document.createTextNode(texto));
+        boton.addEventListener('click', alTocar);
+        return boton;
     }
 
     function copiar(boton, texto) {
@@ -59,7 +82,7 @@
             cabeza.appendChild(origen);
             if (f.estado) {
                 cabeza.appendChild(crear('span', 'senal-estado' + (f.caida ? ' estado-mal' : ''),
-                    f.estado + (f.activa ? '' : ' · apagada a mano')));
+                    f.estado + (f.activa ? '' : (f.retirada ? ' · retirada' : ' · apagada a mano'))));
             }
             li.appendChild(cabeza);
             var tecnico = [f.tipo, f.calidad, f.codec && !f.calidad ? 'códec ' + f.codec : ''].filter(Boolean).join(' · ');
@@ -68,6 +91,8 @@
             if (f.probada) li.appendChild(crear('div', 'senal-dato', 'Probada por el servidor el ' + f.probada));
             if (f.aparatos) li.appendChild(crear('div', 'senal-dato', 'En los aparatos: ' + f.aparatos));
             if (f.oculta) li.appendChild(crear('div', 'senal-dato estado-mal', f.oculta));
+            if (f.retirada) li.appendChild(crear('div', 'senal-dato estado-mal', f.retirada));
+            if (f.salud) li.appendChild(crear('div', 'senal-dato' + (f.salud_mal ? ' estado-mal' : ''), 'Salud: ' + f.salud));
             if (f.aviso_codec) li.appendChild(crear('div', 'senal-dato senal-aviso', f.aviso_codec));
             if (f.url) {
                 var enlace = crear('a', 'direccion', f.url);
@@ -82,6 +107,16 @@
                 botonCopiar.type = 'button';
                 botonCopiar.addEventListener('click', function () { copiar(botonCopiar, f.url); });
                 botones.appendChild(botonCopiar);
+            }
+            // En una serie cada señal junta las de muchos capítulos: ahí no van (como Borrar)
+            if (formAccion && f.borrable && f.id) {
+                botones.appendChild(botonDeAccion('Probar ahora', 'bi-arrow-repeat', '', function () { accion(f, datos, 'probar'); }));
+                if (f.se_puede_mostrar) {
+                    botones.appendChild(botonDeAccion('Volver a mostrar esta señal', 'bi-eye', '', function () { accion(f, datos, 'mostrar'); }));
+                }
+                if (f.activa) {
+                    botones.appendChild(botonDeAccion('Quitar esta señal', 'bi-eye-slash', 'text-danger', function () { accion(f, datos, 'quitar'); }));
+                }
             }
             if (formBorrar && f.borrable && f.id) {
                 var botonBorrar = crear('button', 'btn btn-sm btn-outline-secondary text-danger');
@@ -158,7 +193,7 @@
         panel.querySelector('[data-detalle-cuantas]').textContent = datos.fuentes.length;
         panel.querySelector('[data-detalle-ayuda]').textContent = esSerie
             ? 'Una por cada lista o canal de donde salieron sus capítulos. Para ver o borrar las de un capítulo, entrá a «Ver y ordenar capítulos».'
-            : 'La app prueba la 1 y, si no anda, pasa a la siguiente. Si una no funciona, borrala: las otras quedan.';
+            : 'La app prueba la 1 y, si no anda, pasa a la siguiente. Si una no anda, quitala (la podés volver a mostrar) o borrala: las otras quedan. Las que no andan en una semana se retiran solas.';
         pintar(panel.querySelector('[data-detalle-senales]'), datos);
 
         var mas = panel.querySelector('[data-detalle-mas]');

@@ -198,7 +198,7 @@ class ControlSenal extends ChangeNotifier {
   /// Cuánto se espera a que arranque esta fuente.
   Duration _esperaInicio(FuenteCanal fuente) => esperaDeArranque(enVivo: _enVivo, tipo: fuente.tipo);
 
-  @visibleForTesting
+  /// La usa también el modo revisión (lib/revision/), para esperar lo mismo que un cliente.
   static Duration esperaDeArranque({required bool enVivo, required String tipo}) {
     if (!enVivo) return _esperaArchivo;
     return tipo == 'directo' ? _esperaVivoDirecto : _esperaVivo;

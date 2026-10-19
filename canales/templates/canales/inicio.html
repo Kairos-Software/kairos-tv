@@ -45,11 +45,16 @@
             <span class="seccion-sobrelinea">Estado actual</span>
             <h2 id="resumen-titulo">Tu catálogo</h2>
         </div>
-        {% if permisos.ver_estadisticas %}
-        <a href="{% url 'canales:lo_mas_visto' %}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Ver consumo
-        </a>
-        {% endif %}
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'canales:revisar' %}" class="btn btn-sm btn-outline-secondary" title="Solo lo que necesita tu decisión: lo demás se arregla solo">
+                <i class="bi bi-clipboard-check" aria-hidden="true"></i> Para revisar
+            </a>
+            {% if permisos.ver_estadisticas %}
+            <a href="{% url 'canales:lo_mas_visto' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Ver consumo
+            </a>
+            {% endif %}
+        </div>
     </div>
     <div class="resumen-contenidos">
         {% for bloque in resumen.por_contenido %}

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../pantallas/notificaciones.dart';
 import '../pantallas/perfil.dart';
 import '../pantallas/usuarios_lista.dart';
+import '../revision/pantalla_recorrido.dart';
 import '../sesion.dart';
 import '../utiles.dart';
 import 'componentes.dart';
@@ -324,7 +325,8 @@ class _Continuar extends StatelessWidget {
   }
 }
 
-/// Para los usuarios del panel (no los clientes): perfil, usuarios, avisos.
+/// Para los usuarios del panel (no los clientes): perfil, usuarios, avisos y
+/// el modo revisión (lib/revision/), si pueden cargar canales.
 class _HerramientasDelPanel extends StatelessWidget {
   const _HerramientasDelPanel();
 
@@ -349,6 +351,12 @@ class _HerramientasDelPanel extends StatelessWidget {
             texto: 'Avisos',
             alTocar: () => abrir(PantallaNotificaciones(alCambiar: (_) {})),
           ),
+          if (perfil.puede('importar_canales'))
+            _Opcion(
+              icono: Icons.fact_check_rounded,
+              texto: 'Revisar canales',
+              alTocar: () => abrir(const PantallaRecorrido()),
+            ),
         ],
       ),
     );

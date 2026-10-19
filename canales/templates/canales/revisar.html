@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% load static canales_extras %}
+{% comment %}
+    Para revisar: SOLO lo que necesita una decisión (lo normal se arregla solo, ver canales/salud.py), agrupado
+    por motivo y con lo más visto primero, cada caso con su acción ahí mismo; y cómo está cada lista de origen.
+    Lo arma canales/bandeja.py; las acciones van a views_revisar.decidir y views_revisar.lista.
+{% endcomment %}
+
+{% block titulo %}Para revisar{% endblock %}
+{% block clase_body %}pagina-listado pagina-revisar{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/revisar.css' %}">{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado">
+    <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
+    <h1 class="pagina-titulo">Para revisar</h1>
+    <p class="pagina-bajada">Lo normal se arregla solo: lo que no anda en {{ dias_para_quitar }} días se quita solo y lo que vuelve a andar vuelve solo. Acá queda solo lo que necesita tu decisión, con lo más visto por tus clientes primero.</p>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<nav class="pestanias contenido-pestanias mb-4" aria-label="Sección">
+    {% for clave, nombre in secciones %}
+    <a href="?contenido={{ clave }}" {% if clave == contenido %}class="activa" aria-current="page"{% endif %}>{{ nombre }}</a>
+    {% endfor %}
+</nav>
+
+<section class="tarjeta mb-4" aria-label="Cómo están">
+    <dl class="ficha-datos resumen-metricas revisar-estados">
+        {% for nombre, cantidad, clave in estados %}
+        <div class="revisar-estado-{{ clave }}"><dt>{{ nombre }}</dt><dd class="dato fs-4">{{ cantidad }}</dd></div>
+        {% endfor %}
+        <div class="revisar-estado-quitados"><dt>Quitados por la limpieza</dt><dd class="dato fs-4">{{ quitados }}</dd></div>
+    </dl>
+    <p class="texto-suave small mb-0 mt-3">{% if es_serie %}Cuenta capítulos.{% else %}Cuenta {{ nombre_seccion|lower }} cargados que no quitaste a mano.{% endif %} «Sin datos»: nadie los vio todavía y el servidor no puede probarlos (los paneles Xtream lo bloquean); los va a probar el modo revisión de la app.</p>
+</section>
+
+{% if not pendientes %}
+<section class="tarjeta mb-4 revisar-vacio">
+    <i class="bi bi-check2-circle" aria-hidden="true"></i>
+    <div><strong>Nada para revisar en {{ nombre_seccion }}.</strong><br><span class="texto-suave">Todo lo demás se está arreglando solo.</span></div>
+</section>
+{% endif %}
+
+{% for grupo in grupos %}{% if grupo.casos %}
+<section class="tarjeta mb-4 revisar-grupo revisar-grupo-{{ grupo.clave }}" id="grupo-{{ grupo.clave }}">
+    <div class="revisar-grupo-encabezado">
+        <div>
+            <h2 class="tarjeta-titulo mb-1">{{ grupo.titulo }} <span class="texto-suave fw-normal">· {{ grupo.cantidad }}</span></h2>
+            <p class="texto-suave small mb-0">{{ grupo.explicacion }}</p>
+        </div>
+        {% if puede_decidir and grupo.cantidad > 1 %}
+        <form method="post" action="{% url 'canales:revisar_decidir' %}" class="revisar-todos">
+            {% csrf_token %}
+            <input type="hidden" name="contenido" value="{{ contenido }}">
+            <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+            {% for caso in grupo.casos %}{% for pk in caso.pks %}<input type="hidden" name="canal" value="{{ pk }}">{% endfor %}{% endfor %}
+            {% if 'quitar' in grupo.acciones %}<button type="submit" name="accion" value="quitar" class="btn btn-sm btn-outline-secondary text-danger" data-confirmar="¿Quitar de la app los {{ grupo.cantidad }} de «{{ grupo.titulo }}»? No se borran: quedan en Organizar como quitados.">Quitar los {{ grupo.cantidad }}</button>{% endif %}
+            {% if 'mostrar' in grupo.acciones %}<button type="submit" name="accion" value="mostrar" class="btn btn-sm btn-outline-secondary" data-confirmar="¿Volver a mostrar los {{ grupo.cantidad }}?">Mostrar los {{ grupo.cantidad }}</button>{% endif %}
+            {% if 'dejar' in grupo.acciones %}<button type="submit" name="accion" value="dejar" class="btn btn-sm btn-outline-secondary" data-confirmar="¿Dejar así los {{ grupo.cantidad }}? No vuelven a aparecer acá mientras sigan igual.">Dejar así los {{ grupo.cantidad }}</button>{% endif %}
+            {% if 'borrar_retiradas' in grupo.acciones %}<button type="submit" name="accion" value="borrar_retiradas" class="btn btn-sm btn-outline-secondary text-danger" data-confirmar="¿Borrar PARA SIEMPRE las señales retiradas de los {{ grupo.cantidad }}? Los canales siguen con sus otras señales. Las direcciones quedan anotadas en la Actividad.">Borrar las retiradas de los {{ grupo.cantidad }}</button>{% endif %}
+        </form>
+        {% endif %}
+    </div>
+    <ul class="revisar-casos">
+        {% for caso in grupo.mostrados %}
+        <li class="revisar-caso">
+            <span class="logo-mini" data-iniciales="{{ caso.nombre|iniciales }}">{% if caso.logo %}<img src="{{ caso.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ caso.nombre|iniciales }}{% endif %}</span>
+            <div class="revisar-caso-cuerpo">
+                <a href="{% url 'canales:organizar' %}?contenido={{ contenido }}&amp;q={{ caso.buscar|urlencode }}" class="revisar-caso-nombre" title="Abrir en Organizar contenido">{{ caso.nombre }}</a>
+                <div class="revisar-caso-meta texto-suave">
+                    {% if caso.minutos %}<span class="revisar-visto"><i class="bi bi-eye" aria-hidden="true"></i> {{ caso.minutos }} min mirados en 30 días</span>{% else %}<span>Nadie lo miró en 30 días</span>{% endif %}
+                    {% if caso.categoria %}<span>{{ caso.categoria }}</span>{% endif %}
+                    {% if caso.origenes %}<span>De: {{ caso.origenes|join:", " }}</span>{% endif %}
+                </div>
+                {% if caso.detalle %}<div class="revisar-caso-detalle">{{ caso.detalle }}</div>{% endif %}
+            </div>
+            {% if puede_decidir %}
+            <form method="post" action="{% url 'canales:revisar_decidir' %}" class="revisar-caso-acciones">
+                {% csrf_token %}
+                <input type="hidden" name="contenido" value="{{ contenido }}">
+                <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+                {% for pk in caso.pks %}<input type="hidden" name="canal" value="{{ pk }}">{% endfor %}
+                {% for accion in grupo.acciones %}
+                {% if accion == 'probar' %}<button type="submit" name="accion" value="probar" class="btn btn-sm btn-outline-secondary" title="El servidor lo prueba ahora (unos segundos)"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Probar de nuevo</button>
+                {% elif accion == 'quitar' %}<button type="submit" name="accion" value="quitar" class="btn btn-sm btn-outline-secondary text-danger"><i class="bi bi-eye-slash" aria-hidden="true"></i> Quitar</button>
+                {% elif accion == 'mostrar' %}<button type="submit" name="accion" value="mostrar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye" aria-hidden="true"></i> Volver a mostrar</button>
+                {% elif accion == 'dejar' %}<button type="submit" name="accion" value="dejar" class="btn btn-sm btn-outline-secondary" title="No vuelve a aparecer acá mientras siga igual"><i class="bi bi-check2" aria-hidden="true"></i> Dejar así</button>
+                {% elif accion == 'borrar_retiradas' %}<button type="submit" name="accion" value="borrar_retiradas" class="btn btn-sm btn-outline-secondary text-danger" data-confirmar="¿Borrar para siempre las señales retiradas de «{{ caso.nombre }}»? Sus otras señales quedan."><i class="bi bi-trash" aria-hidden="true"></i> Borrar las retiradas</button>{% endif %}
+                {% endfor %}
+            </form>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% if grupo.mostrados|length < grupo.cantidad %}
+    <a href="?contenido={{ contenido }}&amp;grupo={{ grupo.clave }}#grupo-{{ grupo.clave }}" class="btn btn-sm btn-outline-secondary mt-3">Ver los {{ grupo.cantidad }}</a>
+    {% endif %}
+</section>
+{% endif %}{% endfor %}
+
+{% if listas %}
+<section class="tarjeta p-0 mb-4" id="listas">
+    <h2 class="tarjeta-titulo px-4 pt-4 mb-1">Cómo está cada lista</h2>
+    <p class="texto-suave small px-4">Las fuentes de {{ nombre_seccion }} según la lista de donde vinieron, las más caídas primero. Si una lista está casi toda caída, podés apagar todas sus fuentes de una: los canales que tienen otra fuente buena siguen andando.</p>
+    <div class="table-responsive">
+        <table class="table tabla mb-0 revisar-listas">
+            <thead><tr>
+                <th scope="col">Lista</th>
+                <th scope="col" class="text-end">Fuentes</th>
+                <th scope="col" class="text-end">Andan</th>
+                <th scope="col" class="text-end">Fallan</th>
+                <th scope="col" class="text-end">Muertas</th>
+                <th scope="col" class="text-end">Sin datos</th>
+                <th scope="col" class="text-end">Apagadas</th>
+                {% if puede_decidir %}<th scope="col"><span class="visually-hidden">Acción</span></th>{% endif %}
+            </tr></thead>
+            <tbody>
+            {% for l in listas %}
+                <tr>
+                    <td>
+                        {% if l.origen %}<a href="{% url 'canales:organizar' %}?contenido={{ contenido }}&amp;origen={{ l.origen|urlencode }}" title="Ver lo de esta lista en Organizar">{{ l.origen }}</a>{% else %}<span class="texto-suave">No se sabe</span>{% endif %}
+                        {% if l.casi_toda_caida %}<span class="chip chip-no ms-1">Casi toda caída ({{ l.parte_caida }} %)</span>{% endif %}
+                    </td>
+                    <td class="dato text-end">{{ l.fuentes }}</td>
+                    <td class="dato text-end estado-bien">{{ l.andan }}{% if l.prendidas %} <span class="texto-suave">({{ l.parte_que_anda }} %)</span>{% endif %}</td>
+                    <td class="dato text-end{% if l.fallan %} estado-mal{% endif %}">{{ l.fallan }}</td>
+                    <td class="dato text-end{% if l.muertas %} estado-mal{% endif %}">{{ l.muertas }}</td>
+                    <td class="dato text-end">{{ l.sin_datos }}</td>
+                    <td class="dato text-end">{{ l.apagadas }}</td>
+                    {% if puede_decidir %}
+                    <td class="text-end text-nowrap">{% if l.origen %}
+                        <form method="post" action="{% url 'canales:revisar_lista' %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="contenido" value="{{ contenido }}">
+                            <input type="hidden" name="origen" value="{{ l.origen }}">
+                            <input type="hidden" name="volver" value="{{ request.get_full_path }}#listas">
+                            {% if l.prendidas %}<button type="submit" name="accion" value="apagar" class="btn btn-sm btn-outline-secondary text-danger" data-confirmar="¿Apagar las {{ l.prendidas }} fuentes de «{{ l.origen }}»? Los canales que solo tenían esas dejan de verse en la app. Se puede deshacer con «Volver a prender».">Apagar todas</button>{% endif %}
+                            {% if l.apagadas %}<button type="submit" name="accion" value="prender" class="btn btn-sm btn-outline-secondary" data-confirmar="¿Volver a prender las {{ l.apagadas }} fuentes apagadas de «{{ l.origen }}»? (También las que apagaste de a una.)">Volver a prender</button>{% endif %}
+                        </form>
+                    {% endif %}</td>
+                    {% endif %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.querySelectorAll('[data-confirmar]').forEach(function (boton) {
+        boton.addEventListener('click', function (evento) {
+            if (!window.confirm(boton.dataset.confirmar)) evento.preventDefault();
+        });
+    });
+</script>
+{% endblock %}

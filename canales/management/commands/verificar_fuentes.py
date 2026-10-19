@@ -13,6 +13,12 @@ que llega cada una): así la app arranca por la mejor de cada canal. No hay
 que hacer nada a mano: tanda a tanda quedan todas medidas y se renuevan solas.
 --medir lo hace a cualquier hora.
 
+Después hace la LIMPIEZA AUTOMÁTICA (canales/salud.py): quita de la app los
+canales cuyas fuentes no anduvieron en una semana (a distintas horas, no un
+corte), retira las señales muertas de los canales que siguen andando con
+otras, y devuelve lo que había quitado o retirado y volvió a andar. Nunca
+borra nada.
+
 También prepara los logos parejos que falten (imagenes.emparejar_logos: sin
 el borde vacío que traen, para que todos queden centrados igual en su
 tarjeta), hasta 4 minutos por pasada.
@@ -27,7 +33,7 @@ from functools import partial
 
 from django.core.management.base import BaseCommand
 
-from canales import imagenes
+from canales import imagenes, salud
 from canales.servicios import SEGUNDOS_PARA_MEDIR, es_hora_de_medir, medir_fuentes, verificar_fuentes_guardadas
 from canales.verificacion import verificar_varias
 from core import trabajos
@@ -50,6 +56,7 @@ class Command(BaseCommand):
             trabajos.anotar(CLAVE, 'Verificación automática de las fuentes', margen=MARGEN)
             resultado = verificar_fuentes_guardadas(verificar_varias, al_avanzar=self._avance)
             self.stdout.write(self.style.SUCCESS(f'Listo: {resultado}'))
+            self._limpiar()
             self.stdout.write('Preparando los logos que faltan (sin borde de más, para que se vean parejos)...')
             trabajos.anotar(CLAVE, 'Preparando los logos de los canales',
                             margen=timedelta(seconds=imagenes.SEGUNDOS_PARA_LOGOS + 5 * 60))
@@ -65,6 +72,20 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'Medidas: {medidas}'))
         finally:
             trabajos.terminar(CLAVE)
+
+    def _limpiar(self):
+        trabajos.anotar(CLAVE, 'Limpieza automática (canales que no andan hace una semana)', margen=MARGEN)
+        try:
+            limpieza = salud.limpiar()
+            cuentas = salud.resumen()
+        except Exception as error:   # que un problema con la limpieza no frene lo demás
+            self.stderr.write(f'No se pudo hacer la limpieza: {error}')
+            return
+        self.stdout.write(self.style.SUCCESS(
+            f'Limpieza: quitó {len(limpieza["quitados"])} canal(es) muertos, volvieron '
+            f'{len(limpieza["volvieron"])}; retiró señales muertas de {len(limpieza["senales_retiradas"])} canal(es) '
+            f'que siguen andando, volvieron {limpieza["senales_devueltas"]} señal(es).'))
+        self.stdout.write('Salud de los canales: ' + ', '.join(f'{s.label} {n}' for s, n in cuentas.items()) + '.')
 
     @staticmethod
     def _avance(avance):

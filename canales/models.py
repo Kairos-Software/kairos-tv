@@ -146,6 +146,9 @@ class Canal(ModeloBase):
     # serie se marcan todos sus capítulos (ver organizar.editar_serie).
     destacado = models.BooleanField('destacado en la TV', default=False,
                                     help_text='Sale más seguido en el modo reposo de la TV.')
+    # "Dejar así" en Para revisar (bandeja.py): el estado de salud en que se
+    # dejó (salud.Salud). No vuelve a aparecer en la bandeja mientras siga así.
+    revisado = models.CharField('dejado así en', max_length=10, blank=True)
 
     class Meta:
         verbose_name = 'canal'
@@ -314,6 +317,26 @@ class Fuente(models.Model):
     # La forma de la imagen según los aparatos (ancho / alto: 1.78 = 16:9; 1.33 = 4:3,
     # "cuadrada", con franjas negras a los costados). 0 = no se sabe.
     proporcion = models.FloatField('forma de la imagen', default=0)
+
+    # La SALUD con memoria (ver salud.py): no se juzga por la última prueba
+    # sola. `historial`: las últimas pruebas del servidor y de los aparatos,
+    # una letra cada una (la más nueva al final); `anduvo`: la última vez que
+    # anduvo; `falla_desde` y `fallas_seguidas`: desde cuándo falla SIN PARAR y
+    # cuántas veces (cualquier vez que anda vuelve a cero); `por_que_falla`: el
+    # motivo de la última falla (salud.MOTIVOS).
+    historial = models.CharField('últimas pruebas', max_length=20, blank=True)
+    anduvo = models.DateTimeField('anduvo por última vez', null=True, blank=True)
+    falla_desde = models.DateTimeField('falla sin parar desde', null=True, blank=True)
+    fallas_seguidas = models.PositiveSmallIntegerField(default=0)
+    por_que_falla = models.CharField('por qué falla', max_length=10, blank=True)
+    # La última vez que la probó el "modo revisión" de la app (recorrido.py):
+    # un aparato que recorre los canales solo, desde una casa.
+    recorrida = models.DateTimeField('probada por el modo revisión', null=True, blank=True)
+    # La RETIRÓ la limpieza (salud.limpiar): no anduvo en una semana y el canal
+    # tiene otras que sí. Queda apagada (`activa` = False), pero no como lo
+    # apagado a mano: el servidor la sigue probando y, si vuelve a andar,
+    # vuelve sola. Null = no la retiró la limpieza.
+    retirada = models.DateTimeField('retirada por la limpieza', null=True, blank=True)
 
     class Meta:
         verbose_name = 'fuente'

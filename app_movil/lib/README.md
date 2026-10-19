@@ -20,6 +20,7 @@ El código de la app. Flutter arranca por `main.dart`.
 | `tv/` | La app en la **TV**, manejada con el control remoto (diseño de `diseno_kairos_tv/`). Ver su README. | templates |
 | `tele/` | **"Ver en la tele"**: la app corre en el celular y una tele cualquiera (aunque no sea Android) hace de segundo monitor, con el diseño de TV. En el celular queda el control remoto. Ver su README. | — |
 | `api/` | Cómo se habla con la API y las clases de los datos. Ver su README. | — |
+| `revision/` | El **modo revisión** (usuarios del panel que cargan canales): el aparato recorre los canales solo, de a uno, y le cuenta al servidor cuáles andan. Ver su README. | `canales/recorrido.py` |
 | `pantallas/` | Las herramientas del panel en el celular (perfil, usuarios, avisos). Ver su README. | `views.py` + templates |
 | `widgets/` | Piezas de pantalla reutilizables. Ver su README. | `templates/parciales/` |
 

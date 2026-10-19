@@ -39,7 +39,7 @@ from django.utils import timezone
 from actividad.models import Accion
 from actividad.registro import registrar
 
-from . import clasificar, organizar, secciones, youtube
+from . import clasificar, organizar, salud, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
 from .consultas import fuentes_usables
 from .m3u import EntradaM3U, leer_m3u, normalizar
@@ -677,6 +677,7 @@ def _agregar(entrada, resultado, indice, categorias, origen, usuario, ahora):
         user_agent=user_agent, referer=entrada.referer, estado=estado, codec=resultado.codec if resultado else '',
         error=resultado.error[:200] if resultado else '', verificada=ahora if resultado else None,
         calidad=entrada.calidad, **medidas_de_calidad(entrada.calidad), medida=ahora if entrada.calidad else None,
+        **salud.al_cargar(estado, ahora),
     )
 
     motivos = ['Canal nuevo.' if nuevo else f'Se sumó como fuente alternativa de "{canal.nombre}".']
@@ -1216,8 +1217,12 @@ def importar_m3u(texto, origen='', usuario=None, verificar=None, **opciones):
 # ── Volver a verificar las fuentes guardadas ─────────────────────────
 
 def aplicar_resultado(fuente, resultado, ahora):
-    """Le pone a la fuente lo que dio la verificación (estado, motivo, formato real y User-Agent que anduvo)."""
+    """
+    Le pone a la fuente lo que dio la verificación (estado, motivo, formato
+    real y User-Agent que anduvo) y lo suma a su memoria (salud.py).
+    """
     fuente.estado, fuente.error, fuente.verificada = resultado.estado, resultado.error[:200], ahora
+    salud.anotar_del_servidor(fuente, resultado, ahora)
     if resultado.tipo:
         fuente.tipo = resultado.tipo
     if resultado.codec:
@@ -1233,7 +1238,7 @@ def aplicar_resultado(fuente, resultado, ahora):
 
 
 CAMPOS_DE_VERIFICACION = ['estado', 'error', 'verificada', 'tipo', 'codec', 'user_agent', 'calidad', 'alto',
-                          'velocidad', 'medida']
+                          'velocidad', 'medida', *salud.CAMPOS]
 
 
 def _fuentes_vigentes(seccion='', origen=''):
@@ -1433,7 +1438,10 @@ def mostrar_canales(canales, usuario=None):
       - fuentes escondidas por fallar en los aparatos → se dejan de esconder y se
         olvidan esas fallas (otra oportunidad entera);
       - fuentes caídas → quedan "sin verificar": la app las intenta, y la
-        verificación automática las vuelve a probar.
+        verificación automática las vuelve a probar;
+      - fuentes que retiró la limpieza (salud.retirar_senales) → se prenden.
+    Además se olvida desde cuándo fallan sus fuentes (salud.py): si siguen
+    fallando, la limpieza cuenta una semana entera desde ahora.
     Las fuentes apagadas a mano no se tocan (se prenden desde Editar).
     Devuelve cuántos canales cambiaron.
     """
@@ -1443,17 +1451,69 @@ def mostrar_canales(canales, usuario=None):
     quitados = set(Canal.objects.filter(pk__in=pks, activo=False).values_list('pk', flat=True))
     Canal.objects.filter(pk__in=quitados).update(activo=True, motivo_quitado='', modificado=ahora,
                                                  modificado_por=quien)
+    retiradas = Fuente.objects.filter(canal__in=pks, activa=False, retirada__isnull=False)
+    con_fuentes = set(retiradas.values_list('canal', flat=True))
+    retiradas.update(activa=True, retirada=None)
     escondidas = Fuente.objects.filter(canal__in=pks, activa=True).filter(
         Q(oculta_hasta__gt=ahora) | Q(estado=Fuente.Estado.CAIDA))
-    con_fuentes = set(escondidas.values_list('canal', flat=True))
+    con_fuentes |= set(escondidas.values_list('canal', flat=True))
     escondidas.filter(oculta_hasta__isnull=False).update(
         oculta_desde=None, oculta_hasta=None, veces_oculta=0, avisos_de_aparatos=0, primer_aviso=None,
         falla_en_aparatos='')
     escondidas.filter(estado=Fuente.Estado.CAIDA).update(estado=Fuente.Estado.SIN_VERIFICAR)
+    salud.olvidar_fallas(Fuente.objects.filter(canal__in=pks))   # que la limpieza no lo vuelva a quitar enseguida
     cantidad = len(quitados | con_fuentes)
     if cantidad:
         registrar(usuario, Accion.EDITAR, f'Volvió a mostrar {cantidad} canal(es) en la app.', modulo='canales')
     return cantidad
+
+
+# ── Una señal sola (Organizar → Detalles) ────────────────────────────
+
+def quitar_fuente(fuente, usuario=None):
+    """
+    "Quitar esta señal": la app deja de recibirla, aunque el canal siga
+    andando con las otras. Es como apagarla a mano: no vuelve sola (para eso,
+    mostrar_fuente). No se borra.
+    """
+    fuente.activa, fuente.retirada = False, None
+    fuente.save(update_fields=['activa', 'retirada'])
+    registrar(usuario, Accion.EDITAR, f'Quitó una señal de "{fuente.canal}" ({fuente.origen or "sin origen"}).',
+              objeto=fuente.canal, modulo='canales')
+
+
+def mostrar_fuente(fuente, usuario=None):
+    """
+    "Volver a mostrar esta señal": otra oportunidad entera, aunque el canal ya
+    se vea con otras. Se prende (si estaba apagada a mano o la retiró la
+    limpieza), deja de estar escondida por los aparatos, si estaba caída
+    queda "sin verificar" (la app la intenta y la verificación la vuelve a
+    probar) y se olvida desde cuándo fallaba (la limpieza cuenta una semana
+    desde ahora).
+    """
+    fuente.activa, fuente.retirada = True, None
+    fuente.oculta_desde = fuente.oculta_hasta = fuente.primer_aviso = None
+    fuente.veces_oculta = fuente.avisos_de_aparatos = 0
+    fuente.falla_en_aparatos = ''
+    fuente.falla_desde, fuente.fallas_seguidas = None, 0
+    if fuente.estado == Fuente.Estado.CAIDA:
+        fuente.estado = Fuente.Estado.SIN_VERIFICAR
+    fuente.save()
+    registrar(usuario, Accion.EDITAR, f'Volvió a mostrar una señal de "{fuente.canal}" '
+                                      f'({fuente.origen or "sin origen"}).', objeto=fuente.canal, modulo='canales')
+
+
+def probar_fuente(fuente, verificar_url):
+    """
+    "Probar ahora": el servidor la prueba en el momento. Si la había retirado
+    la limpieza y ahora anda, vuelve a la app. Devuelve el resultado.
+    """
+    resultado = verificar_url(fuente.url, fuente.tipo, fuente.user_agent, fuente.referer)
+    aplicar_resultado(fuente, resultado, timezone.now())
+    fuente.save(update_fields=CAMPOS_DE_VERIFICACION)
+    if fuente.retirada and resultado.estado == Fuente.Estado.FUNCIONA:
+        salud.devolver_senales(fuentes=[fuente.pk])
+    return resultado
 
 
 # ── Editar un canal desde el panel ───────────────────────────────────
@@ -1666,6 +1726,7 @@ def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):
     if fuente.primer_aviso is None or ahora - fuente.primer_aviso > timedelta(days=1):
         fuente.avisos_de_aparatos, fuente.primer_aviso = 0, ahora
     fuente.avisos_de_aparatos += 1
+    salud.anotar_del_aparato(fuente, False, motivo, ahora)
     texto = MOTIVOS_DE_LOS_APARATOS.get(motivo, MOTIVOS_DE_LOS_APARATOS['error'])
     fuente.falla_en_aparatos = (f'{texto}: {detalle}' if detalle else texto)[:200]
     if fuente.avisos_de_aparatos >= AVISOS_PARA_OCULTAR:
@@ -1678,7 +1739,7 @@ def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):
                   f'Se ocultó por {_texto_de_tiempo(tiempo)} una fuente de {fuente.canal}: no se reproduce en los '
                   f'aparatos ({texto}). Después vuelve sola a la app.', modulo='canales')
     fuente.save(update_fields=['avisos_de_aparatos', 'primer_aviso', 'falla_en_aparatos', 'oculta_desde',
-                               'oculta_hasta', 'veces_oculta'])
+                               'oculta_hasta', 'veces_oculta', *salud.CAMPOS])
     return fuente.oculta_por_aparatos
 
 
@@ -1719,6 +1780,8 @@ def registrar_estabilidad(fuente, segundos, cortes, proporcion=None):
         if proporcion:
             fuente.proporcion = proporcion
         campos = ['segundos_en_aparatos', 'cortes_en_aparatos', 'proporcion']
+        if segundos >= VISTO_PARA_PERDONAR and salud.anotar_del_aparato(fuente, True):
+            campos += salud.CAMPOS
         if segundos >= VISTO_PARA_PERDONAR and (fuente.veces_oculta or fuente.avisos_de_aparatos
                                                  or fuente.oculta_hasta):
             volvio = fuente.oculta_por_aparatos

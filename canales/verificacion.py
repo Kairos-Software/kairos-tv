@@ -14,8 +14,9 @@ Hace lo mismo que el reproductor de la app, pero desde el servidor:
 
 En HLS se presenta igual que el reproductor de la app (USER_AGENT_REPRODUCTOR,
 o el User-Agent / Referer propio de la fuente); si el servidor lo rechaza,
-prueba como VLC. Los archivos directos se piden primero como VLC y con Range,
-igual que un reproductor: hay paneles Xtream que dejan esperando a un navegador
+prueba como VLC. Los archivos directos se piden primero como VLC y con Range
+(un canal en vivo Xtream, sin Range: llega de corrido), igual que un
+reproductor: hay paneles Xtream que dejan esperando a un navegador
 o intentan enviar el MKV completo. Si así anda, el resultado trae ese User-Agent
 para guardarlo en la fuente (y la app lo usa).
 
@@ -172,11 +173,17 @@ def cabeceras_para(user_agent='', referer=''):
     return cabeceras
 
 
-def _cabeceras_para_video_directo(user_agent='', referer='', a_fondo=False):
-    """Como un reproductor: pide solo el comienzo del archivo, no el MKV/MP4 completo."""
+def _cabeceras_para_video_directo(user_agent='', referer='', a_fondo=False, en_vivo=False):
+    """
+    Como un reproductor: pide solo el comienzo del archivo, no el MKV/MP4 completo.
+    Un canal en vivo no tiene "comienzo" (llega de corrido): sin Range, como lo
+    abre VLC. Hay paneles que a un rango en vivo contestan con error. Igual se
+    lee solo el principio y se corta (ver _descargar y _bajar).
+    """
     cabeceras = cabeceras_para(user_agent, referer)
-    maximo = BYTES_A_FONDO if a_fondo else BYTES_INICIALES
-    cabeceras['Range'] = f'bytes=0-{maximo - 1}'
+    if not en_vivo:
+        maximo = BYTES_A_FONDO if a_fondo else BYTES_INICIALES
+        cabeceras['Range'] = f'bytes=0-{maximo - 1}'
     return cabeceras
 
 
@@ -588,6 +595,24 @@ def _es_stream_de_xtream(url):
                 and (con_prefijo or direccion.port is not None))
 
 
+def _es_vivo_de_xtream(url):
+    """Un canal en vivo Xtream (/usuario/clave/id o /live/usuario/clave/id.ts), no una película ni un capítulo."""
+    partes = [parte for parte in urlsplit(url).path.lower().split('/') if parte]
+    return _es_stream_de_xtream(url) and partes[0] not in ('series', 'movie')
+
+
+def _caida_segura(resultado):
+    """
+    Con Xtream, lo único que prueba desde el VPS que una señal no existe más: el
+    panel dice que ese canal no está (404, 410) o el servidor del panel ya no
+    existe. Lo demás (rechazo, corte, demora, una página en vez de video) suele
+    ser el panel bloqueando la IP del VPS o la cuenta ocupada con otra
+    reproducción (permiten una sola: la app pasó a otra fuente de la misma cuenta
+    y el servidor, al reprobar la que falló, choca con esa): no se sabe.
+    """
+    return bool(re.search(r'error (404|410)\b', resultado.error)) or 'ya no existe' in resultado.error
+
+
 def url_xtream_para_reproductor(url):
     """
     La forma corta de un vivo Xtream (``/usuario/clave/id``) funciona en VLC,
@@ -643,8 +668,9 @@ def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
 
     if _conviene_vlc_primero(url, tipo):
         agente = user_agent or USER_AGENT_VLC
+        en_vivo = _es_vivo_de_xtream(url)
         resultado = _probar_video_directo(
-            url, _cabeceras_para_video_directo(agente, referer, a_fondo), a_fondo)
+            url, _cabeceras_para_video_directo(agente, referer, a_fondo, en_vivo), a_fondo)
         if resultado.estado == FUNCIONA:
             if not user_agent:
                 resultado.user_agent = USER_AGENT_VLC
@@ -652,13 +678,18 @@ def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
         # Si el panel rechazó a VLC, todavía puede aceptar el reproductor de
         # la app. Para errores de red definitivos no se duplica la espera.
         if resultado.rechazo and not user_agent:
-            return _probar_video_directo(
-                url, _cabeceras_para_video_directo('', referer, a_fondo), a_fondo)
-        if resultado.error == 'No respondió a tiempo.' and _es_stream_de_xtream(url):
+            como_la_app = _probar_video_directo(
+                url, _cabeceras_para_video_directo('', referer, a_fondo, en_vivo), a_fondo)
+            if como_la_app.estado == FUNCIONA or not en_vivo:
+                return como_la_app
+        no_se_sabe = en_vivo or resultado.error == 'No respondió a tiempo.'
+        if _es_stream_de_xtream(url) and no_se_sabe and not _caida_segura(resultado):
             # Algunos proveedores reproducen en VLC y en la app, pero bloquean
-            # las IP de datacenter para impedir restreaming. El VPS no puede
-            # afirmar que el archivo esté caído: se carga sin verificar y la
-            # app lo pide directamente desde la conexión del cliente.
+            # las IP de datacenter para impedir restreaming, o (en vivo) la
+            # cuenta está ocupada con otra reproducción. El VPS no puede
+            # afirmar que esté caído: se carga sin verificar y la app lo pide
+            # directamente desde la conexión del cliente. Si ahí tampoco anda,
+            # lo esconden los avisos de los aparatos (servicios.registrar_falla_en_aparato).
             return _xtream_sin_verificar(agente)
         return resultado
 
