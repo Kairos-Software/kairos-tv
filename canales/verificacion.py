@@ -588,6 +588,25 @@ def _es_stream_de_xtream(url):
                 and (con_prefijo or direccion.port is not None))
 
 
+def url_xtream_para_reproductor(url):
+    """
+    La forma corta de un vivo Xtream (``/usuario/clave/id``) funciona en VLC,
+    pero no le da a Android ninguna pista sobre el contenedor. Los mismos
+    paneles exponen la forma canónica ``/live/usuario/clave/id.ts``; conservar
+    la URL en la base y transformar solamente lo que recibe la app permite que
+    ExoPlayer reconozca MPEG-TS sin tener que adivinarlo.
+
+    Solo se transforma la forma inequívoca que usa un puerto explícito. Las
+    películas y series ya vienen bajo /movie/ o /series/ y no se tocan.
+    """
+    direccion = urlsplit(url)
+    partes = [parte for parte in direccion.path.split('/') if parte]
+    if (direccion.port is None or len(partes) != 3 or not partes[-1].isdigit()):
+        return url
+    ruta = '/live/' + '/'.join((*partes[:2], f'{partes[-1]}.ts'))
+    return direccion._replace(path=ruta).geturl()
+
+
 _MENSAJE_XTREAM_SIN_VERIFICAR = (
     'El proveedor no permite comprobar esta señal desde el servidor; se cargará sin verificar.'
 )

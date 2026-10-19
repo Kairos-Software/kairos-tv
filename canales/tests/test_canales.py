@@ -224,6 +224,22 @@ class ApiCanalesTests(TestCase):
         datos = self.client.get(self.URL, {'formatos': 'hls,dash,directo,rtsp'}).json()
         self.assertEqual(datos['cantidad'], 2)
 
+    def test_la_app_recibe_la_forma_ts_de_un_vivo_xtream_sin_extension(self):
+        fuente = Fuente.objects.get(canal__nombre='Canal 26')
+        fuente.url = 'http://panel:55577/usuario/clave/444969'
+        fuente.tipo = Fuente.Tipo.DIRECTO
+        fuente.save(update_fields=['url', 'tipo'])
+
+        datos = self.client.get(self.URL, {'formatos': 'hls,directo'}).json()
+        canal = next(c for categoria in datos['categorias'] for c in categoria['canales']
+                     if c['nombre'] == 'Canal 26')
+        self.assertEqual(canal['fuentes'][0]['url'],
+                         'http://panel:55577/live/usuario/clave/444969.ts')
+        # La dirección original queda intacta para el panel, las verificaciones
+        # y las exportaciones; solo se adapta al entregársela al reproductor.
+        fuente.refresh_from_db()
+        self.assertEqual(fuente.url, 'http://panel:55577/usuario/clave/444969')
+
     def test_peliculas_aparte(self):
         importar_m3u('#EXTM3U\n#EXTINF:-1,Una película\nhttp://x/movie/u/p/1.mp4\n')
         formatos = {'formatos': 'hls,directo'}
