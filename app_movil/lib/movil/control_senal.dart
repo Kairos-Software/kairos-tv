@@ -59,6 +59,14 @@ class ControlSenal extends ChangeNotifier {
   /// grande y tarda más en empezar que un canal en vivo.
   static const _esperaVivo = Duration(seconds: 15);
   static const _esperaArchivo = Duration(seconds: 30);
+
+  /// En vivo, un video directo (MPEG-TS de una lista Xtream: ".../123.ts"): el
+  /// servidor redirige a otro y a veces tarda más de 12 s en mandar lo primero
+  /// (VLC espera; con 15 s se cortaba antes de que llegara). Si no arranca, se
+  /// prueba la MISMA una vez más ([_esperaReintento] después) antes de pasar a
+  /// otra: esa conexión suele ser intermitente.
+  static const _esperaVivoDirecto = Duration(seconds: 40);
+  static const _esperaReintento = Duration(seconds: 1);
   static const _esperaTrabado = Duration(seconds: 20);
 
   /// Cuánto se espera a que aparezca la imagen después de arrancar.
@@ -187,7 +195,17 @@ class ControlSenal extends ChangeNotifier {
 
   bool get _enVivo => canal?.contenido == 'vivo';
 
-  Duration get _esperaInicio => _enVivo ? _esperaVivo : _esperaArchivo;
+  /// Cuánto se espera a que arranque esta fuente.
+  Duration _esperaInicio(FuenteCanal fuente) => esperaDeArranque(enVivo: _enVivo, tipo: fuente.tipo);
+
+  @visibleForTesting
+  static Duration esperaDeArranque({required bool enVivo, required String tipo}) {
+    if (!enVivo) return _esperaArchivo;
+    return tipo == 'directo' ? _esperaVivoDirecto : _esperaVivo;
+  }
+
+  /// Si esta fuente, al no arrancar, se prueba una vez más antes de pasar a otra.
+  bool _reintentarArranque(FuenteCanal fuente) => _enVivo && fuente.tipo == 'directo';
 
   /// Las que abre este reproductor. Las de YouTube oficial ("yt_video") no:
   /// van en el reproductor de YouTube (reproductor_youtube.dart).
@@ -256,7 +274,9 @@ class ControlSenal extends ChangeNotifier {
     return _probar(indice);
   }
 
-  Future<void> _probar(int indice) async {
+  /// [reintento]: es la segunda vez que se prueba esta fuente porque la primera no
+  /// arrancó (ver [_esperaVivoDirecto]).
+  Future<void> _probar(int indice, {bool reintento = false}) async {
     final intento = ++_intento;
     _detenido = false;
     _cancelarVigias();
@@ -312,7 +332,7 @@ class ControlSenal extends ChangeNotifier {
     final Senal senal;
     try {
       // YouTube, Twitch...: primero hay que averiguar dónde está el video (ver senales.dart)
-      senal = await resolverSenal(elegida, api).timeout(_esperaInicio);
+      senal = await resolverSenal(elegida, api).timeout(_esperaInicio(elegida));
     } catch (e) {
       if (intento == _intento && !_cerrado) {
         _avisarFalla(elegida, Falla.de(e));
@@ -329,13 +349,20 @@ class ControlSenal extends ChangeNotifier {
       viewType: enSuperficie ? VideoViewType.platformView : VideoViewType.textureView,
     );
     try {
-      await nuevo.initialize().timeout(_esperaInicio);
+      await nuevo.initialize().timeout(_esperaInicio(elegida));
     } catch (e) {
+      // Primero se cierra (suelta la conexión: hay cuentas que permiten una sola)
       await nuevo.dispose();
-      if (intento == _intento && !_cerrado) {
-        _avisarFalla(elegida, Falla.de(e));
-        _probar(_siguiente(indice));
+      if (intento != _intento || _cerrado) return;
+      final falla = Falla.de(e);
+      if (!reintento && !falla.delAparato && _reintentarArranque(elegida)) {
+        // Una vez más la misma, sin contarla como falla (ni avisarle al servidor)
+        await Future<void>.delayed(_esperaReintento);
+        if (intento == _intento && !_cerrado) _probar(indice, reintento: true);
+        return;
       }
+      _avisarFalla(elegida, falla);
+      _probar(_siguiente(indice));
       return;
     }
     if (intento != _intento || _cerrado) {

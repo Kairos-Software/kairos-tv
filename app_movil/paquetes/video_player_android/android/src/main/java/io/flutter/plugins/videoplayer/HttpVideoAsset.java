@@ -17,11 +17,22 @@ import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
+import java.util.Locale;
 import java.util.Map;
 
 final class HttpVideoAsset extends VideoAsset {
   /** Kairos TV: cuánto detrás del vivo se mira un canal (ver getMediaItem). */
   static final long KAIROS_ATRAS_DEL_VIVO_MS = 30_000;
+
+  /**
+   * Kairos TV: cuánto espera a que el servidor de la señal conteste (conectar) y
+   * a que mande el próximo pedazo (leer). De fábrica son 8 s: los servidores IPTV
+   * (Xtream) redirigen a otro y a veces tardan más de 12 s en mandar lo primero, y
+   * ExoPlayer se rendía con "Source error" aunque VLC (que espera más) lo viera.
+   */
+  static final int KAIROS_ESPERA_CONEXION_MS = 25_000;
+
+  static final int KAIROS_ESPERA_LECTURA_MS = 30_000;
 
   @NonNull private final StreamingFormat streamingFormat;
   @NonNull private final Map<String, String> httpHeaders;
@@ -54,6 +65,9 @@ final class HttpVideoAsset extends VideoAsset {
         mimeType = MimeTypes.APPLICATION_M3U8;
         break;
     }
+    if (mimeType == null) {
+      mimeType = kairosMimeDirecto(assetUrl);
+    }
     if (mimeType != null) {
       builder.setMimeType(mimeType);
     }
@@ -65,6 +79,21 @@ final class HttpVideoAsset extends VideoAsset {
     builder.setLiveConfiguration(
         new MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(KAIROS_ATRAS_DEL_VIVO_MS).build());
     return builder.build();
+  }
+
+  /**
+   * Kairos TV: un video directo que termina en ".ts" (un canal de una lista Xtream:
+   * ".../live/usuario/clave/123.ts") es MPEG-TS que llega de corrido, no una lista
+   * HLS: se lo dice a ExoPlayer. Lo demás, sin pista (lo averigua ExoPlayer).
+   */
+  @VisibleForTesting
+  @Nullable
+  static String kairosMimeDirecto(@Nullable String url) {
+    if (url == null) {
+      return null;
+    }
+    String ruta = url.split("[?#]", 2)[0].toLowerCase(Locale.ROOT);
+    return ruta.endsWith(".ts") ? MimeTypes.VIDEO_MP2T : null;
   }
 
   @NonNull
@@ -96,7 +125,13 @@ final class HttpVideoAsset extends VideoAsset {
       @NonNull DefaultHttpDataSource.Factory factory,
       @NonNull Map<String, String> httpHeaders,
       @Nullable String userAgent) {
-    factory.setUserAgent(userAgent).setAllowCrossProtocolRedirects(true);
+    // Las redirecciones (también de https a http) las sigue el mismo DefaultHttpDataSource,
+    // y en cada una vuelve a mandar el User-Agent y las cabeceras.
+    factory
+        .setUserAgent(userAgent)
+        .setAllowCrossProtocolRedirects(true)
+        .setConnectTimeoutMs(KAIROS_ESPERA_CONEXION_MS)
+        .setReadTimeoutMs(KAIROS_ESPERA_LECTURA_MS);
     if (!httpHeaders.isEmpty()) {
       factory.setDefaultRequestProperties(httpHeaders);
     }
