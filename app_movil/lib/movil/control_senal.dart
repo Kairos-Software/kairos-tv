@@ -56,9 +56,10 @@ class ControlSenal extends ChangeNotifier {
   ControlSenal(this.api);
 
   /// Cuánto se espera a que arranque. Una película o capítulo es un archivo
-  /// grande y tarda más en empezar que un canal en vivo.
+  /// grande y tarda más en empezar que un canal en vivo: hay servidores que
+  /// tardan cerca de un minuto en mandar lo primero (VLC también espera).
   static const _esperaVivo = Duration(seconds: 15);
-  static const _esperaArchivo = Duration(seconds: 30);
+  static const _esperaArchivo = Duration(seconds: 90);
 
   /// En vivo, un video directo (MPEG-TS de una lista Xtream: ".../123.ts"): el
   /// servidor redirige a otro y a veces tarda más de 12 s en mandar lo primero
@@ -68,6 +69,15 @@ class ControlSenal extends ChangeNotifier {
   static const _esperaVivoDirecto = Duration(seconds: 40);
   static const _esperaReintento = Duration(seconds: 1);
   static const _esperaTrabado = Duration(seconds: 20);
+
+  /// Una película o capítulo que se queda cargando (sobre todo después de
+  /// adelantar) espera más antes de darse por trabada: volver a abrirla desde
+  /// cero cuesta otra vez toda la conexión, que en esos servidores es lo lento.
+  static const _esperaTrabadoArchivo = Duration(seconds: 60);
+
+  /// Varios toques seguidos de adelantar o atrasar (las flechas del control)
+  /// se juntan en UN solo salto: el video carga una vez y no una por toque.
+  static const _juntarToques = Duration(milliseconds: 600);
 
   /// Cuánto se espera a que aparezca la imagen después de arrancar.
   static const _esperaImagen = Duration(seconds: 8);
@@ -179,6 +189,10 @@ class ControlSenal extends ChangeNotifier {
   /// Después de adelantar o atrasar, el video carga: eso no es un corte.
   DateTime? _ignorarCortesHasta;
 
+  /// Adónde va a saltar (mientras se juntan los toques: ver [_juntarToques]).
+  Duration? _saltoPendiente;
+  Timer? _vigiaSalto;
+
   /// La app en el fondo: el video se cerró y se reconecta al volver.
   AppLifecycleListener? _ciclo;
   ({int fuente, Duration? desde})? _suspendido;
@@ -266,6 +280,9 @@ class ControlSenal extends ChangeNotifier {
   void _cancelarVigias() {
     _vigiaTrabado?.cancel();
     _vigiaTrabado = null;
+    _vigiaSalto?.cancel();
+    _vigiaSalto = null;
+    _saltoPendiente = null;
     _vigiaImagen?.cancel();
     _vigiaEstable?.cancel();
   }
@@ -452,7 +469,7 @@ class ControlSenal extends ChangeNotifier {
       _seEstabaViendo = true;
     }
     if (actual.value.isBuffering) {
-      _vigiaTrabado ??= Timer(_esperaTrabado, () {
+      _vigiaTrabado ??= Timer(_enVivo ? _esperaTrabado : _esperaTrabadoArchivo, () {
         _vigiaTrabado = null;
         if (!_cerrado && video == actual && actual.value.isBuffering) _fallo(actual, Falla.trabada);
       });
@@ -687,12 +704,41 @@ class ControlSenal extends ChangeNotifier {
     _avisar();
   }
 
-  Future<void> saltar(Duration cuanto) async {
+  /// Dónde va el video: si se está por saltar, adónde (para que la barra ya lo muestre).
+  Duration get posicion => _saltoPendiente ?? video?.value.position ?? Duration.zero;
+
+  /// Adelanta o atrasa [cuanto]. Los toques seguidos se suman y se salta una
+  /// sola vez, [_juntarToques] después del último.
+  void saltar(Duration cuanto) {
     final actual = video;
     if (actual == null) return;
-    final destino = actual.value.position + cuanto;
+    var destino = (_saltoPendiente ?? actual.value.position) + cuanto;
+    final total = actual.value.duration;
+    if (destino < Duration.zero) destino = Duration.zero;
+    if (total > Duration.zero && destino > total) destino = total;
+    _saltoPendiente = destino;
+    _vigiaSalto?.cancel();
+    _vigiaSalto = Timer(_juntarToques, () => irA(destino));
+    _avisar();
+  }
+
+  /// Va a [destino] ya (al soltar la barra, o al terminar de juntar los toques).
+  Future<void> irA(Duration destino) async {
+    _vigiaSalto?.cancel();
+    _vigiaSalto = null;
+    final actual = video;
+    if (actual == null) {
+      _saltoPendiente = null;
+      return;
+    }
+    _saltoPendiente = destino;
     _ignorarCortesHasta = DateTime.now().add(const Duration(seconds: 5)); // va a cargar: no es un corte
-    await actual.seekTo(destino < Duration.zero ? Duration.zero : destino);
+    try {
+      await actual.seekTo(destino < Duration.zero ? Duration.zero : destino);
+    } finally {
+      if (video == actual && _saltoPendiente == destino) _saltoPendiente = null;
+      _avisar();
+    }
   }
 
   /// Corta la reproducción (libera la conexión: hay listas IPTV que permiten una sola).

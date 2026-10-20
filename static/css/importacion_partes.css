@@ -1,22 +1,54 @@
-/* La pantalla de una lista importada, por partes (canales/importacion.html):
-   "Qué trae esta lista" (tarjetas por parte), las categorías de la parte
-   elegida y "Estás trabajando con…" en tres pasos (probar, revisar, cargar). */
+/* Una lista importada (canales/importacion.html; static/js/importacion_trabajo.js):
+   la cabecera, las partes como pestañas, «Estás trabajando con…» en una sola tarjeta baja, la tabla de
+   categorías (el lugar de trabajo: barrita + próximo paso por fila) y la lista uno por uno en una línea.
+   Aparte de kairos.css: solo usa sus colores. */
 
-.imp-partes, .imp-categorias, .imp-trabajo { margin-bottom: 1rem; }
+/* ── Cabecera ── */
+.importacion-encabezado { align-items: flex-end; }
+.importacion-titulo .volver { display: inline-flex; margin-bottom: .2rem; }
+.importacion-titulo .contenido-titulo { font-size: 1.4rem; overflow-wrap: anywhere; }
+.importacion-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin: .3rem 0 0; font-size: .84rem; color: var(--texto-suave); }
+.importacion-meta .importacion-config { display: inline-flex; flex-wrap: wrap; gap: .3rem; margin: 0; }
+.importacion-encabezado .contenido-acciones { align-items: center; }
+.importacion-encabezado .contenido-acciones form { margin: 0; }
 
-/* Qué trae esta lista */
-.imp-partes-grilla {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: .75rem;
+/* ── La barrita de colores y los números (canales/_importacion_cuentas.html) ── */
+.imp-barra {
+    display: flex;
+    width: 100%;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--capa-maxima);
 }
+.imp-barra > span { flex-basis: 0; min-width: 0; }
+.imp-barra .b-cargados { background: var(--verde); }
+.imp-barra .b-pasaron { background: var(--celeste); }
+.imp-barra .b-fallaron { background: var(--rubi); }
+.imp-barra .b-descartados { background: rgba(255, 186, 32, .45); }
+.imp-barra .b-estaban { background: var(--texto-apagado); }
+.imp-barra .b-falta { background: transparent; }
+.imp-cuentas { display: flex; flex-wrap: wrap; gap: 0 .3rem; font-size: .76rem; color: var(--texto-apagado); }
+.imp-cuentas > span:not(:last-child)::after { content: ' ·'; }
+.c-pasaron, .c-pasaron b { color: var(--celeste-claro); }
+.c-cargados, .c-cargados b { color: var(--verde-claro); }
+.c-fallaron, .c-fallaron b { color: var(--rubi-claro); }
+
+/* ── Las partes: pestañas con su barrita ── */
+.imp-partes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: .5rem;
+    margin-bottom: .75rem;
+}
+.imp-partes-titulo { grid-column: 1 / -1; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-apagado); }
 .imp-parte {
     display: flex;
     flex-direction: column;
-    gap: .2rem;
-    padding: .9rem 1rem;
-    border-radius: 14px;
-    background: var(--capa-baja);
+    gap: .35rem;
+    padding: .55rem .75rem;
+    border-radius: var(--radio);
+    background: var(--capa);
     border: 1px solid var(--borde);
     color: var(--texto);
     text-decoration: none;
@@ -24,105 +56,158 @@
 }
 .imp-parte:hover { border-color: var(--celeste-borde); color: var(--texto); }
 .imp-parte.activa { border-color: var(--celeste); background: var(--celeste-fondo); }
-.imp-parte-nombre { font-weight: 700; display: flex; gap: .45rem; align-items: center; }
+.imp-parte.adentro { border-color: var(--celeste-borde); }
+.imp-parte-nombre { display: flex; gap: .45rem; align-items: center; font-weight: 700; font-size: .92rem; }
 .imp-parte-nombre .bi { color: var(--celeste); }
-.imp-parte-total { font-family: var(--fuente-titulos); font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
-.imp-parte-detalle { font-size: .8rem; color: var(--texto-suave); }
+.imp-parte-nombre b { margin-left: auto; font-family: var(--fuente-titulos); font-size: 1.05rem; font-weight: 800; }
 
-/* Las categorías de la parte elegida */
-.imp-categorias-cabecera {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .75rem;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: .35rem;
-}
-.imp-categorias-cabecera .form-control { max-width: 260px; }
-.imp-categorias-tabla { max-height: 420px; overflow-y: auto; }
-.imp-categorias-tabla thead th { position: sticky; top: 0; background: var(--capa); z-index: 1; }
-.imp-categorias .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.imp-categorias tr.activa td { background: var(--celeste-fondo); }
-.imp-categorias tr.activa a { font-weight: 700; }
+/* ── Estás trabajando con… ── */
+.imp-trabajo { padding: 1rem 1.15rem; margin-bottom: .75rem; }
+.imp-trabajo-cabecera { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .75rem; margin-bottom: .7rem; }
+.imp-trabajo-que { margin-right: auto; min-width: 0; }
+.imp-trabajo-que .tarjeta-titulo { overflow-wrap: anywhere; }
+.imp-trabajo-sobretitulo { margin: 0; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--celeste); font-weight: 700; }
+.imp-trabajo .avance-texto { margin-top: .35rem; }
+.imp-numeros { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .9rem; margin: .55rem 0 0; font-size: .84rem; }
+.imp-numeros a { color: var(--texto-suave); text-decoration: none; }
+.imp-numeros a:hover { text-decoration: underline; }
+.imp-numeros a[hidden] { display: none; }
+.imp-numeros b { font-family: var(--fuente-titulos); font-weight: 800; color: var(--texto); }
+.imp-numeros a.c-pasaron b { color: var(--celeste-claro); }
+.imp-numeros a.c-cargados b { color: var(--verde-claro); }
+.imp-numeros a.c-fallaron b { color: var(--rubi-claro); }
+.imp-causas { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.imp-causas .chip { font-size: .72rem; }
+.imp-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .8rem; }
+.imp-acciones form { margin: 0; }
+.imp-estado { flex: 1 1 16rem; font-size: .82rem; color: var(--texto-suave); }
+.imp-estado:empty { display: none; }
+.imp-hecho { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; }
 
-/* Estás trabajando con… */
-.imp-trabajo-cabecera {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .75rem;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-}
-.imp-trabajo-sobretitulo {
-    margin: 0;
-    font-size: .75rem;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    color: var(--celeste);
-    font-weight: 700;
-}
-.imp-pasos {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: .75rem;
-}
-.imp-paso {
-    display: flex;
-    gap: .85rem;
-    padding: 1rem;
-    border-radius: 14px;
-    background: var(--capa-baja);
-    border: 1px solid var(--borde);
-    min-width: 0;
-}
-.imp-paso-numero {
-    flex: none;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-weight: 800;
-    background: var(--celeste-fondo);
-    border: 1px solid var(--celeste-borde);
-    color: var(--celeste);
-}
-.imp-paso.hecho .imp-paso-numero { background: var(--celeste); color: var(--capa-baja); }
-.imp-paso-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .5rem; }
-.imp-paso-titulo { font-size: 1rem; font-weight: 700; margin: 0; }
-.imp-paso-ayuda { font-size: .82rem; color: var(--texto-suave); margin: 0; }
-.imp-paso-acciones { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.imp-paso .contadores li { flex: 1 1 40%; padding: .45rem .6rem; }
-.imp-trabajo-pie {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .75rem;
-    align-items: center;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--borde);
-}
-.imp-descartar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-
-/* ¿Dónde va? (paso 3; static/js/importacion_destino.js) */
-.imp-va-hoy {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .25rem;
-    font-size: .85rem;
-}
+/* ¿Dónde va? (cerrado: es opcional) */
+.imp-donde { margin-top: .8rem; border-top: 1px solid var(--borde); padding-top: .6rem; }
+.imp-donde > summary { cursor: pointer; font-weight: 600; font-size: .9rem; list-style-position: inside; }
+.imp-donde > summary .texto-suave { font-weight: 400; font-size: .8rem; margin-left: .3rem; }
+.imp-donde-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 1rem; margin-top: .7rem; }
+.imp-va-hoy { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; }
 .imp-va-hoy .chip { font-size: .7rem; padding: .05rem .45rem; }
 .imp-donde-form { display: flex; flex-direction: column; gap: .6rem; }
 .imp-donde-form select optgroup { font-style: normal; }
+.imp-donde-form .imp-acciones { margin-top: 0; }
 .imp-donde-resumen { margin: 0; font-size: .85rem; font-weight: 600; color: var(--celeste); }
 .imp-donde-resumen:empty { display: none; }
+.imp-paso-ayuda { font-size: .8rem; color: var(--texto-suave); margin: 0; }
 
-/* La lista, uno por uno */
-.imp-lista-titulo { font-size: 1.1rem; font-weight: 700; margin: 1.5rem 0 .75rem; }
+/* ── Las categorías: el lugar de trabajo ── */
+.imp-categorias { padding: 1rem 1.15rem; margin-bottom: 1.25rem; }
+.imp-categorias-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; margin-bottom: .6rem; }
+.imp-categorias-cabecera .tarjeta-titulo { margin-right: auto; }
+.imp-categorias-cabecera .ayuda-boton { order: 1; }   /* en el celular queda en el renglón del título */
+.imp-categorias-buscar { flex: 0 1 260px; order: 2; }
+.imp-cola {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin: 0 0 .6rem;
+    padding: .45rem .7rem;
+    border-radius: var(--radio);
+    background: var(--celeste-fondo);
+    border: 1px solid var(--celeste-borde);
+    font-size: .85rem;
+}
+.imp-cola[hidden] { display: none; }
+.imp-cola .spinner-border { color: var(--celeste); }
+.imp-cola .btn { margin-left: auto; }
+.imp-categorias-tabla { max-height: min(60vh, 560px); overflow-y: auto; border: 1px solid var(--borde); border-radius: var(--radio); }
+.imp-categorias-tabla thead th { position: sticky; top: 0; z-index: 1; background: var(--capa-alta); }
+.imp-categorias .tabla td { padding: .4rem .6rem; vertical-align: middle; }
+.imp-categorias .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.imp-categorias .col-elegir { width: 2.2rem; text-align: center; }
+.imp-categorias .col-elegir .form-check-input { margin: 0; }
+.imp-categorias tr.activa td { background: var(--celeste-fondo); }
+.imp-categorias tr.activa .imp-fila-nombre a { font-weight: 700; }
+.imp-categorias tr[hidden] { display: none; }
+.imp-fila-nombre { min-width: 10rem; }
+.imp-fila-nombre a { color: var(--texto); text-decoration: none; font-weight: 600; overflow-wrap: anywhere; }
+.imp-fila-nombre a:hover { color: var(--celeste-claro); text-decoration: underline; }
+.imp-fila-parte { display: block; font-size: .72rem; color: var(--texto-apagado); }
+.imp-fila-como { min-width: 12rem; }
+.imp-fila-como .imp-barra { margin-bottom: .25rem; }
+.imp-fila-estado { display: block; margin-top: .15rem; font-size: .76rem; font-weight: 600; color: var(--celeste-claro); }
+.imp-categorias tr.con-error .imp-fila-estado { color: var(--rubi-claro); }
+.imp-categorias tr.en-cola td { background: rgba(255, 255, 255, .02); }
+.imp-categorias tr.trabajando td { background: var(--celeste-fondo); }
+.imp-fila-acciones { white-space: nowrap; text-align: right; width: 1%; }
+.imp-fila-acciones .btn { padding: .2rem .6rem; font-size: .8rem; }
+.imp-fila-acciones .btn-icono { width: 1.8rem; height: 1.8rem; vertical-align: middle; margin-left: .25rem; }
+.imp-fila-hecho { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; font-weight: 600; color: var(--verde-claro); }
+
+/* ── Uno por uno ── */
+.imp-lista-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: .6rem; }
+.imp-lista-titulo { font-size: 1.1rem; font-weight: 700; margin: 0 auto 0 0; }
+.imp-buscar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0; }
+.imp-buscar .filtros-buscar { flex: 1 1 220px; }
+.imp-buscar .form-select { width: auto; }
+.imp-buscar .form-control, .imp-buscar .form-select, .imp-buscar .btn { height: 2.3rem; font-size: .85rem; padding-block: 0; }
+.pagina-importacion .pestanias-entradas { margin-bottom: .6rem; }
+.imp-lista-info { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0 0 .4rem; font-size: .8rem; color: var(--texto-suave); }
+.imp-elegir-pagina { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
+.imp-elegir-pagina .form-check-input { margin: 0; }
+
+.pagina-importacion .entrada {
+    grid-template-columns: 1.2rem 32px minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: .1rem .75rem;
+    padding: .35rem .8rem;
+}
+.pagina-importacion .entrada.recien-cambiada { animation: imp-recien 1.6s ease-out; }
+@keyframes imp-recien { from { background: var(--celeste-fondo); } to { background: transparent; } }
+.entrada-casilla { display: grid; place-items: center; }
+.entrada-casilla .form-check-input { margin: 0; }
+.pagina-importacion .entrada .logo-mini { width: 32px; height: 32px; }
+.pagina-importacion .entrada-nombre { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .45rem; font-size: .88rem; }
+.pagina-importacion .entrada-nombre > .bi { color: var(--texto-apagado); font-size: .8rem; }
+.pagina-importacion .entrada-nombre small { display: inline; font-size: .72rem; }
+.pagina-importacion .entrada-etiquetas { gap: .25rem; margin-top: .1rem; }
+.pagina-importacion .entrada-etiquetas li { padding: 0 .4rem; font-size: .68rem; }
+.pagina-importacion .entrada-etiquetas li.entrada-calidad { margin: 0; border-color: transparent; color: var(--texto-apagado); }
+.pagina-importacion .entrada-estado { gap: .2rem .5rem; }
+.pagina-importacion .entrada-estado .chip { font-size: .72rem; }
+.pagina-importacion .entrada-motivo { margin: 0; font-size: .78rem; color: var(--texto-suave); }
+.pagina-importacion .entrada .direccion {
+    margin-top: .1rem;
+    overflow: hidden;
+    font-size: .68rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+}
+
+@media (max-width: 991.98px) {
+    .imp-donde-cuerpo { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767.98px) {
+    .imp-partes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .imp-trabajo, .imp-categorias { padding: .85rem; }
+    .imp-categorias-buscar { flex-basis: 100%; }
+    /* Cada categoría como una tarjetita: nombre y cuántos arriba, la barrita y el botón abajo */
+    .imp-categorias .tabla, .imp-categorias .tabla tbody { display: block; }
+    .imp-categorias .tabla thead { display: none; }
+    .imp-categorias .tabla tr {
+        display: grid;
+        grid-template-columns: 1.8rem minmax(0, 1fr) auto;
+        column-gap: .4rem;
+        padding: .5rem .6rem;
+        border-bottom: 1px solid rgba(59, 73, 75, .35);
+    }
+    .imp-categorias .tabla td { display: block; padding: .1rem 0; border: 0; min-width: 0; }
+    .imp-categorias .tabla td.col-elegir { grid-column: 1; grid-row: 1 / span 3; width: auto; padding-top: .2rem; }
+    .imp-categorias .tabla td.imp-fila-nombre { grid-column: 2; }
+    .imp-categorias .tabla td.num { grid-column: 3; }
+    .imp-categorias .tabla td.imp-fila-como, .imp-categorias .tabla td.imp-fila-acciones { grid-column: 2 / 4; }
+    .imp-categorias .tabla td.imp-fila-acciones { width: auto; text-align: left; padding-top: .3rem; }
+    .imp-buscar .form-select { flex: 1 1 45%; max-width: none; }
+    .pagina-importacion .entrada { grid-template-columns: 1.2rem 32px minmax(0, 1fr); }
+    .pagina-importacion .entrada-resultado { grid-column: 3; }
+}

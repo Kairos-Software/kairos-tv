@@ -1,29 +1,31 @@
 {% extends "base.html" %}
 {% load static canales_extras %}
 {% comment %}
-    Organizar contenido: TODO en un lugar, sección por sección (En vivo,
-    Películas, Series y las nuevas que se crean acá: Música, Radio...). Cada
-    sección tiene SUS categorías.
-      - Izquierda: las categorías de la sección con cuántos tienen; las que
-        parecen la misma (para juntarlas con un clic); elegir varias y
-        juntarlas en una; crear una nueva.
-      - Derecha: lo que hay en la elegida. Tocar una tarjeta la elige (para
-        la barra de abajo: mover, cambiar de sección, unir en una serie,
-        quitar, eliminar); "Editar" abre la edición rápida (nombre, imagen,
-        categoría, si se muestra y DE DÓNDE SALIÓ).
-    Cada acción dice en una línea qué va a pasar. Ver consultas.organizar_contenido y organizar.py.
+    Organizar contenido: TODO en un lugar, sección por sección (En vivo, Películas, Series y las nuevas que se
+    crean acá: Música, Radio...). Cada sección tiene SUS categorías.
+      - Izquierda: las categorías de la sección con cuántos tienen; las que parecen la misma (para juntarlas con
+        un clic); elegir varias y juntarlas en una; crear una nueva.
+      - Arriba: buscar y los chips de qué mostrar, con cuántos hay de cada uno (lo que queda por hacer:
+        sin imagen, no se ven...).
+      - Derecha: lo que hay en la elegida (parcial _organizar_tarjeta.html). Tocar una tarjeta abre el PANEL DE
+        EDICIÓN al costado (todo lo de esa cosa: datos, imagen, señales), que guarda sin recargar y pasa a la
+        anterior o a la siguiente. La casilla la elige para la barra de abajo (mover, cambiar de sección, unir en
+        una serie, cambiar nombres, quitar, eliminar, exportar). En la vista Lista, el nombre, la categoría, ★ y
+        "se muestra" se cambian ahí mismo. Arrastrar una imagen arriba de una tarjeta se la pone.
+    Comportamiento: static/js/organizar_trabajo.js (+ imagenes_contenido.js, organizar_detalle.js, trabajo.js).
+    Datos: consultas.organizar_contenido, views._preparar_para_editar y views_organizar.
 {% endcomment %}
 
 {% block titulo %}Organizar contenido{% endblock %}
 {% block clase_body %}pagina-organizar{% endblock %}
 
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}"><link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}"><link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/organizar_trabajo.css' %}?v=20261021">{% endblock %}
 
 {% block encabezado %}
 {% barra_contenido 'organizar' %}
 <div class="contenido-encabezado">
     <h1 class="contenido-titulo">Organizar
-        <button type="button" class="ayuda-boton" data-ayuda="Todo lo cargado, sección por sección y categoría por categoría. Tocá las tarjetas para elegirlas (una o varias; con Shift, un rango) y abajo elegí qué hacer con ellas: mover, pasar a otra sección, unir en una serie, quitar, eliminar. El ⓘ muestra al costado todo lo de una (de dónde salió, cada señal y cómo anda) y el lápiz la edita. Atajo: la tecla / va a la búsqueda." aria-label="Cómo se usa">?</button>
+        <button type="button" class="ayuda-boton" data-ayuda="Todo lo cargado, sección por sección y categoría por categoría. Tocá una tarjeta para abrirla al costado: cambiás nombre, imagen y categoría, ves sus señales, y con «Siguiente» pasás a la que sigue (Ctrl+Enter guarda y pasa). Para poner una imagen rápido, arrastrala desde otra ventana arriba de la tarjeta. En la vista Lista el nombre se cambia ahí mismo (Enter guarda, Tab pasa al siguiente). Tildá la casilla para elegir varias (con Shift, un rango) y abajo elegí qué hacer con ellas. La tecla / va a la búsqueda." aria-label="Cómo se usa">?</button>
     </h1>
     {% if puede_editar %}
     <div class="contenido-acciones">
@@ -208,30 +210,26 @@
     </aside>
 
     <section class="espejo-contenido" aria-label="Contenido">
-        {# ── Filtros ── #}
-        <form method="get" class="filtros organizar-filtros mb-3" role="search">
+        {# ── Buscar (y los filtros que se usan poco, plegados) ── #}
+        <form method="get" class="filtros organizar-filtros" role="search">
             <input type="hidden" name="contenido" value="{{ contenido }}">
             {% if datos.elegida != 'todas' %}<input type="hidden" name="categoria" value="{{ datos.elegida }}">{% endif %}
+            {% if filtros.mostrar != 'todo' %}<input type="hidden" name="mostrar" value="{{ filtros.mostrar }}">{% endif %}
+            {% if filtros.sin_logo %}<input type="hidden" name="sin_logo" value="1">{% endif %}
             <div class="filtros-buscar">
                 <i class="bi bi-search" aria-hidden="true"></i>
                 <label for="q" class="visually-hidden">Buscar</label>
-                <input type="search" id="q" name="q" value="{{ filtros.texto }}" class="form-control" placeholder="Buscar por nombre">
-            </div>
-            <div>
-                <label for="mostrar" class="visually-hidden">Qué mostrar</label>
-                <select id="mostrar" name="mostrar" class="form-select">
-                    {% for valor, texto in que_mostrar %}<option value="{{ valor }}" {% if filtros.mostrar == valor %}selected{% endif %}>{{ texto }}</option>{% endfor %}
-                </select>
+                <input type="search" id="q" name="q" value="{{ filtros.texto }}" class="form-control" placeholder="Buscar por nombre (Enter)">
             </div>
             <details class="filtros-mas">
                 <summary class="btn btn-outline-secondary">
-                    <i class="bi bi-sliders" aria-hidden="true"></i> Más filtros
-                    {% if filtros.idioma or filtros.origen or filtros.sin_logo %}<span class="filtro-activo" aria-label="Hay filtros adicionales activos"></span>{% endif %}
+                    <i class="bi bi-sliders" aria-hidden="true"></i> Idioma y lista
+                    {% if filtros.idioma or filtros.origen %}<span class="filtro-activo" aria-label="Hay filtros de idioma o lista puestos"></span>{% endif %}
                 </summary>
                 <div class="filtros-mas-panel">
                     <div>
                         <label for="idioma" class="form-label">Idioma</label>
-                        <select id="idioma" name="idioma" class="form-select">
+                        <select id="idioma" name="idioma" class="form-select" data-enviar-al-cambiar>
                             <option value="">Cualquier idioma</option>
                             <option value="es" {% if filtros.idioma == 'es' %}selected{% endif %}>Español</option>
                             <option value="otro" {% if filtros.idioma == 'otro' %}selected{% endif %}>Otro idioma</option>
@@ -239,21 +237,26 @@
                         </select>
                     </div>
                     <div>
-                        <label for="origen" class="form-label">Origen</label>
-                        <select id="origen" name="origen" class="form-select">
-                            <option value="">Cualquier origen</option>
+                        <label for="origen" class="form-label">De qué lista vino</label>
+                        <select id="origen" name="origen" class="form-select" data-enviar-al-cambiar>
+                            <option value="">Cualquier lista</option>
                             {% for o in origenes %}<option value="{{ o }}" {% if filtros.origen == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
                         </select>
                     </div>
-                    <div class="form-check mb-0">
-                        <input class="form-check-input" type="checkbox" name="sin_logo" value="1" id="sin_logo" {% if filtros.sin_logo %}checked{% endif %}>
-                        <label class="form-check-label" for="sin_logo">Solo sin imagen</label>
-                    </div>
                 </div>
             </details>
-            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i> Aplicar</button>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search" aria-hidden="true"></i><span class="visually-hidden">Buscar</span></button>
             {% if hay_filtros %}<a href="?contenido={{ contenido }}{% if datos.elegida != 'todas' %}&amp;categoria={{ datos.elegida }}{% endif %}" class="btn btn-link">Limpiar</a>{% endif %}
         </form>
+
+        {# ── Qué mostrar: un chip por filtro, con cuántos hay (lo que queda por hacer) ── #}
+        <nav class="problemas organizar-chips" aria-label="Qué mostrar">
+            {% for clave, nombre, cantidad in chips %}
+            <a href="?{{ sin_mostrar }}&amp;mostrar={{ clave }}" class="problema problema-{{ clave }}{% if filtros.mostrar == clave %} activo{% endif %}{% if not cantidad and filtros.mostrar != clave %} sin-nada{% endif %}"{% if filtros.mostrar == clave %} aria-current="true"{% endif %}>{{ nombre }} <span>{{ cantidad }}</span></a>
+            {% endfor %}
+            <a href="?{{ alternar_sin_logo }}" class="problema problema-sin-imagen{% if filtros.sin_logo %} activo{% endif %}{% if not cuenta_sin_logo and not filtros.sin_logo %} sin-nada{% endif %}"
+               aria-pressed="{% if filtros.sin_logo %}true{% else %}false{% endif %}" title="Solo lo que no tiene imagen (se suma a lo que elijas a la izquierda). Tocalo de nuevo para sacarlo."><i class="bi bi-image" aria-hidden="true"></i> Sin imagen <span>{{ cuenta_sin_logo }}</span></a>
+        </nav>
 
         {# ── La categoría elegida y sus opciones ── #}
         <div class="espejo-titulo">
@@ -264,12 +267,12 @@
             <div class="espejo-titulo-acciones">
                 {% if puede_editar and datos.pagina.object_list %}
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="elegir-pagina">
-                    <i class="bi bi-check2-square" aria-hidden="true"></i> Seleccionar esta página
+                    <i class="bi bi-check2-square" aria-hidden="true"></i> Elegir toda la página
                 </button>
                 {% endif %}
                 <div class="vista-botones" role="group" aria-label="Cómo ver">
                     <button type="button" data-vista="tarjetas" aria-pressed="true" title="Tarjetas"><i class="bi bi-grid-3x2-gap" aria-hidden="true"></i><span class="visually-hidden">Tarjetas</span></button>
-                    <button type="button" data-vista="lista" aria-pressed="false" title="Lista (más por pantalla)"><i class="bi bi-list-ul" aria-hidden="true"></i><span class="visually-hidden">Lista</span></button>
+                    <button type="button" data-vista="lista" aria-pressed="false" title="Lista: cambiás nombre, categoría, ★ y si se muestra ahí mismo"><i class="bi bi-list-ul" aria-hidden="true"></i><span class="visually-hidden">Lista</span></button>
                 </div>
             </div>
         </div>
@@ -351,41 +354,16 @@
             <input type="hidden" name="seccion" value="{{ contenido }}">
             {# Con filtros, lo que se haga con una serie toca solo sus capítulos que se ven #}
             <input type="hidden" name="q" value="{{ filtros.texto }}">
-                    <input type="hidden" name="mostrar" value="{{ filtros.mostrar }}">
-                    <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
-                    <input type="hidden" name="origen" value="{{ filtros.origen }}">
-                    <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
+            <input type="hidden" name="mostrar" value="{{ filtros.mostrar }}">
+            <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
+            <input type="hidden" name="origen" value="{{ filtros.origen }}">
+            <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
             {% for categoria, items in datos.grupos %}
             {% if datos.elegida == 'todas' %}
             <h3 class="espejo-seccion">{% if categoria %}{{ categoria.nombre }}{% else %}Sin categoría (en la app: «Otros»){% endif %}</h3>
             {% endif %}
             <div class="espejo-grilla{% if forma != 'vivo' %} con-poster{% endif %}">
-                {% for item in items %}
-                <article class="espejo-tarjeta{% if contenido == 'serie' %}{% if not item.completa %} fuera{% endif %}{% elif item.no_se_ve %} fuera{% endif %}">
-                    {% if puede_editar %}
-                    {% if contenido == 'serie' %}
-                    <input type="checkbox" class="form-check-input canal-elegir" name="serie" value="{{ item.nombre }}" id="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" aria-label="Elegir {{ item.nombre }}">
-                    {% else %}
-                    <input type="checkbox" class="form-check-input canal-elegir" name="canal" value="{{ item.pk }}" id="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" aria-label="Elegir {{ item.nombre }}">
-                    {% endif %}
-                    {% endif %}
-                    {% if puede_editar %}<label class="espejo-seleccionar" for="elegir-{{ forloop.parentloop.counter }}-{{ forloop.counter }}">{% else %}<div class="espejo-seleccionar">{% endif %}
-                    <span class="espejo-imagen" data-iniciales="{{ item.nombre|iniciales }}">{% if item.logo_ver %}<img src="{{ item.logo_ver }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ item.nombre|iniciales }}{% endif %}</span>
-                    <span class="espejo-nombre" title="{{ item.nombre }}">{% if item.destacado %}<span title="Destacado en la TV" aria-label="Destacado en la TV">★</span> {% endif %}{{ item.nombre }}</span>
-                    <span class="espejo-detalle">
-                        {% if contenido == 'serie' %}
-                        <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% elif item.fuera %} · <span class="estado-mal" title="Capítulos que la app no muestra (caídos o quitados)">{{ item.fuera }} no se ve{{ item.fuera|pluralize:"n" }}</span>{% endif %}
-                        {% else %}
-                        {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<a href="{% url 'canales:senales' %}?problema=cualquiera&amp;canal={{ item.pk }}" class="estado-mal espejo-senales" title="{{ item.no_se_ve }} · Ver sus señales">No se ve</a>{% else %}Se ve en la app{% if item.fuentes_fuera %} · <a href="{% url 'canales:senales' %}?problema=cualquiera&amp;canal={{ item.pk }}" class="estado-mal espejo-senales" title="Las otras están caídas, ocultas, quitadas o retiradas: ver cada una">{{ item.senales_en_app }} de {{ item.fuentes_total }} señales</a>{% endif %}{% endif %}
-                        {% endif %}
-                    </span>
-                    {% if puede_editar %}</label>{% else %}</div>{% endif %}
-                    <div class="espejo-botones">
-                        <button type="button" class="espejo-ver" aria-label="Detalles de {{ item.nombre }}" title="Detalles: de dónde salió, cada señal y cómo anda"><i class="bi bi-info-circle" aria-hidden="true"></i><span class="espejo-boton-texto"> Detalles</span></button>
-                        <button type="button" class="espejo-editar" data-datos="{{ item.datos }}" aria-label="{% if puede_editar %}Editar{% else %}Ver{% endif %} {{ item.nombre }}" title="{% if puede_editar %}Editar: nombre, imagen, categoría…{% else %}Ver{% endif %}"><i class="bi bi-{% if puede_editar %}pencil{% else %}eye{% endif %}" aria-hidden="true"></i><span class="espejo-boton-texto"> {% if puede_editar %}Editar{% else %}Ver{% endif %}</span></button>
-                    </div>
-                </article>
-                {% endfor %}
+                {% for item in items %}{% include "canales/_organizar_tarjeta.html" %}{% endfor %}
             </div>
             {% endfor %}
 
@@ -403,6 +381,7 @@
                     <select id="accion" class="form-select form-select-sm w-auto" aria-label="Qué hacer con lo elegido">
                         <option value="">—</option>
                         <option value="mover">Mover a otra categoría</option>
+                        <option value="renombrar">Cambiar nombres (sacar «HD», reemplazar…)</option>
                         {% if contenido == 'serie' %}
                         <option value="unir">Unir en una sola serie</option>
                         <option value="a_peliculas">Pasar a Películas</option>
@@ -427,6 +406,17 @@
                     <input type="text" name="nueva_categoria" class="form-control form-control-sm" maxlength="80" placeholder="o una nueva">
                     <button type="submit" class="btn btn-sm btn-primary" {% if contenido == 'serie' %}name="accion" value="mover"{% else %}formaction="{% url 'canales:catalogo_categoria' %}"{% endif %}>Mover</button>
                     <span class="espejo-ayuda">Los elegidos pasan a esa categoría de {{ seccion }}.</span>
+                </div>
+                <div class="espejo-barra-fila renombrar-fila" data-accion="renombrar" hidden>
+                    <div class="renombrar-reglas">
+                        <label>Sacar <input type="text" name="sacar" class="form-control form-control-sm" maxlength="60" placeholder="ej: HD" autocomplete="off"></label>
+                        <label>Cambiar <input type="text" name="reemplazar" class="form-control form-control-sm" maxlength="60" autocomplete="off"></label>
+                        <label>por <input type="text" name="por" class="form-control form-control-sm" maxlength="60" autocomplete="off"></label>
+                        <label class="form-check mb-0"><input type="checkbox" name="limpiar" value="1" class="form-check-input"> Limpiar como al importar <button type="button" class="ayuda-boton" data-ayuda="Saca el país del principio («AR:», «ES |»), la calidad (HD, FHD, 4K, 1080p) y palabras como «REPUESTO», igual que cuando se importa una lista." aria-label="Qué saca">?</button></label>
+                        <label class="form-check mb-0"><input type="checkbox" name="mayusculas" value="1" class="form-check-input"> Mayúscula Inicial</label>
+                        <button type="submit" class="btn btn-sm btn-primary" formaction="{% url 'canales:organizar_renombrar' %}" data-renombrar-boton disabled>Cambiar nombres</button>
+                    </div>
+                    <div class="renombrar-vista" data-renombrar-vista aria-live="polite"></div>
                 </div>
                 {% if contenido == 'serie' %}
                 <div class="espejo-barra-fila" data-accion="unir" hidden>
@@ -481,7 +471,6 @@
                             <p class="ds-paso-titulo"><span>3</span> Temporada</p>
                             <input type="number" name="temporada" class="form-control form-control-sm" min="1" max="99" value="1" aria-label="Número de temporada">
                         </div>
-                        
                         <p class="ds-resumen" data-ds-resumen></p>
                     </div>
                     <button type="submit" class="btn btn-sm btn-primary" formaction="{% url 'canales:catalogo_contenido' %}">Pasar</button>
@@ -512,122 +501,125 @@
     </section>
 </div>
 
-{# ── Edición rápida (la llena el script con los datos de la tarjeta) ── #}
-<dialog class="detalle-canal" id="editar" aria-labelledby="editar-titulo">
-    <form method="post" action="{% url 'canales:organizar_editar' %}" class="detalle-canal-cuerpo" id="form-editar" enctype="multipart/form-data">
+{% if puede_editar %}
+{# ── Elegir la categoría de una tarjeta en la vista Lista (uno solo para todas: lo ubica organizar_trabajo.js) ── #}
+<div class="selector-categoria" id="selector-categoria" hidden role="dialog" aria-label="Elegir la categoría">
+    <input type="search" class="form-control form-control-sm" placeholder="Buscar o escribir una nueva" aria-label="Buscar la categoría" autocomplete="off" data-buscador-secundario data-selector-buscar>
+    <div class="selector-categoria-lista" data-selector-lista>
+        {% for c in categorias %}<button type="button" data-valor="{{ c.pk }}">{{ c.nombre }}</button>{% endfor %}
+        <button type="button" data-valor="ninguna">Sin categoría («Otros»)</button>
+    </div>
+    <button type="button" class="selector-categoria-nueva" data-selector-nueva hidden><i class="bi bi-plus-lg" aria-hidden="true"></i> Crear «<span></span>»</button>
+</div>
+{% endif %}
+
+{# ── El panel de edición: todo lo de una tarjeta (datos, imagen, señales). Lo llena organizar_trabajo.js ── #}
+<aside class="editor-contenido" id="editor" hidden aria-labelledby="editor-titulo"
+       data-forma="{{ forma }}" data-contenido="{{ contenido }}" data-puede-editar="{% if puede_editar %}1{% endif %}"
+       data-url-cambiar="{% url 'canales:organizar_cambiar' %}" data-url-imagenes="{% url 'canales:organizar_imagenes' %}"
+       data-url-renombrar="{% url 'canales:organizar_renombrar' %}" data-categoria-vista="{{ datos.elegida }}"
+       data-pagina-siguiente="{{ pagina_siguiente }}" data-pagina-anterior="{{ pagina_anterior }}">
+    <form method="post" action="{% url 'canales:organizar_editar' %}" id="form-editor" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         <input type="hidden" name="tipo">
         <input type="hidden" name="canal">
         <input type="hidden" name="serie">
         <input type="hidden" name="volver" value="{{ request.get_full_path }}">
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-            <div>
-                <h2 class="h5 mb-1" id="editar-titulo"></h2>
-                <p class="small mb-0" id="editar-estado"></p>
+        <div class="editor-cabeza">
+            <div class="espejo-imagen editor-vista" data-editor-vista{% if puede_editar %} data-soltar-imagen tabindex="0" role="button" aria-label="Cambiar la imagen: arrastrá una, pegala con Ctrl+V o tocá para subir un archivo" title="Arrastrá una imagen acá, pegala con Ctrl+V o tocá para subir un archivo"{% endif %}></div>
+            <div class="editor-titulo">
+                <p class="editor-posicion" data-editor-posicion></p>
+                <h2 id="editor-titulo" data-editor-nombre></h2>
+                <p class="editor-estado" data-editor-estado></p>
             </div>
-            <button type="button" class="btn-close" data-cerrar aria-label="Cerrar"></button>
+            <button type="button" class="btn-close" data-editor-cerrar aria-label="Cerrar (Esc)" title="Cerrar (Esc)"></button>
         </div>
-        <div class="row g-3">
-            <div class="col-md-3">
-                <div class="espejo-imagen" id="editar-vista"></div>
+        <div class="editor-cuerpo">
+            {% if puede_editar %}
+            <div class="editor-campo">
+                <label for="editor-nombre" class="form-label">Nombre</label>
+                <input type="text" name="nombre" id="editor-nombre" class="form-control" maxlength="120" required autocomplete="off">
             </div>
-            <div class="col-md-9">
-                <div class="row g-3">
-                    <div class="col-md-8">
-                        <label for="editar-nombre" class="form-label">Nombre</label>
-                        <input type="text" name="nombre" id="editar-nombre" class="form-control" maxlength="120" required>
-                    </div>
-                    <div class="col-md-4" data-solo-canal>
-                        <label for="editar-numero" class="form-label">Número de canal</label>
-                        <input type="text" name="numero" id="editar-numero" class="form-control" maxlength="10">
-                    </div>
-                    <div class="col-md-7">
-                        <div class="editar-imagen-titulo">
-                            <label for="editar-logo" class="form-label mb-0" id="editar-logo-titulo">Imagen (logo o póster)</label>
-                            <a href="#" class="small" id="editar-buscar" target="_blank" rel="noopener" title="Abre Google Imágenes con el nombre: copiá la imagen y pegala acá con Ctrl+V"><i class="bi bi-search" aria-hidden="true"></i> Buscar imagen</a>
-                        </div>
-                        <input type="url" name="logo" id="editar-logo" class="form-control" maxlength="500" placeholder="https://.../imagen.jpg">
-                    </div>
-                    <div class="col-md-5">
-                        <label for="editar-subir" class="form-label">O subila desde la compu</label>
-                        <input type="file" name="imagen" id="editar-subir" class="form-control" accept="image/jpeg,image/png,image/webp">
-                    </div>
-                    <div class="col-12 espejo-ayuda mt-1"><span id="editar-logo-ayuda"></span> <strong>Atajo:</strong> copiá una imagen (o su link) y pegala acá con <kbd>Ctrl</kbd>+<kbd>V</kbd>.</div>
-                    <div class="col-md-6">
-                        <label for="editar-categoria" class="form-label">Categoría</label>
-                        <select name="categoria" id="editar-categoria" class="form-select">
-                            {% for c in categorias %}<option value="{{ c.pk }}">{{ c.nombre }}</option>{% endfor %}
-                            <option value="ninguna">Sin categoría («Otros»)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label for="editar-nueva" class="form-label">O una nueva</label>
-                        <input type="text" name="nueva_categoria" id="editar-nueva" class="form-control" maxlength="80">
-                    </div>
-                    {% if contenido != 'serie' %}
-                    <div class="col-md-6">
-                        <label for="editar-contenido" class="form-label">Sección</label>
-                        <select name="contenido" id="editar-contenido" class="form-select">
-                            <option value="vivo">En vivo</option>
-                            <option value="pelicula">Películas</option>
-                            {% for s in secciones_nuevas %}<option value="{{ s.clave }}">{{ s.nombre }}</option>{% endfor %}
-                        </select>
-                    </div>
-                    {% endif %}
-                    <div class="col-md-6 d-flex align-items-end">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" name="activo" id="editar-activo">
-                            <label class="form-check-label" for="editar-activo">Se muestra en la app</label>
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check mb-0">
-                            <input class="form-check-input" type="checkbox" name="destacado" id="editar-destacado">
-                            <label class="form-check-label" for="editar-destacado">★ Destacado en la TV</label>
-                            <button type="button" class="ayuda-boton ms-1" data-ayuda="Cuando nadie usa la TV, la app muestra una vidriera con películas, series y canales. Lo destacado sale ahí más seguido que lo demás (no todo el tiempo)." aria-label="Qué es destacado">?</button>
-                        </div>
-                    </div>
+            <div class="editor-campo">
+                <div class="editor-campo-cabeza">
+                    <span class="form-label mb-0" data-editor-imagen-titulo>Imagen</span>
+                    <span class="editor-imagen-botones">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-imagen-buscar title="Imágenes con este nombre: de otras listas y de Wikipedia"><i class="bi bi-search" aria-hidden="true"></i> Buscar</button>
+                        <label class="btn btn-sm btn-outline-secondary mb-0" title="Una imagen de la compu (JPG, PNG o WEBP)"><i class="bi bi-upload" aria-hidden="true"></i> Subir<input type="file" name="imagen" accept="image/jpeg,image/png,image/webp" hidden data-imagen-archivo></label>
+                        <button type="button" class="btn btn-sm btn-link px-1" data-imagen-quitar title="Dejarla sin imagen">Sacar</button>
+                    </span>
+                </div>
+                <input type="url" name="logo" id="editor-logo" class="form-control form-control-sm" maxlength="500" placeholder="Link de la imagen, o pegala (Ctrl+V) / arrastrala" aria-label="Link de la imagen" autocomplete="off">
+                <div class="editor-sugerencias" data-sugerencias hidden></div>
+                <p class="editor-ayuda" data-editor-imagen-ayuda></p>
+            </div>
+            <div class="editor-fila">
+                <div class="editor-campo">
+                    <label for="editor-categoria" class="form-label">Categoría</label>
+                    <select name="categoria" id="editor-categoria" class="form-select form-select-sm">
+                        {% for c in categorias %}<option value="{{ c.pk }}">{{ c.nombre }}</option>{% endfor %}
+                        <option value="ninguna">Sin categoría («Otros»)</option>
+                        <option value="+nueva">＋ Una nueva…</option>
+                    </select>
+                    <input type="text" name="nueva_categoria" class="form-control form-control-sm mt-1" maxlength="80" placeholder="Nombre de la categoría nueva" aria-label="Nombre de la categoría nueva" hidden data-editor-nueva>
+                </div>
+                {% if contenido != 'serie' %}
+                <div class="editor-campo">
+                    <label for="editor-contenido" class="form-label">Sección</label>
+                    <select name="contenido" id="editor-contenido" class="form-select form-select-sm">
+                        <option value="vivo">En vivo</option>
+                        <option value="pelicula">Películas</option>
+                        {% for s in secciones_nuevas %}<option value="{{ s.clave }}">{{ s.nombre }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="editor-campo editor-campo-chico"{% if forma != 'vivo' %} hidden{% endif %}>
+                    <label for="editor-numero" class="form-label">Número</label>
+                    <input type="text" name="numero" id="editor-numero" class="form-control form-control-sm" maxlength="10" inputmode="numeric" autocomplete="off">
+                </div>
+                {% endif %}
+            </div>
+            <div class="editor-checks">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" name="activo" id="editor-activo">
+                    <label class="form-check-label" for="editor-activo">Se muestra en la app</label>
+                </div>
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" name="destacado" id="editor-destacado">
+                    <label class="form-check-label" for="editor-destacado">★ Destacado en la TV</label>
+                    <button type="button" class="ayuda-boton ms-1" data-ayuda="Cuando nadie usa la TV, la app muestra una vidriera con películas, series y canales. Lo destacado sale ahí más seguido que lo demás (no todo el tiempo)." aria-label="Qué es destacado">?</button>
                 </div>
             </div>
+            {% endif %}
+            <details class="editor-bloque" data-editor-bloque-senales>
+                <summary>Señales <span class="editor-bloque-numero" data-editor-cuantas></span></summary>
+                <p class="espejo-ayuda mx-0" data-editor-senales-ayuda></p>
+                <ul class="lista-senales" data-editor-senales></ul>
+            </details>
+            <details class="editor-bloque">
+                <summary>Datos <span class="texto-apagado fw-normal">· sección, de dónde salió, quién lo cargó…</span></summary>
+                <dl class="detalle-datos" data-editor-datos></dl>
+            </details>
         </div>
-        <h3 class="h6 mt-4">Señales (la app las prueba en este orden)</h3>
-        <ul class="lista-senales" id="editar-origenes"></ul>
-        <div class="dialogo-acciones d-flex flex-wrap align-items-center gap-2 mt-3">
-            {% if puede_editar %}<button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>
-            <button type="submit" class="btn btn-outline-secondary" data-guardar-siguiente title="Guarda y abre la tarjeta que sigue (para ir de una en una sin buscar)"><i class="bi bi-chevron-double-right" aria-hidden="true"></i> Guardar y seguir</button>{% endif %}
-            <button type="button" class="btn btn-link" data-cerrar>Cerrar</button>
-            <a href="#" class="btn btn-link" id="editar-mas">Más opciones (señales, idioma…)</a>
-            {% if puede_editar %}<button type="button" class="btn btn-outline-secondary text-danger ms-auto" id="editar-eliminar"><i class="bi bi-trash" aria-hidden="true"></i> Eliminar</button>{% endif %}
+        <div class="editor-pie">
+            <div class="editor-pie-botones">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-editor-anterior title="Anterior" aria-label="Anterior"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                {% if puede_editar %}<button type="submit" class="btn btn-sm btn-primary" data-editor-guardar><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>{% endif %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-editor-siguiente title="Ctrl+Enter"><span>Siguiente</span> <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                <span class="editor-aviso" data-editor-aviso role="status" aria-live="polite"></span>
+            </div>
+            <div class="editor-pie-enlaces">
+                <a href="#" data-editor-mas>Más opciones</a>
+                <a href="#" data-editor-senales-link data-base="{% url 'canales:senales' %}">En Señales</a>
+                {% if puede_editar %}<button type="button" class="btn btn-link p-0 text-danger" data-editor-eliminar>Eliminar</button>{% endif %}
+                <span class="editor-atajos" aria-hidden="true"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> guarda y sigue · <kbd>Esc</kbd> cierra</span>
+            </div>
         </div>
     </form>
-</dialog>
+</aside>
 <form method="post" action="{% url 'canales:organizar_eliminar' %}" id="form-eliminar-uno" hidden>
     {% csrf_token %}
     <input type="hidden" name="volver" value="{{ request.get_full_path }}">
 </form>
-
-{# ── Detalles: con el botón «Detalles» de una tarjeta, todo lo que se sabe de ella (static/js/organizar_detalle.js). Elegir tarjetas NO lo abre ── #}
-<aside class="detalle-lateral" id="detalle-lateral" data-forma="{{ forma }}" aria-labelledby="detalle-nombre" hidden>
-    <div class="detalle-lateral-cabeza">
-        <div class="espejo-imagen" data-detalle-imagen></div>
-        <div class="detalle-lateral-titulo">
-            <h2 id="detalle-nombre" data-detalle-nombre></h2>
-            <p data-detalle-estado></p>
-        </div>
-        <button type="button" class="btn-close" data-detalle-cerrar aria-label="Cerrar los detalles"></button>
-    </div>
-    <div class="detalle-lateral-cuerpo">
-        <dl class="detalle-datos" data-detalle-datos></dl>
-        <h3 class="detalle-subtitulo">Señales (<span data-detalle-cuantas></span>)</h3>
-        <p class="espejo-ayuda mx-0" data-detalle-ayuda></p>
-        <ul class="lista-senales" data-detalle-senales></ul>
-    </div>
-    <div class="detalle-lateral-pie">
-        <button type="button" class="btn btn-sm btn-primary" data-detalle-editar>{% if puede_editar %}Editar{% else %}Ver todo{% endif %}</button>
-        <a href="#" class="btn btn-sm btn-link" data-detalle-senales-link data-base="{% url 'canales:senales' %}"><i class="bi bi-activity" aria-hidden="true"></i> En Señales</a>
-        <a href="#" class="btn btn-sm btn-link" data-detalle-mas>Más opciones</a>
-    </div>
-</aside>
 {% if puede_editar %}
 <form method="post" id="form-borrar-senal" data-url="{% url 'canales:fuente_borrar' 0 %}" hidden>
     {% csrf_token %}
@@ -698,7 +690,7 @@
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="que" value="elegido" id="exportar-elegido">
                 <label class="form-check-label" for="exportar-elegido">Lo que elegiste en la página (<span id="exportar-cuantos">0</span>)</label>
-                <div class="espejo-ayuda mx-0 mt-1 mb-0">Para un canal, una película o una serie en particular: tocá su tarjeta (o buscala arriba) y elegí esta opción.</div>
+                <div class="espejo-ayuda mx-0 mt-1 mb-0">Para un canal, una película o una serie en particular: tildá su casilla (o buscala arriba) y elegí esta opción.</div>
             </div>
         </fieldset>
 
@@ -740,352 +732,9 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'js/trabajo.js' %}"></script>
-<script src="{% static 'js/organizar_detalle.js' %}"></script>
+<script src="{% static 'js/trabajo.js' %}?v=20261021"></script>
+<script src="{% static 'js/organizar_detalle.js' %}?v=20261021"></script>
 {% if puede_editar %}<script src="{% static 'js/destino_serie.js' %}"></script>{% endif %}
-<script>
-(function () {
-    // (Confirmar lo que no se puede deshacer: static/js/trabajo.js)
-
-    // ── Juntar categorías: aparece al elegir dos o más ──
-    var juntar = document.getElementById('form-juntar');
-    var barraJuntar = document.getElementById('juntar-barra');
-    if (juntar && barraJuntar) {
-        var destino = document.getElementById('juntar-destino');
-        var actualizarJuntar = function () {
-            var elegidas = Array.prototype.filter.call(juntar.querySelectorAll('[name=elegida]'), function (c) { return c.checked; });
-            barraJuntar.hidden = elegidas.length < 2;
-            document.getElementById('juntar-cuantas').textContent = elegidas.length;
-            destino.textContent = '';
-            elegidas.forEach(function (c) {
-                var opcion = document.createElement('option');
-                opcion.value = c.value;
-                opcion.textContent = '«' + c.dataset.nombre + '»';
-                destino.appendChild(opcion);
-            });
-        };
-        juntar.querySelectorAll('[name=elegida]').forEach(function (c) { c.addEventListener('change', actualizarJuntar); });
-        actualizarJuntar();
-    }
-
-    // Buscar categorías sin recargar ni perder los filtros del contenido.
-    var buscarCategorias = document.getElementById('buscar-categorias');
-    if (buscarCategorias) {
-        var filasCategorias = Array.prototype.slice.call(document.querySelectorAll('[data-categoria-fila]'));
-        var categoriasVacio = document.getElementById('categorias-vacio');
-        var normalizar = function (texto) {
-            return (texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        };
-        buscarCategorias.addEventListener('input', function () {
-            var texto = normalizar(buscarCategorias.value.trim());
-            var visibles = 0;
-            filasCategorias.forEach(function (fila, indice) {
-                var coincide = !texto || normalizar(fila.textContent).indexOf(texto) >= 0;
-                // "Todas" queda visible cuando no se está buscando.
-                fila.hidden = texto ? !coincide : false;
-                if (!fila.hidden && (texto || indice > 0)) visibles += 1;
-            });
-            categoriasVacio.hidden = !texto || visibles > 0;
-        });
-    }
-
-    // "Nueva sección" en las pestañas muestra el formulario de crear (se usa poco: no ocupa lugar si no se pide)
-    var crearSeccion = document.getElementById('nueva-seccion');
-    if (crearSeccion) {
-        var mostrarCrear = function () {
-            crearSeccion.hidden = false;
-            crearSeccion.open = true;
-            crearSeccion.scrollIntoView({behavior: 'smooth', block: 'start'});
-            document.getElementById('seccion-nombre').focus();
-        };
-        document.querySelectorAll('[data-abrir-seccion]').forEach(function (enlace) {
-            enlace.addEventListener('click', function (evento) { evento.preventDefault(); mostrarCrear(); });
-        });
-        crearSeccion.addEventListener('toggle', function () { if (!crearSeccion.open) crearSeccion.hidden = true; });
-        if (location.hash === '#nueva-seccion') mostrarCrear();
-    }
-
-    // ── Elegir tarjetas y la barra de abajo ──
-    var form = document.getElementById('form-organizar');
-    if (form) {
-        var casillas = form.querySelectorAll('.canal-elegir');
-        var todos = document.getElementById('elegir-todos');
-        var elegirPagina = document.getElementById('elegir-pagina');
-        var limpiarSeleccion = document.getElementById('limpiar-seleccion');
-        var cantidad = document.getElementById('cantidad-elegidos');
-        var accion = document.getElementById('accion');
-        var barraAcciones = form.querySelector('.espejo-barra');
-        var seccion = document.getElementById('seccion-destino');
-        var ayudaSeccion = document.getElementById('seccion-ayuda');
-        var actualizar = function () {
-            var elegidos = Array.prototype.filter.call(casillas, function (c) { return c.checked; }).length;
-            if (cantidad) cantidad.textContent = elegidos ? elegidos + ' elegido' + (elegidos > 1 ? 's' : '') : 'Ninguno elegido';
-            if (barraAcciones) barraAcciones.classList.toggle('tiene-seleccion', elegidos > 0);
-            if (todos) {
-                todos.checked = elegidos > 0 && elegidos === casillas.length;
-                todos.indeterminate = elegidos > 0 && elegidos < casillas.length;
-            }
-            // Solo se ve lo de la acción elegida, y solo con algo elegido
-            form.querySelectorAll('[data-accion]').forEach(function (fila) {
-                fila.hidden = !elegidos || fila.dataset.accion !== (accion && accion.value);
-                // Lo que está escondido no se manda (hay dos "nombre_serie" y dos "temporada")
-                fila.querySelectorAll('input, select').forEach(function (campo) { campo.disabled = fila.hidden; });
-            });
-            if (seccion) {
-                var aSerie = seccion.value === 'serie';
-                var cajaSerie = form.querySelector('.espejo-barra-serie');
-                cajaSerie.style.display = aSerie ? 'flex' : 'none';
-                // Categoría, serie y temporada solo cuentan si van a Series (si no, ni se mandan ni se piden)
-                var sinSerie = form.querySelector('[data-accion=seccion]').hidden || !aSerie;
-                cajaSerie.querySelectorAll('input, select').forEach(function (campo) { campo.disabled = sinSerie; });
-                ayudaSeccion.textContent = aSerie
-                    ? 'Los elegidos quedan como capítulos de UNA serie: elegí la categoría, la serie (una que ya existe o una nueva) y la temporada. Siguen después del último capítulo de esa temporada, en orden alfabético.'
-                    : 'Los elegidos se mueven a esa sección (con una categoría del mismo nombre allá).';
-            }
-        };
-        casillas.forEach(function (c) { c.addEventListener('change', actualizar); });
-        if (elegirPagina) {
-            elegirPagina.addEventListener('click', function () {
-                casillas.forEach(function (c) { c.checked = true; });
-                actualizar();
-            });
-        }
-        if (limpiarSeleccion) {
-            limpiarSeleccion.addEventListener('click', function () {
-                casillas.forEach(function (c) { c.checked = false; });
-                if (accion) accion.value = '';
-                actualizar();
-            });
-        }
-        if (accion) accion.addEventListener('change', actualizar);
-        if (seccion) seccion.addEventListener('change', actualizar);
-        if (todos) {
-            todos.addEventListener('change', function () {
-                casillas.forEach(function (c) { c.checked = todos.checked; });
-                actualizar();
-            });
-        }
-        actualizar();
-    }
-
-    // ── Edición rápida ──
-    var dialogo = document.getElementById('editar');
-    var editar = document.getElementById('form-editar');
-    var vista = document.getElementById('editar-vista');
-    var logo = document.getElementById('editar-logo');
-    var actual = null;
-
-    function iniciales(texto) {
-        return (texto || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (p) { return p[0]; }).join('').toUpperCase() || '?';
-    }
-    var subir = document.getElementById('editar-subir');
-    var subida = '';
-    function pintarImagen() {
-        vista.textContent = '';
-        if (subida) URL.revokeObjectURL(subida);
-        subida = subir.files.length ? URL.createObjectURL(subir.files[0]) : '';
-        if (subida || logo.value.trim()) {
-            var imagen = document.createElement('img');
-            imagen.alt = '';
-            imagen.referrerPolicy = 'no-referrer';
-            imagen.src = subida || logo.value.trim();
-            vista.appendChild(imagen);
-        } else {
-            vista.textContent = iniciales(editar.nombre.value);
-        }
-    }
-    function abrir(datos) {
-        actual = datos;
-        var esSerie = datos.tipo === 'serie';
-        editar.tipo.value = datos.tipo;
-        editar.canal.value = esSerie ? '' : datos.pk;
-        editar.serie.value = esSerie ? datos.nombre : '';
-        editar.nombre.value = datos.nombre;
-        editar.numero.value = datos.numero || '';
-        logo.value = datos.logo || '';
-        subir.value = '';
-        document.getElementById('editar-logo-titulo').textContent = esSerie ? 'Portada de la serie' : 'Imagen (logo o póster)';
-        document.getElementById('editar-logo-ayuda').textContent = esSerie
-            ? (datos.portada ? 'Es la portada propia de la serie. Si la borrás, vuelve a usar la imagen del primer capítulo.'
-                             : 'Ahora usa la imagen del primer capítulo. Lo que pongas acá queda como portada de la serie; cada capítulo conserva la suya.')
-            : 'Link o archivo (JPG, PNG o WEBP: se achica sola y le saca el fondo de cuadritos). El archivo gana sobre el link.';
-        editar.categoria.value = String(datos.categoria);
-        editar.nueva_categoria.value = '';
-        editar.nueva_categoria.dispatchEvent(new Event('input', {bubbles: true}));   // la lista vuelve a valer (sistema.js)
-        if (editar.contenido) editar.contenido.value = datos.contenido;
-        editar.activo.checked = !!datos.activo;
-        editar.destacado.checked = !!datos.destacado;
-        document.getElementById('editar-titulo').textContent = esSerie ? 'Serie «' + datos.nombre + '» (' + datos.capitulos + ' capítulos)' : datos.nombre;
-        var estado = document.getElementById('editar-estado');
-        estado.textContent = datos.en_app ? 'Se ve en la app.' : 'No se ve en la app: ' + (datos.motivo || '');
-        estado.className = 'small mb-0 ' + (datos.en_app ? 'estado-bien' : 'estado-mal');
-        dialogo.querySelectorAll('[data-solo-canal]').forEach(function (el) { el.style.display = esSerie ? 'none' : ''; });
-        vista.classList.toggle('poster', esSerie || '{{ forma }}' !== 'vivo');
-        document.getElementById('editar-mas').href = datos.mas;
-        document.getElementById('editar-mas').textContent = esSerie ? 'Ver y ordenar capítulos' : 'Más opciones (señales, idioma…)';
-        // Las señales, con su link, datos y "Borrar esta señal" (static/js/organizar_detalle.js)
-        window.KairosSenales.pintar(document.getElementById('editar-origenes'), datos);
-        var buscar = document.getElementById('editar-buscar');
-        buscar.href = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(datos.nombre + (esSerie || '{{ forma }}' !== 'vivo' ? ' póster' : ' logo png'));
-        if (guardarSeguir) guardarSeguir.hidden = !siguienteDe(datos);
-        pintarImagen();
-        dialogo.showModal();
-    }
-    document.querySelectorAll('.espejo-editar').forEach(function (boton) {
-        boton.addEventListener('click', function (evento) {
-            evento.preventDefault();   // que no elija la tarjeta
-            abrir(JSON.parse(boton.dataset.datos));
-        });
-    });
-    logo.addEventListener('input', pintarImagen);
-    subir.addEventListener('change', pintarImagen);
-
-    // ── Volver a la misma tarjeta después de guardar, y "Guardar y seguir" (abre la que sigue) ──
-    function claveDe(datos) { return datos.tipo === 'serie' ? 's:' + datos.nombre : 'c' + datos.pk; }
-    function botonesEditar() { return Array.prototype.slice.call(document.querySelectorAll('.espejo-editar')); }
-    function siguienteDe(datos) {
-        var botones = botonesEditar();
-        var clave = claveDe(datos);
-        var i = botones.findIndex(function (b) { return claveDe(JSON.parse(b.dataset.datos)) === clave; });
-        return i >= 0 ? botones[i + 1] : null;
-    }
-    function aca(parametro, clave) {
-        var url = new URL(location.href);
-        url.searchParams.delete('ir');
-        url.searchParams.delete('abrir');
-        url.searchParams.set(parametro, clave);
-        return url.pathname + url.search;
-    }
-    var guardarSeguir = editar.querySelector('[data-guardar-siguiente]');
-    editar.addEventListener('submit', function (evento) {
-        if (!actual) return;
-        var proxima = evento.submitter === guardarSeguir ? siguienteDe(actual) : null;
-        editar.elements.volver.value = proxima ? aca('abrir', claveDe(JSON.parse(proxima.dataset.datos))) : aca('ir', claveDe(actual));
-    });
-    (function () {
-        var parametros = new URLSearchParams(location.search);
-        var clave = parametros.get('abrir') || parametros.get('ir');
-        if (!clave) return;
-        var boton = botonesEditar().find(function (b) { return claveDe(JSON.parse(b.dataset.datos)) === clave; });
-        if (boton) {
-            var tarjeta = boton.closest('.espejo-tarjeta');
-            tarjeta.scrollIntoView({block: 'center'});
-            tarjeta.classList.add('recien-editada');
-            if (parametros.get('abrir')) abrir(JSON.parse(boton.dataset.datos));
-        }
-        var limpia = new URL(location.href);
-        limpia.searchParams.delete('ir');
-        limpia.searchParams.delete('abrir');
-        history.replaceState(null, '', limpia);
-    })();
-
-    // ── Pegar una imagen (o el link de una) con Ctrl+V en el cuadro de edición ──
-    dialogo.addEventListener('paste', function (evento) {
-        var portapapeles = evento.clipboardData;
-        if (!portapapeles) return;
-        var imagen = Array.prototype.find.call(portapapeles.files || [], function (f) { return /^image\/(jpeg|png|webp)$/.test(f.type); });
-        if (imagen) {
-            evento.preventDefault();
-            var archivos = new DataTransfer();
-            archivos.items.add(imagen);
-            subir.files = archivos.files;
-            pintarImagen();
-            return;
-        }
-        var texto = (portapapeles.getData('text') || '').trim();
-        var escribiendo = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
-        if (!escribiendo && /^https?:\/\/\S+$/.test(texto)) {
-            evento.preventDefault();
-            logo.value = texto;
-            pintarImagen();
-        }
-    });
-    dialogo.querySelectorAll('[data-cerrar]').forEach(function (b) { b.addEventListener('click', function () { dialogo.close(); }); });
-    dialogo.addEventListener('click', function (evento) { if (evento.target === dialogo) dialogo.close(); });
-    var eliminar = document.getElementById('editar-eliminar');
-    if (eliminar) {
-        eliminar.addEventListener('click', function () {
-            if (!actual || !window.confirm('¿Eliminar «' + actual.nombre + '»' + (actual.tipo === 'serie' ? ' con todos sus capítulos' : '') + '? Desaparece del panel y de la app. Si lo volvés a importar, entra de nuevo.')) return;
-            var uno = document.getElementById('form-eliminar-uno');
-            var campo = document.createElement('input');
-            campo.type = 'hidden';
-            campo.name = actual.tipo === 'serie' ? 'serie' : 'canal';
-            campo.value = actual.tipo === 'serie' ? actual.nombre : actual.pk;
-            uno.appendChild(campo);
-            uno.submit();
-        });
-    }
-
-    // ── Exportar ──
-    var cuadroExportar = document.getElementById('exportar');
-    if (cuadroExportar) {
-        var formExportar = document.getElementById('form-exportar');
-        var arbol = document.getElementById('exportar-arbol');
-        var radioLista = document.getElementById('exportar-lista');
-        var radioElegido = document.getElementById('exportar-elegido');
-        var aviso = document.getElementById('exportar-aviso');
-        var tarjetasElegidas = function () {
-            return Array.prototype.filter.call(document.querySelectorAll('#form-organizar .canal-elegir'), function (c) { return c.checked; });
-        };
-        // Una sección entera marcada ya incluye sus categorías: se marcan y quedan fijas (no se mandan aparte)
-        var acomodarSeccion = function (seccion) {
-            arbol.querySelectorAll('[data-de="' + seccion.value + '"]').forEach(function (c) {
-                if (seccion.checked) c.checked = true;
-                else if (c.disabled) c.checked = false;
-                c.disabled = seccion.checked;
-            });
-        };
-        arbol.querySelectorAll('[data-seccion]').forEach(function (seccion) {
-            acomodarSeccion(seccion);
-            seccion.addEventListener('change', function () { acomodarSeccion(seccion); });
-        });
-        arbol.addEventListener('change', function () { radioLista.checked = true; aviso.textContent = ''; });
-        cuadroExportar.querySelectorAll('[data-exportar-todo]').forEach(function (boton) {
-            boton.addEventListener('click', function () {
-                var marcar = boton.dataset.exportarTodo === '1';
-                arbol.querySelectorAll('[data-seccion]').forEach(function (seccion) {
-                    if (!seccion.disabled) seccion.checked = marcar;
-                    acomodarSeccion(seccion);
-                });
-                arbol.querySelectorAll('[data-de]').forEach(function (c) { if (!marcar) c.checked = false; });
-                radioLista.checked = true;
-                aviso.textContent = '';
-            });
-        });
-        document.querySelectorAll('[data-abrir-exportar]').forEach(function (boton) {
-            boton.addEventListener('click', function () {
-                var cuantos = tarjetasElegidas().length;
-                document.getElementById('exportar-cuantos').textContent = cuantos;
-                radioElegido.disabled = !cuantos;
-                if (boton.dataset.abrirExportar === 'elegido' && cuantos) radioElegido.checked = true;
-                else if (!cuantos) radioLista.checked = true;
-                aviso.textContent = '';
-                cuadroExportar.showModal();
-            });
-        });
-        formExportar.addEventListener('submit', function (evento) {
-            formExportar.querySelectorAll('[data-tarjeta]').forEach(function (campo) { campo.remove(); });
-            if (radioElegido.checked) {
-                // Las tarjetas elegidas están en otro formulario: se copian acá
-                tarjetasElegidas().forEach(function (c) {
-                    var campo = document.createElement('input');
-                    campo.type = 'hidden';
-                    campo.name = c.name;
-                    campo.value = c.value;
-                    campo.dataset.tarjeta = '';
-                    formExportar.appendChild(campo);
-                });
-            } else if (!arbol.querySelector('input:checked:not(:disabled)')) {
-                evento.preventDefault();
-                aviso.textContent = 'Elegí al menos una sección o una categoría.';
-                return;
-            }
-            // La descarga no cambia de página: se cierra el cuadro
-            window.setTimeout(function () { cuadroExportar.close(); }, 300);
-        });
-        cuadroExportar.querySelectorAll('[data-cerrar]').forEach(function (b) { b.addEventListener('click', function () { cuadroExportar.close(); }); });
-        cuadroExportar.addEventListener('click', function (evento) { if (evento.target === cuadroExportar) cuadroExportar.close(); });
-    }
-})();
-</script>
+<script src="{% static 'js/imagenes_contenido.js' %}?v=20261021"></script>
+<script src="{% static 'js/organizar_trabajo.js' %}?v=20261021"></script>
 {% endblock %}

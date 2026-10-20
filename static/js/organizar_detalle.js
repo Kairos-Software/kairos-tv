@@ -1,19 +1,16 @@
 /*
- * Organizar contenido: el panel de DETALLES (canales/organizar.html).
+ * Organizar contenido: las SEÑALES de una tarjeta (canales/organizar.html).
  *
- * Al elegir una tarjeta (tildarla) se abre al costado con TODO lo que se sabe
- * de ella: si se ve en la app (y si no, por qué), sus datos (sección,
- * categoría, idioma, quién la cargó y cuándo...) y cada señal en el orden en
+ * window.KairosSenales.pintar(lista, datos) dibuja cada señal en el orden en
  * que la prueba la app: de qué lista o link salió, el link completo (para
  * copiar), formato, estado, calidad, error, cómo anda en los aparatos, si
- * está oculta y su salud (cómo anduvo en sus últimas pruebas: canales/salud.py).
- * Cada señal tiene sus botones: "Probar ahora", "Quitar esta señal" o "Volver a
- * mostrar esta señal" (aunque el canal se vea con las otras) y "Borrar esta señal". Cada señal tiene "Borrar esta señal" (borra solo esa).
- * Muestra la última tarjeta que se tocó; los datos salen del data-datos del
- * botón Editar de la tarjeta (los arma views._preparar_para_editar).
- *
- * window.KairosSenales.pintar(lista, datos) dibuja las señales: lo usa también
- * el cuadro de edición rápida.
+ * está oculta y su salud (cómo anduvo en sus últimas pruebas: canales/salud.py),
+ * con sus botones: "Probar ahora", "Quitar esta señal" o "Volver a mostrar esta
+ * señal" (aunque el canal se vea con las otras) y "Borrar esta señal" (solo esa).
+ * Lo usa el panel de edición (organizar_trabajo.js); los datos salen del
+ * data-datos de la tarjeta (los arma views._preparar_para_editar). Esos botones
+ * recargan la página y el panel se vuelve a abrir en la misma (?abrir=).
+ * (El panel viejo de Detalles quedó dentro del de edición: si no está, no hace nada.)
  */
 (function () {
     'use strict';
@@ -28,6 +25,14 @@
         return elemento;
     }
 
+    /** Al volver de la acción, el panel de esta misma tarjeta abierto (organizar_trabajo.js lee ?abrir=). */
+    function volverAbierto(formulario, datos) {
+        var url = new URL(window.location.href);
+        url.searchParams.delete('ir');
+        url.searchParams.set('abrir', datos.tipo === 'serie' ? 's:' + datos.nombre : 'c' + datos.pk);
+        formulario.elements.volver.value = url.pathname + url.search;
+    }
+
     function borrar(senal, datos) {
         var unica = datos.fuentes.length === 1;
         var pregunta = '¿Borrar la señal ' + senal.orden + ' (' + senal.origen + ') de «' + datos.nombre + '»?\n\n' +
@@ -35,6 +40,7 @@
                    : 'Las otras ' + (datos.fuentes.length - 1) + ' quedan como están.');
         if (!window.confirm(pregunta)) return;
         formBorrar.action = formBorrar.dataset.url.replace('/0/', '/' + senal.id + '/');
+        volverAbierto(formBorrar, datos);
         formBorrar.submit();
     }
 
@@ -46,6 +52,7 @@
         }
         formAccion.action = formAccion.dataset.url.replace('/0/', '/' + senal.id + '/');
         formAccion.elements.accion.value = cual;
+        volverAbierto(formAccion, datos);
         formAccion.submit();
     }
 

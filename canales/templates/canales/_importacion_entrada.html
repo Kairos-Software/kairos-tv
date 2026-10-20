@@ -1,0 +1,37 @@
+{% load canales_extras %}
+{% comment %}
+    Una entrada de una lista importada, en una línea (canales/importacion.html). La misma fila la redibuja
+    views_importacion.filas_de_entradas después de «No cargar» / «Cargar igual» sin recargar.
+    Necesita: e, puede_importar, se_pueden_elegir, se_pueden_cargar_igual, volver.
+{% endcomment %}
+<li class="entrada" data-entrada="{{ e.pk }}">
+    <span class="entrada-casilla">{% if puede_importar and e.estado in se_pueden_elegir %}<input class="form-check-input entrada-elegir" type="checkbox" name="entrada" value="{{ e.pk }}" aria-label="Elegir {{ e.nombre }}" data-elegir>{% endif %}</span>
+    <span class="logo-mini" data-iniciales="{{ e.nombre|iniciales }}">{% if e.logo %}<img src="{{ e.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ e.nombre|iniciales }}{% endif %}</span>
+    <div class="entrada-datos">
+        <div class="entrada-nombre">
+            <i class="bi {% if e.contenido == 'vivo' %}bi-broadcast{% elif e.contenido == 'pelicula' %}bi-film{% elif e.contenido == 'serie' %}bi-collection-play{% else %}bi-grid{% endif %}" title="{{ e.get_contenido_display }}" aria-hidden="true"></i>
+            {% if e.canal and puede_importar %}<a href="{% url 'canales:canal_editar' e.canal.pk %}?volver={{ volver|urlencode }}" title="Editar el canal">{{ e.nombre }}</a>{% else %}<strong>{{ e.nombre }}</strong>{% endif %}
+            {% if e.nombre_original != e.nombre %}<small title="Cómo viene en la lista">{{ e.nombre_original }}</small>{% endif %}
+        </div>
+        <ul class="entrada-etiquetas" aria-label="Datos">
+            <li title="Categoría en la lista">{{ e.categoria|default:"Sin categoría" }}</li>
+            {% if e.idioma != 'es' %}<li>{% if e.idioma %}{{ e.get_idioma_display }}{% else %}Idioma ?{% endif %}</li>{% endif %}
+            {% if e.pais %}<li>{{ e.pais }}</li>{% endif %}
+            {% if e.numero %}<li>Canal {{ e.numero }}</li>{% endif %}
+            {% if not e.logo %}<li class="falta">Sin logo</li>{% endif %}
+            {% if e.calidad %}<li class="entrada-calidad">{{ e.calidad }}</li>{% endif %}
+        </ul>
+    </div>
+    <div class="entrada-resultado">
+        <div class="entrada-estado">
+            <span class="chip chip-{{ e.estado }}">{{ e.get_estado_display }}</span>
+            {% if puede_importar and e.estado == 'apta' %}
+            <button type="submit" class="btn btn-sm btn-link p-0" name="no_cargar_una" value="{{ e.pk }}">No cargar</button>
+            {% elif puede_importar and e.estado in se_pueden_cargar_igual %}
+            <button type="submit" class="btn btn-sm btn-link p-0" name="cargar_una" value="{{ e.pk }}">Cargar igual</button>
+            {% endif %}
+            {% if e.motivo %}<span class="entrada-motivo">{{ e.motivo }}</span>{% endif %}
+        </div>
+        <div class="direccion">{{ e.url }}</div>
+    </div>
+</li>

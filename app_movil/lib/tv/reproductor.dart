@@ -910,7 +910,7 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
         : 'Temporada ${episodio.temporada} · Episodio ${episodio.numero}'
               '${episodio.titulo.isEmpty ? '' : ' · ${episodio.titulo}'}';
     final duracion = valor?.duration ?? Duration.zero;
-    final posicion = valor?.position ?? Duration.zero;
+    final posicion = _control.posicion;
     final siguiente = _siguiente;
     final textoDelTitulo = Column(
       crossAxisAlignment: CrossAxisAlignment.start,

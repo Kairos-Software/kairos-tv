@@ -886,13 +886,40 @@ def descartar(importacion, seleccion, usuario=None):
     volver atrás con "Cargar igual". Devuelve cuántas.
     """
     elegidas = seleccion.aplicar(importacion.entradas.filter(estado__in=[Estado.PENDIENTE, Estado.APTA]))
-    sin_probar = elegidas.filter(estado=Estado.PENDIENTE).count()
-    cantidad = elegidas.update(estado=Estado.DESCARTADA, causa='', motivo='Descartada a mano: no se quiso esta parte.')
+    # Cada una recuerda cómo estaba, para «Deshacer» (recuperar)
+    sin_probar = elegidas.filter(estado=Estado.PENDIENTE).update(estado=Estado.DESCARTADA, causa='',
+                                                                 motivo=DESCARTADA_SIN_PROBAR)
+    cantidad = sin_probar + elegidas.filter(estado=Estado.APTA).update(estado=Estado.DESCARTADA, causa='',
+                                                                       motivo=DESCARTADA_HABIA_PASADO)
     if cantidad:
         importacion.para_verificar = max(0, importacion.para_verificar - sin_probar)
         importacion.save(update_fields=['para_verificar'])
         registrar(usuario, Accion.EDITAR, f'Descartó {cantidad} de "{importacion.archivo}" ({que_es(seleccion)}).',
                   modulo='canales')
+    return cantidad
+
+
+DESCARTADA_SIN_PROBAR = 'Descartada a mano: no se quiso esta parte.'
+DESCARTADA_HABIA_PASADO = 'Descartada a mano: no se quiso esta parte (había pasado la prueba).'
+
+
+def recuperar(importacion, seleccion, usuario=None):
+    """
+    «Deshacer» de `descartar`: lo de `seleccion` descartado así vuelve a como
+    estaba (por probar, o que pasó la prueba). Lo descartado de otra forma (a
+    mano una por una, o un canal quitado) no se toca. Devuelve cuántas.
+    """
+    descartadas = seleccion.aplicar(importacion.entradas.filter(estado=Estado.DESCARTADA))
+    sin_probar = descartadas.filter(motivo=DESCARTADA_SIN_PROBAR).update(estado=Estado.PENDIENTE, motivo='')
+    cantidad = sin_probar + descartadas.filter(motivo=DESCARTADA_HABIA_PASADO).update(
+        estado=Estado.APTA, motivo='Pasó la prueba (se había descartado).')
+    if sin_probar:
+        importacion.para_verificar += sin_probar
+        importacion.terminada = importacion.cargada = None
+        importacion.save(update_fields=['para_verificar', 'terminada', 'cargada'])
+    if cantidad:
+        registrar(usuario, Accion.EDITAR, f'Volvió atrás el descarte de {cantidad} de "{importacion.archivo}" '
+                                          f'({que_es(seleccion)}).', modulo='canales')
     return cantidad
 
 
@@ -1050,15 +1077,36 @@ def por_contenido(importacion):
 _ORDEN_DE_LAS_PARTES = {Contenido.VIVO: 0, Contenido.PELICULA: 1, Contenido.SERIE: 2}
 
 
-def categorias_de(importacion, contenido):
-    """Las categorías de una parte de la lista con cuántas hay en cada estado, de la más grande a la más chica."""
+def categorias_de(importacion, contenido=''):
+    """
+    Las categorías de una parte de la lista (sin `contenido`, de toda) con
+    cuántas hay en cada estado, de la más grande a la más chica. Cada una dice
+    de qué parte es ('contenido'): en toda la lista, «Noticias» puede estar en
+    En vivo y en Películas, y son dos.
+    """
+    entradas = importacion.entradas.filter(contenido=contenido) if contenido else importacion.entradas.all()
     filas = {}
-    for categoria, estado, cantidad in (importacion.entradas.filter(contenido=contenido).order_by()
-                                        .values_list('categoria', 'estado').annotate(cantidad=Count('pk'))):
-        filas.setdefault(categoria, []).append((estado, cantidad))
-    return sorted(({'nombre': categoria or 'Sin categoría', 'clave': categoria or SIN_CATEGORIA,
-                    **_por_estado_de(cuentas)} for categoria, cuentas in filas.items()),
+    for de_que, categoria, estado, cantidad in (entradas.order_by().values_list('contenido', 'categoria', 'estado')
+                                                .annotate(cantidad=Count('pk'))):
+        filas.setdefault((de_que, categoria), []).append((estado, cantidad))
+    return sorted(({'nombre': categoria or 'Sin categoría', 'clave': categoria or SIN_CATEGORIA, 'contenido': de_que,
+                    **_por_estado_de(cuentas)} for (de_que, categoria), cuentas in filas.items()),
                   key=lambda fila: (-fila['total'], fila['nombre'].casefold()))
+
+
+def con_sus_cuentas(importaciones):
+    """
+    Les pone a cada importación `.cuentas` (cuántas en cada estado, como `por_contenido`), con una sola
+    consulta: el historial de «Importar y estado» muestra cómo va cada lista sin abrirla.
+    """
+    importaciones = list(importaciones)
+    filas = {}
+    for importacion, estado, cantidad in (EntradaImportada.objects.filter(importacion__in=importaciones).order_by()
+                                          .values_list('importacion', 'estado').annotate(cantidad=Count('pk'))):
+        filas.setdefault(importacion, []).append((estado, cantidad))
+    for importacion in importaciones:
+        importacion.cuentas = _por_estado_de(filas.get(importacion.pk, []))
+    return importaciones
 
 
 def _por_estado_de(cuentas):

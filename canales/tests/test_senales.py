@@ -167,11 +167,11 @@ class UnaSenalTests(Base):
         self.assertNotContains(respuesta, 'Todo bien')
         self.assertContains(respuesta, '1 de 3 señales')
         self.assertContains(respuesta, 'id="form-accion-senal"')
-        crudo = re.search(r'class="espejo-editar" data-datos="([^"]+)"', respuesta.content.decode()).group(1)
+        crudo = re.search(r'<article class="espejo-tarjeta[^"]*"\s+data-clave="[^"]*"\s+data-datos="([^"]+)"', respuesta.content.decode()).group(1)
         senales = json.loads(unescape(crudo))['fuentes']
         self.assertEqual([s['se_puede_mostrar'] for s in senales], [False, True, True])
         salud.limpiar(AHORA)   # la caída (muerta) se retira
-        crudo = re.search(r'class="espejo-editar" data-datos="([^"]+)"',
+        crudo = re.search(r'<article class="espejo-tarjeta[^"]*"\s+data-clave="[^"]*"\s+data-datos="([^"]+)"',
                           self.client.get(reverse('canales:organizar'), {'contenido': 'vivo'}).content.decode()).group(1)
         self.assertIn('Retirada sola el', json.loads(unescape(crudo))['fuentes'][1]['retirada'])
 

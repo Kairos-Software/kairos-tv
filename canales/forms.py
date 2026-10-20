@@ -112,9 +112,13 @@ def _no_las_dos(form, datos):
 
 
 class EditarDesdeOrganizarForm(forms.Form):
-    """La edición rápida de "Organizar contenido" (la categoría se lee aparte: views._categoria_elegida)."""
+    """
+    La edición rápida de "Organizar contenido" (la categoría se lee aparte: views._categoria_elegida). El link de
+    la imagen se revisa en views.organizar_editar SOLO si cambió: un logo raro que vino en una lista (con espacios,
+    sin dominio completo) no tiene que impedir guardar el nombre.
+    """
     nombre = forms.CharField(max_length=120)
-    logo = forms.URLField(max_length=500, required=False)
+    logo = forms.CharField(max_length=500, required=False)
     numero = forms.CharField(max_length=10, required=False)
     contenido = forms.ChoiceField(choices=Contenido.choices, required=False)
     activo = forms.BooleanField(required=False)

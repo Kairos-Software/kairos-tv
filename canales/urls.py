@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_revisar, views_senales
+from . import views, views_importacion, views_organizar, views_revisar, views_senales
 
 app_name = 'canales'
 
@@ -17,6 +17,7 @@ urlpatterns = [
     path('importaciones/<int:pk>/reintentar/', views.importacion_reintentar, name='importacion_reintentar'),
     path('importaciones/<int:pk>/elegir/', views.importacion_elegir, name='importacion_elegir'),
     path('importaciones/<int:pk>/borrar/', views.importacion_borrar, name='importacion_borrar'),
+    path('importaciones/<int:pk>/partes/', views_importacion.partes, name='importacion_partes'),
     path('catalogo/', views.catalogo, name='catalogo'),
     path('series/', views.series, name='series'),
     path('como-en-la-app/', views.como_en_la_app, name='como_en_la_app'),
@@ -24,6 +25,9 @@ urlpatterns = [
     path('organizar/editar/', views.organizar_editar, name='organizar_editar'),
     path('organizar/eliminar/', views.organizar_eliminar, name='organizar_eliminar'),
     path('organizar/exportar/', views.organizar_exportar, name='organizar_exportar'),
+    path('organizar/cambiar/', views_organizar.cambiar, name='organizar_cambiar'),
+    path('organizar/imagenes/', views_organizar.imagenes_sugeridas, name='organizar_imagenes'),
+    path('organizar/renombrar/', views_organizar.renombrar, name='organizar_renombrar'),
     path('eliminados/', views.eliminados, name='eliminados'),
     path('series/detalle/', views.serie_detalle, name='serie_detalle'),
     path('series/ordenar/', views.serie_ordenar, name='serie_ordenar'),

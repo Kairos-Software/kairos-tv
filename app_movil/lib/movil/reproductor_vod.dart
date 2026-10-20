@@ -288,7 +288,7 @@ class _PantallaReproductorVodState extends State<PantallaReproductorVod> {
   Widget _barra({bool compacta = false}) {
     final valor = _valor;
     final duracion = valor?.duration ?? Duration.zero;
-    final posicion = valor?.position ?? Duration.zero;
+    final posicion = _control.posicion;
     final total = duracion.inMilliseconds;
     final fraccion = _arrastre ?? (total == 0 ? 0.0 : posicion.inMilliseconds / total);
     var cargado = 0.0;
@@ -317,7 +317,7 @@ class _PantallaReproductorVodState extends State<PantallaReproductorVod> {
     Future<void> soltar() async {
       final destino = _arrastre;
       if (destino != null && total > 0) {
-        await _control.video?.seekTo(Duration(milliseconds: (destino * total).round()));
+        await _control.irA(Duration(milliseconds: (destino * total).round()));
       }
       if (mounted) setState(() => _arrastre = null);
       _mostrarControles();

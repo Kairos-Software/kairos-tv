@@ -245,7 +245,7 @@
 .vista-botones button[aria-pressed="true"] { background: var(--celeste-fondo); color: var(--celeste-claro); }
 .espejo-titulo-acciones { display: flex; align-items: center; gap: .5rem; }
 
-/* ── Organizar en LISTA: las mismas tarjetas, como filas de una línea ── */
+/* ── Organizar en LISTA: las mismas tarjetas, como filas de una línea (una planilla) ── */
 html.vista-lista .pagina-organizar .espejo-grilla,
 html.vista-lista .pagina-organizar .espejo-grilla.con-poster {
     display: flex;
@@ -259,34 +259,36 @@ html.vista-lista .pagina-organizar .espejo-grilla.con-poster {
 html.vista-lista .pagina-organizar .espejo-tarjeta {
     flex-direction: row;
     align-items: center;
-    gap: .75rem;
-    padding: .3rem .6rem .3rem 2.4rem;
+    gap: .7rem;
+    min-height: 2.6rem;
+    padding: .25rem .5rem .25rem 2.4rem;
     border-bottom: 1px solid rgba(59, 73, 75, .35);
+    border-radius: 0;
 }
 html.vista-lista .pagina-organizar .espejo-tarjeta:last-child { border-bottom: 0; }
 html.vista-lista .pagina-organizar .espejo-tarjeta:hover { background: rgba(255, 255, 255, .025); }
 html.vista-lista .pagina-organizar .espejo-tarjeta:has(.canal-elegir:checked) { background: var(--celeste-fondo); }
+html.vista-lista .pagina-organizar .espejo-tarjeta.abierta { background: rgba(0, 218, 243, .07); box-shadow: inset 3px 0 0 var(--celeste); }
 html.vista-lista .pagina-organizar .espejo-tarjeta .canal-elegir { top: 50%; left: .75rem; right: auto; transform: translateY(-50%); box-shadow: none; }
-html.vista-lista .pagina-organizar .espejo-seleccionar { flex: 1; flex-direction: row; align-items: center; gap: .75rem; }
 html.vista-lista .pagina-organizar .espejo-imagen {
-    width: 60px;
+    width: 56px;
     flex: none;
     border-width: 1px;
     border-radius: 7px;
-    font-size: .75rem;
+    font-size: .72rem;
 }
 html.vista-lista .pagina-organizar .espejo-imagen img { padding: 3px; }
-html.vista-lista .pagina-organizar .con-poster .espejo-imagen { width: 28px; }
+html.vista-lista .pagina-organizar .con-poster .espejo-imagen { width: 26px; }
 html.vista-lista .pagina-organizar .con-poster .espejo-imagen img { padding: 0; }
 html.vista-lista .pagina-organizar .espejo-tarjeta:has(.canal-elegir:checked) .espejo-imagen { box-shadow: none; }
-html.vista-lista .pagina-organizar .espejo-nombre { flex: 0 1 24rem; min-width: 8rem; -webkit-line-clamp: 1; font-size: .9rem; }
-html.vista-lista .pagina-organizar .espejo-detalle { flex: 1; margin: 0; font-size: .78rem; }
+html.vista-lista .pagina-organizar .espejo-nombre { flex: 1 1 16rem; min-width: 7rem; -webkit-line-clamp: 1; font-size: .9rem; }
+html.vista-lista .pagina-organizar .espejo-detalle { flex: 0 1 14rem; margin: 0; font-size: .76rem; text-align: right; }
 html.vista-lista .pagina-organizar .espejo-seccion { margin: 1rem 0 .4rem; font-size: .9rem; }
 
 @media (max-width: 767.98px) {
-    html.vista-lista .pagina-organizar .espejo-seleccionar { flex-wrap: wrap; row-gap: .1rem; }
+    html.vista-lista .pagina-organizar .espejo-tarjeta { flex-wrap: wrap; row-gap: .15rem; }
     html.vista-lista .pagina-organizar .espejo-nombre { flex: 1 1 60%; }
-    html.vista-lista .pagina-organizar .espejo-detalle { flex-basis: 100%; padding-left: calc(60px + .75rem); }
+    html.vista-lista .pagina-organizar .espejo-detalle { flex-basis: 100%; text-align: left; padding-left: calc(56px + .7rem); }
 }
 
 /* Cuadro de edición: "Buscar imagen" al lado del título, y la tarjeta que se acaba de guardar */
@@ -322,11 +324,80 @@ kbd { padding: .05rem .3rem; border-radius: 4px; background: var(--capa-maxima);
 .titulo-editable:hover, .titulo-editable:focus-visible { border-bottom-color: var(--celeste-borde); outline: none; }
 .titulo-editable.recien-guardado { color: var(--verde); }
 .titulo-editando { display: inline-block; width: min(28rem, 100%); }
-.pagina-serie .serie-hero { margin-top: 0; gap: 1rem; align-items: center; }
-.pagina-serie .serie-hero-portada { width: 84px; }
+.pagina-serie .serie-hero { margin-top: 0; gap: 1rem; align-items: center; flex-wrap: nowrap; }
+.pagina-serie .serie-hero-portada { width: 84px; position: relative; }
 .pagina-serie .serie-hero-portada span { font-size: 1.6rem; }
-.pagina-serie .serie-hero .pagina-titulo { font-size: 1.8rem; }
+.pagina-serie .serie-hero .pagina-titulo { margin: .1rem 0 .35rem; font-size: 1.8rem; }
 .pagina-serie .serie-datos .btn { white-space: nowrap; }
+
+/* La cabecera de una serie: volver, las series de al lado, y portada / nombre / categoría que se cambian ahí mismo */
+.serie-cabeza { margin-bottom: 1rem; }
+.serie-cabeza-arriba { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .6rem; }
+.serie-vecinas { display: flex; flex-wrap: wrap; gap: .4rem; }
+.serie-vecinas a {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .25rem .65rem;
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    color: var(--texto-suave);
+    font-size: .8rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.serie-vecinas a:hover { border-color: var(--celeste-borde); color: var(--celeste-claro); }
+.serie-hero-datos { flex: 1; min-width: 0; }
+.serie-hero-linea { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .7rem; font-size: .88rem; }
+.serie-hero-categoria { display: inline-flex; align-items: center; gap: .4rem; margin-left: .2rem; }
+.serie-hero-categoria label { margin: 0; font-size: .8rem; color: var(--texto-suave); }
+.serie-hero-categoria .form-select { width: auto; max-width: 15rem; }
+.serie-hero-categoria .form-control { width: 13rem; }
+.pagina-serie [data-portada] { cursor: pointer; }
+.pagina-serie [data-portada]:focus-visible { outline: 2px solid var(--celeste); outline-offset: 3px; }
+.serie-portada-cambiar {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .25rem;
+    padding: .2rem;
+    background: rgba(0, 0, 0, .7);
+    color: #fff;
+    font: 600 .68rem/1.2 var(--fuente-texto);
+    opacity: 0;
+    transition: opacity .14s;
+}
+.pagina-serie [data-portada]:hover .serie-portada-cambiar,
+.pagina-serie [data-portada]:focus-visible .serie-portada-cambiar { opacity: 1; }
+.pagina-serie [data-portada].soltar-aca,
+.pagina-serie [data-capitulo-imagen].soltar-aca { outline: 2px dashed var(--verde); outline-offset: 2px; }
+.pagina-serie .guardando { opacity: .5; }
+.serie-portada-herramientas {
+    margin-top: .8rem;
+    padding: .7rem .85rem;
+    border: 1px solid var(--celeste-borde);
+    border-radius: var(--radio);
+    background: var(--capa);
+}
+.serie-portada-botones { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.serie-portada-botones strong { margin-right: .3rem; font-size: .9rem; }
+.serie-portada-link { display: inline-flex; gap: .35rem; flex: 1 1 18rem; max-width: 28rem; }
+.serie-portada-herramientas .editor-ayuda { margin-top: .45rem; }
+.serie-herramientas { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .9rem; }
+.serie-herramientas .serie-separar-plegable { padding: 0; }
+.serie-herramientas .serie-separar-plegable > summary { list-style: none; display: inline-flex; margin: 0; }
+.serie-herramientas .serie-separar-plegable > summary::-webkit-details-marker { display: none; }
+.serie-herramientas .serie-separar-plegable[open] { flex-basis: 100%; padding: .7rem .85rem; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--capa); }
+.serie-herramientas .serie-separar { margin-top: .6rem; }
+@media (max-width: 575.98px) {
+    .pagina-serie .serie-hero { align-items: flex-start; }
+    .pagina-serie .serie-hero .pagina-titulo { font-size: 1.4rem; }
+    .serie-hero-categoria { margin-left: 0; }
+}
 
 /* ── Para revisar: los números en una tira, no en cuadros grandes ── */
 .pagina-revisar .revisar-estados { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0; }
@@ -363,3 +434,104 @@ kbd { padding: .05rem .3rem; border-radius: 4px; background: var(--capa-maxima);
     .col-problema-texto { display: block; margin: .15rem 0 0; }
     .col-problema-aparato { max-width: none; white-space: normal; }
 }
+
+/* ── Avisos de abajo (KairosTrabajo.avisar en trabajo.js): se van solos; algunos con «Deshacer» ── */
+.avisos-trabajo {
+    /* Es un popover="manual" (trabajo.js): se le sacan los estilos de popover del navegador (inset, margen, borde, fondo) */
+    position: fixed;
+    inset: auto;
+    left: 1rem;
+    bottom: 1rem;
+    z-index: 1090;
+    display: grid;
+    gap: .4rem;
+    max-width: min(26rem, calc(100vw - 2rem));
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    pointer-events: none;
+}
+.aviso-cerrar {
+    margin-left: auto;
+    padding: 0 .2rem;
+    border: 0;
+    background: transparent;
+    color: var(--texto-apagado);
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.aviso-cerrar:hover, .aviso-cerrar:focus-visible { color: var(--texto); }
+@media (min-width: 992px) {
+    .avisos-trabajo { left: calc(var(--menu-ancho, 0px) + 1.5rem); }
+    .app.menu-colapsado ~ .avisos-trabajo, body:has(.app.menu-colapsado) .avisos-trabajo { left: calc(var(--menu-ancho-contraido, 0px) + 1.5rem); }
+}
+body:has(.espejo-barra.tiene-seleccion) .avisos-trabajo { bottom: 8rem; }
+.aviso-trabajo {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem .8rem;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 12px;
+    background: var(--capa-maxima);
+    box-shadow: var(--sombra);
+    font-size: .84rem;
+    pointer-events: auto;
+    animation: aviso-entra .18s ease-out;
+}
+.aviso-trabajo.aviso-bien { border-color: rgba(69, 224, 183, .45); }
+.aviso-trabajo.aviso-mal { border-color: var(--rubi-borde); color: var(--rubi-claro); }
+.aviso-trabajo .btn-link { padding: 0; color: var(--celeste-claro); font-weight: 700; text-decoration: none; }
+.aviso-trabajo.saliendo { opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) {
+    .aviso-trabajo { animation: none; }
+    .aviso-trabajo.saliendo { transition: none; }
+}
+
+/* ── Sugerencias de imágenes (js/imagenes_contenido.js): Organizar, una serie, Editar canal ── */
+.editor-sugerencias { margin-top: .5rem; padding: .55rem; border: 1px solid var(--borde); border-radius: 12px; background: var(--capa-baja); }
+.sugerencias-estado { margin: 0 0 .4rem; font-size: .76rem; color: var(--texto-suave); }
+.sugerencias-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: .4rem; }
+.sugerencias-grilla.con-poster { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+.sugerencia {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid transparent;
+    border-radius: 9px;
+    background: var(--capa-alta);
+    cursor: pointer;
+}
+.con-poster .sugerencia { aspect-ratio: 2 / 3; }
+.sugerencia img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.con-poster .sugerencia img { object-fit: cover; padding: 0; }
+.sugerencia:hover, .sugerencia:focus-visible { border-color: var(--celeste-borde); outline: none; }
+.sugerencia.elegida { border-color: var(--celeste); box-shadow: var(--brillo-celeste); }
+.sugerencia-de {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding: .1rem .3rem;
+    overflow: hidden;
+    background: rgba(0, 0, 0, .7);
+    color: #fff;
+    font-size: .58rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .12s;
+}
+.sugerencia:hover .sugerencia-de, .sugerencia:focus-visible .sugerencia-de { opacity: 1; }
+.sugerencias-pie { margin: .45rem 0 0; font-size: .74rem; color: var(--texto-apagado); }
+.sugerencias-pie a { color: var(--celeste-claro); }
+
+/* Una lista importada (canales/importacion.html): en static/css/importacion_partes.css */
+
+/* Editar canal: soltar una imagen arriba de la vista previa */
+.canal-logo.soltar-aca { outline: 2px dashed var(--verde); outline-offset: 3px; }

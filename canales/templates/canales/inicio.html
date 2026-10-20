@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% load canales_extras static %}
 {% comment %}
-    Contenido (canales en vivo, películas y series): resumen, volver a verificar todas las fuentes (de a tandas, con
-    barra de avance), subir una lista y las importaciones anteriores.
+    Contenido → Importar y estado, de arriba abajo: subir listas (siempre a la vista: se arrastran o se eligen
+    varias y se suben solas), las listas importadas con cómo va cada una y su próximo paso, el resumen del
+    catálogo y el mantenimiento (verificar todas las fuentes de a tandas, limpiar nombres).
     El detalle de cada lista está en importacion.html y los canales "como
     los ve la app" en catalogo.html.
 {% endcomment %}
@@ -10,24 +11,94 @@
 {% block titulo %}Contenido{% endblock %}
 {% block clase_body %}pagina-contenido{% endblock %}
 
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}"><link rel="stylesheet" href="{% static 'css/mantenimiento.css' %}">
-<link rel="stylesheet" href="{% static 'css/importar_varias.css' %}">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/mantenimiento.css' %}">
+<link rel="stylesheet" href="{% static 'css/importar_varias.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/importacion_partes.css' %}?v=20261021">{% endblock %}
 
 {% block encabezado %}
 {% barra_contenido 'inicio' %}
 <div class="contenido-encabezado">
     <h1 class="contenido-titulo">Importar y estado
-        <button type="button" class="ayuda-boton" data-ayuda="Cómo está todo lo cargado, sección por sección (tocá un número para ver cuáles), subir listas nuevas y el mantenimiento del catálogo (verificar todas las señales, limpiar nombres)." aria-label="Qué es esta pantalla">?</button>
+        <button type="button" class="ayuda-boton" data-ayuda="Subir listas nuevas, seguir con las que ya subiste, cómo está todo lo cargado (tocá un número para ver cuáles) y el mantenimiento del catálogo (verificar todas las señales, limpiar nombres)." aria-label="Qué es esta pantalla">?</button>
     </h1>
-    {% if puede_importar %}
-    <div class="contenido-acciones">
-        <a href="#importar-lista" class="btn btn-sm btn-primary" data-abrir-detalle="importar-lista"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
 
 {% block contenido %}
+{% if puede_importar %}
+{# Subir listas: siempre a la vista. Se eligen o se arrastran varias y se suben solas (static/js/importar_varias.js) #}
+<section class="tarjeta importar-zona" id="importar-lista" aria-labelledby="importar-titulo">
+    <form method="post" enctype="multipart/form-data" novalidate id="form-importar">
+        {% csrf_token %}
+        <h2 class="visually-hidden" id="importar-titulo">Importar listas</h2>
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <label class="importar-soltar" for="{{ form.archivo.id_for_label }}">
+            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+            <span><strong>Arrastrá las listas acá o tocá para elegirlas</strong>
+            <small>.m3u, .m3u8 o un .zip · varias a la vez · se suben solas y después elegís qué probar y cargar</small></span>
+            {{ form.archivo }}
+        </label>
+        {% if form.archivo.errors %}<div class="invalid-feedback d-block">{% for error in form.archivo.errors %}{{ error }} {% endfor %}</div>{% endif %}
+        <div data-subidas></div>
+        <div class="importar-opciones-fila">
+            <span class="importar-opciones-titulo">Al probar:</span>
+            {% for campo, texto in opciones_de_importar %}
+            <label class="importar-opcion" title="{{ campo.help_text }}">{{ campo }} {{ texto }}</label>
+            {% endfor %}
+            <button type="button" class="ayuda-boton" data-ayuda="Prueba a fondo: además de ver si responde, revisa que tenga sonido, el idioma del audio, la resolución, un formato que lean todos los aparatos y que llegue fluido (tarda más). Solo español: descarta lo que se sabe que es de otro idioma. Sin adultos: XXX / +18, por el nombre o la categoría. Sin películas ni series: solo canales en vivo (hay listas con miles de películas). Solo con logo: descarta lo que no trae imagen. Valen para todas las listas que subas ahora." aria-label="Qué hace cada opción">?</button>
+        </div>
+        <details class="importar-destino"{% if form.seccion_destino.errors or form.categoria_destino.errors or form.categoria_nueva.errors %} open{% endif %}>
+            <summary>Mandar todo a una categoría <span class="texto-suave">(opcional: si no, cada cosa va a la que dice la lista)</span></summary>
+            <div class="row g-3 mt-0">
+                {% if form.seccion_destino.field.choices|length > 1 %}{% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-4" %}{% endif %}
+                {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-4" %}
+                {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-4" %}
+            </div>
+        </details>
+        <div class="importar-enviar">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-upload" aria-hidden="true"></i> Subir y analizar</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+
+<section class="tarjeta p-0 mb-4" id="importaciones" aria-labelledby="importaciones-titulo">
+    <div class="contenido-seccion-encabezado contenido-listas-encabezado">
+        <div>
+            <span class="seccion-sobrelinea">Historial</span>
+            <h2 id="importaciones-titulo">Listas importadas</h2>
+        </div>
+        <span class="texto-suave small">Abrí una para seguir donde quedaste.</span>
+    </div>
+    {% if importaciones %}
+    <div class="table-responsive">
+        <table class="table tabla mb-0 tabla-importaciones">
+            <thead><tr><th scope="col">Lista</th><th scope="col" class="num">Trae</th><th scope="col">Cómo va</th><th scope="col"><span class="visually-hidden">Qué falta</span></th></tr></thead>
+            <tbody>
+                {% for i in importaciones %}
+                <tr>
+                    <td><a href="{% url 'canales:importacion' i.pk %}" class="importacion-nombre">{{ i.archivo }}</a>
+                        <span class="texto-suave small d-block">{{ i.creada|date:"j/m/Y H:i" }}{% if i.usuario %} · {{ i.usuario }}{% endif %}</span></td>
+                    <td class="num dato">{{ i.total }}</td>
+                    <td class="importacion-como">{% if i.por_leer %}<span class="texto-suave small">Leyendo la lista…</span>{% else %}{% include "canales/_importacion_cuentas.html" with c=i.cuentas %}{% endif %}</td>
+                    <td class="text-end">
+                        {% if i.por_leer %}<a href="{% url 'canales:importacion' i.pk %}" class="btn btn-sm btn-outline-secondary">Seguir leyendo</a>
+                        {% elif i.cuentas.pendientes %}<a href="{% url 'canales:importacion' i.pk %}" class="btn btn-sm btn-outline-primary">Seguir probando</a>
+                        {% elif i.cuentas.aptas %}<a href="{% url 'canales:importacion' i.pk %}" class="btn btn-sm btn-primary">Cargar {{ i.cuentas.aptas }}</a>
+                        {% else %}<a href="{% url 'canales:importacion' i.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-check-lg" aria-hidden="true"></i> Ver</a>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="vacio">
+        <i class="bi bi-collection-play" aria-hidden="true"></i>
+        <p>Todavía no se importó ninguna lista desde el panel.</p>
+    </div>
+    {% endif %}
+</section>
+
 <section class="contenido-resumen mb-4" aria-labelledby="resumen-titulo">
     <div class="contenido-seccion-encabezado">
         <div>
@@ -62,51 +133,6 @@
 
 {% if puede_importar %}
 <div class="contenido-herramientas mb-4">
-    <details class="tarjeta tarjeta-plegable" id="importar-lista" {% if form.errors %}open{% endif %}>
-        <summary>
-            <span class="tarjeta-plegable-icono"><i class="bi bi-upload" aria-hidden="true"></i></span>
-            <span><strong>Importar una lista</strong><small>Subí un archivo M3U, revisalo y cargá solo lo apto.</small></span>
-            <i class="bi bi-chevron-down tarjeta-plegable-flecha" aria-hidden="true"></i>
-        </summary>
-        <div class="tarjeta-plegable-cuerpo">
-            <p class="texto-suave">La lista se analiza y después se prueba de a tandas. No se publica nada hasta que revises el resultado y confirmes qué cargar.</p>
-            <form method="post" enctype="multipart/form-data" class="row g-3 align-items-start" novalidate id="form-importar">
-                {% csrf_token %}
-                {% if form.non_field_errors %}<div class="col-12 alert alert-danger mb-0">{{ form.non_field_errors }}</div>{% endif %}
-                {% include "parciales/_campo.html" with campo=form.archivo ancho="col-12" %}
-                <details class="col-12 importar-opciones" {% if form.errors %}open{% endif %}>
-                    <summary>
-                        <span><i class="bi bi-shield-check" aria-hidden="true"></i> Prueba y filtros</span>
-                        <small>Recomendado: prueba a fondo, español y sin contenido adulto</small>
-                    </summary>
-                    <div class="row g-3 importar-opciones-cuerpo">
-                        {% include "parciales/_campo.html" with campo=form.a_fondo ancho="col-12" %}
-                        {% include "parciales/_campo.html" with campo=form.descartar_vod ancho="col-md-6 col-xl-3" %}
-                        {% include "parciales/_campo.html" with campo=form.solo_espanol ancho="col-md-6 col-xl-3" %}
-                        {% include "parciales/_campo.html" with campo=form.descartar_adultos ancho="col-md-6 col-xl-3" %}
-                        {% include "parciales/_campo.html" with campo=form.descartar_sin_logo ancho="col-md-6 col-xl-3" %}
-                    </div>
-                </details>
-                <details class="col-12 importar-opciones" {% if form.errors %}open{% endif %}>
-                    <summary>
-                        <span><i class="bi bi-folder2-open" aria-hidden="true"></i> Destino opcional</span>
-                        <small>Sin cambiar nada, se respetan la sección y categoría de cada entrada</small>
-                    </summary>
-                    <div class="row g-3 importar-opciones-cuerpo">
-                        {% if form.seccion_destino.field.choices|length > 1 %}{% include "parciales/_campo.html" with campo=form.seccion_destino ancho="col-md-4" %}{% endif %}
-                        {% include "parciales/_campo.html" with campo=form.categoria_destino ancho="col-md-4" %}
-                        {% include "parciales/_campo.html" with campo=form.categoria_nueva ancho="col-md-4" %}
-                    </div>
-                </details>
-                <div class="col-12">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-upload" aria-hidden="true"></i> Subir y analizar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </details>
-
     <details class="tarjeta tarjeta-plegable" id="mantenimiento-contenido" {% if resultado_limpieza %}open{% endif %}>
         <summary>
             <span class="tarjeta-plegable-icono"><i class="bi bi-wrench-adjustable" aria-hidden="true"></i></span>
@@ -199,46 +225,10 @@
     </details>
 </div>
 {% endif %}
-
-<section class="tarjeta p-0">
-    <div class="contenido-seccion-encabezado contenido-listas-encabezado">
-        <div>
-            <span class="seccion-sobrelinea">Historial</span>
-            <h2>Listas importadas</h2>
-        </div>
-        <span class="texto-suave small">Abrí una lista para continuar una revisión pendiente.</span>
-    </div>
-    {% if importaciones %}
-    <div class="table-responsive">
-        <table class="table tabla mb-0">
-            <thead><tr><th scope="col">Lista</th><th scope="col">Subida</th><th scope="col">Canales</th><th scope="col">Estado</th><th scope="col"><span class="visually-hidden">Acción</span></th></tr></thead>
-            <tbody>
-                {% for i in importaciones %}
-                <tr>
-                    <td><a href="{% url 'canales:importacion' i.pk %}">{{ i.archivo }}</a></td>
-                    <td class="texto-suave small">{{ i.creada|date:"j/m/Y H:i" }}{% if i.usuario %} · {{ i.usuario }}{% endif %}</td>
-                    <td class="dato">{{ i.total }}</td>
-                    <td>
-                        {% if i.terminada %}<span class="chip chip-agregada">Terminada</span>
-                        {% else %}<span class="chip chip-pendiente">A medio verificar</span>{% endif %}
-                    </td>
-                    <td class="text-end"><a href="{% url 'canales:importacion' i.pk %}" class="btn btn-sm btn-outline-secondary">{% if i.terminada %}Revisar{% else %}Continuar{% endif %}</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="vacio">
-        <i class="bi bi-collection-play" aria-hidden="true"></i>
-        <p>Todavía no se importó ninguna lista desde el panel.</p>
-    </div>
-    {% endif %}
-</section>
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'js/trabajo.js' %}"></script>
+<script src="{% static 'js/trabajo.js' %}?v=20261021"></script>
 <script src="{% static 'js/tandas.js' %}"></script>
 <script>
 (function () {
@@ -255,7 +245,7 @@
 })();
 </script>
 {# Varias listas de una: se suben solas al elegirlas o arrastrarlas #}
-<script src="{% static 'js/importar_varias.js' %}"></script>
+<script src="{% static 'js/importar_varias.js' %}?v=20261021"></script>
 <script src="{% static 'js/mantenimiento.js' %}" data-url-lote="{% url 'canales:verificar_lote' %}"
         data-url-canal="{% url 'canales:canal_editar' 0 %}"></script>
 {% endblock %}

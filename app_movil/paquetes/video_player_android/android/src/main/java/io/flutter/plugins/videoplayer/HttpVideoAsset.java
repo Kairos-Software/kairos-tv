@@ -34,6 +34,14 @@ final class HttpVideoAsset extends VideoAsset {
 
   static final int KAIROS_ESPERA_LECTURA_MS = 30_000;
 
+  /**
+   * Kairos TV: una película o capítulo (un archivo: .mp4, .mkv, .avi...) espera más a
+   * que el servidor mande lo primero: hay servidores que tardan cerca de un minuto en
+   * empezar a mandar una película (VLC también tarda). Con 30 s ExoPlayer cortaba y
+   * volvía a pedirla desde cero, y no arrancaba nunca. En vivo (HLS o .ts) sigue en 30 s.
+   */
+  static final int KAIROS_ESPERA_LECTURA_ARCHIVO_MS = 90_000;
+
   @NonNull private final StreamingFormat streamingFormat;
   @NonNull private final Map<String, String> httpHeaders;
   @Nullable private final String userAgent;
@@ -96,6 +104,21 @@ final class HttpVideoAsset extends VideoAsset {
     return ruta.endsWith(".ts") ? MimeTypes.VIDEO_MP2T : null;
   }
 
+  /**
+   * Kairos TV: cuánto espera a que llegue el próximo pedazo. Un canal en vivo (HLS o un
+   * ".ts" directo) 30 s; un archivo (película o capítulo) 90 s (ver
+   * {@link #KAIROS_ESPERA_LECTURA_ARCHIVO_MS}).
+   */
+  @VisibleForTesting
+  static int kairosEsperaLectura(@Nullable String url, @NonNull StreamingFormat formato) {
+    if (formato != StreamingFormat.UNKNOWN || url == null) {
+      return KAIROS_ESPERA_LECTURA_MS;
+    }
+    String ruta = url.split("[?#]", 2)[0].toLowerCase(Locale.ROOT);
+    boolean enVivo = ruta.endsWith(".ts") || ruta.endsWith(".m3u8") || ruta.endsWith(".m3u");
+    return enVivo ? KAIROS_ESPERA_LECTURA_MS : KAIROS_ESPERA_LECTURA_ARCHIVO_MS;
+  }
+
   @NonNull
   @Override
   public MediaSource.Factory getMediaSourceFactory(@NonNull Context context) {
@@ -114,7 +137,8 @@ final class HttpVideoAsset extends VideoAsset {
   @VisibleForTesting
   MediaSource.Factory getMediaSourceFactory(
       Context context, DefaultHttpDataSource.Factory initialFactory) {
-    unstableUpdateDataSourceFactory(initialFactory, httpHeaders, userAgent);
+    unstableUpdateDataSourceFactory(
+        initialFactory, httpHeaders, userAgent, kairosEsperaLectura(assetUrl, streamingFormat));
     DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context, initialFactory);
     return new DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory);
   }
@@ -124,14 +148,15 @@ final class HttpVideoAsset extends VideoAsset {
   private static void unstableUpdateDataSourceFactory(
       @NonNull DefaultHttpDataSource.Factory factory,
       @NonNull Map<String, String> httpHeaders,
-      @Nullable String userAgent) {
+      @Nullable String userAgent,
+      int esperaLecturaMs) {
     // Las redirecciones (también de https a http) las sigue el mismo DefaultHttpDataSource,
     // y en cada una vuelve a mandar el User-Agent y las cabeceras.
     factory
         .setUserAgent(userAgent)
         .setAllowCrossProtocolRedirects(true)
         .setConnectTimeoutMs(KAIROS_ESPERA_CONEXION_MS)
-        .setReadTimeoutMs(KAIROS_ESPERA_LECTURA_MS);
+        .setReadTimeoutMs(esperaLecturaMs);
     if (!httpHeaders.isEmpty()) {
       factory.setDefaultRequestProperties(httpHeaders);
     }

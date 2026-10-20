@@ -1,6 +1,6 @@
 """
-Organizar contenido: al elegir algo se ve TODO lo suyo (panel de detalles), y
-se puede borrar UNA señal de un canal (la que no anda) sin tocar las otras.
+Organizar contenido: al tocar una tarjeta se ve TODO lo suyo (el panel de edición, que también tiene sus datos y
+cada señal), y se puede borrar UNA señal de un canal (la que no anda) sin tocar las otras.
 """
 
 import json
@@ -35,18 +35,21 @@ class DetalleYBorrarFuenteTests(TestCase):
                                           oculta_hasta=timezone.now() + timedelta(hours=3))
 
     def datos_de_la_tarjeta(self, respuesta):
-        """El JSON que el panel de detalles lee del botón Editar de la tarjeta."""
-        crudo = re.search(r'class="espejo-editar" data-datos="([^"]+)"', respuesta.content.decode()).group(1)
+        """El JSON que el panel de edición lee de la tarjeta (data-datos)."""
+        crudo = re.search(r'<article class="espejo-tarjeta[^"]*"\s+data-clave="[^"]*"\s+data-datos="([^"]+)"',
+                          respuesta.content.decode()).group(1)
         return json.loads(unescape(crudo))
 
     def test_con_detalles_se_ve_todo_lo_suyo(self):
         respuesta = self.client.get(reverse('canales:organizar'), {'contenido': 'vivo'})
-        self.assertContains(respuesta, 'id="detalle-lateral"')
+        # Un solo panel al costado (antes había «Detalles» y «Editar» por separado): lo abre tocar la tarjeta
+        self.assertContains(respuesta, 'id="editor"')
+        self.assertContains(respuesta, 'data-editor-senales')
         self.assertContains(respuesta, 'js/organizar_detalle.js')
-        # Elegir tarjetas no abre el panel (molestaba al trabajar con varias): lo abre «Detalles»
-        self.assertContains(respuesta, 'class="espejo-ver"')
-        self.assertContains(respuesta, 'El ⓘ muestra al costado todo lo de una')   # en la ayuda "?" del título
-        self.assertNotContains(respuesta, 'data-detalle-varios')
+        self.assertContains(respuesta, 'js/organizar_trabajo.js')
+        self.assertNotContains(respuesta, 'id="detalle-lateral"')
+        self.assertNotContains(respuesta, 'class="espejo-ver"')
+        self.assertContains(respuesta, 'Tocá una tarjeta para abrirla al costado')   # en la ayuda "?" del título
         datos = self.datos_de_la_tarjeta(respuesta)
         filas = dict(datos['datos'])
         self.assertEqual(filas['Idioma'], 'Español')

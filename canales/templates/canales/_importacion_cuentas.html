@@ -1,0 +1,7 @@
+{% comment %}
+    Cómo va una parte de una lista importada (c: las cuentas de servicios._por_estado_de): una barrita de colores
+    (cargados, pasaron, no pasaron, descartados, ya estaban; lo vacío es lo que falta probar) y el texto con lo
+    que hay. static/js/importacion_trabajo.js dibuja lo mismo (barraDe / textoDe) al actualizar una fila.
+{% endcomment %}
+<span class="imp-barra" aria-hidden="true"><span class="b-cargados" style="flex-grow: {{ c.agregadas }}"></span><span class="b-pasaron" style="flex-grow: {{ c.aptas }}"></span><span class="b-fallaron" style="flex-grow: {{ c.no_pasaron }}"></span><span class="b-descartados" style="flex-grow: {{ c.descartadas }}"></span><span class="b-estaban" style="flex-grow: {{ c.repetidas }}"></span><span class="b-falta" style="flex-grow: {{ c.pendientes }}"></span></span>
+<span class="imp-cuentas">{% if c.pendientes %}<span>{{ c.pendientes }} sin probar</span>{% endif %}{% if c.aptas %}<span class="c-pasaron">{{ c.aptas }} pasaron</span>{% endif %}{% if c.agregadas %}<span class="c-cargados">{{ c.agregadas }} cargados</span>{% endif %}{% if c.no_pasaron %}<span class="c-fallaron">{{ c.no_pasaron }} no pasaron</span>{% endif %}{% if c.descartadas %}<span>{{ c.descartadas }} descartados</span>{% endif %}{% if c.repetidas %}<span>{{ c.repetidas }} ya estaban</span>{% endif %}</span>

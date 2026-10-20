@@ -83,4 +83,22 @@ public final class KairosHttpVideoAssetTest {
     assertEquals(25_000, HttpVideoAsset.KAIROS_ESPERA_CONEXION_MS);
     assertEquals(30_000, HttpVideoAsset.KAIROS_ESPERA_LECTURA_MS);
   }
+
+  @Test
+  public void unaPeliculaEsperaMasQueUnCanalEnVivo() {
+    VideoAsset.StreamingFormat nada = VideoAsset.StreamingFormat.UNKNOWN;
+    // Archivos (películas y capítulos): hasta 90 s a que el servidor mande lo primero
+    assertEquals(90_000, HttpVideoAsset.kairosEsperaLectura("http://s:1/movie/u/c/26473.mp4", nada));
+    assertEquals(90_000, HttpVideoAsset.kairosEsperaLectura("http://s:1/series/u/c/9.MKV?x=1", nada));
+    assertEquals(90_000, HttpVideoAsset.kairosEsperaLectura("http://s:1/movie/u/c/26461.avi", nada));
+    // En vivo, igual que antes
+    assertEquals(30_000, HttpVideoAsset.kairosEsperaLectura(XTREAM, nada));
+    assertEquals(30_000, HttpVideoAsset.kairosEsperaLectura("http://x/canal.m3u8?t=1", nada));
+    assertEquals(30_000, HttpVideoAsset.kairosEsperaLectura("http://x/pelicula.mp4", VideoAsset.StreamingFormat.HTTP_LIVE));
+
+    DefaultHttpDataSource.Factory fabrica = fabricaDePrueba();
+    ((HttpVideoAsset) VideoAsset.fromRemoteUrl("http://s:1/movie/u/c/1.mp4", nada, new HashMap<>(), null))
+        .getMediaSourceFactory(ApplicationProvider.getApplicationContext(), fabrica);
+    verify(fabrica).setReadTimeoutMs(90_000);
+  }
 }

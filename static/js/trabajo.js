@@ -10,9 +10,94 @@
  *   <form data-seleccion> con [data-elegir] (cada fila), [data-elegir-todas], [data-barra-lote] y [data-cuantas]
  *                                                               -> tildar filas (Shift = un rango) muestra la barra
  *                                                                  de abajo con cuántas hay elegidas
+ *
+ * Y para las pantallas que guardan sin recargar (Organizar, la página de una serie):
+ *   KairosTrabajo.pedir(url, formData)          -> Promise del JSON {ok: true, ...}; si no, un Error con el motivo
+ *   KairosTrabajo.avisar(texto, tipo, deshacer) -> un aviso abajo que se va solo ('bien' | 'mal' | 'info');
+ *                                                  con `deshacer` (una función) suma el botón «Deshacer»
  */
 (function () {
     'use strict';
+
+    // ── Guardar sin recargar y avisar ──
+    function csrfDeLaPagina() {
+        var campo = document.querySelector('[name=csrfmiddlewaretoken]');
+        return campo ? campo.value : '';
+    }
+    function pedir(url, datos) {
+        return fetch(url, {
+            method: 'POST', body: datos, credentials: 'same-origin',
+            headers: {'Accept': 'application/json', 'X-CSRFToken': csrfDeLaPagina()}
+        }).then(function (respuesta) {
+            return respuesta.json().catch(function () { return null; }).then(function (r) {
+                if (r && r.ok === true) return r;
+                if (r && r.error) throw new Error(r.error);
+                if (respuesta.status === 403) throw new Error('No tenés permiso para cambiar esto.');
+                throw new Error('No se pudo guardar. Si estuviste mucho rato sin usar el panel, recargá la página.');
+            });
+        }, function () { throw new Error('No se pudo guardar: revisá la conexión.'); });
+    }
+    // Los avisos van en un contenedor popover="manual" (si el navegador lo tiene): queda en la capa de arriba de
+    // todo, también sobre un cuadro abierto, y no se cierra al tocar otra cosa. Sin popover, es un fijo común.
+    var avisos = null;
+    var conPopoverDeAvisos = 'popover' in HTMLElement.prototype;
+    function contenedorDeAvisos() {
+        if (!avisos) {
+            avisos = document.createElement('div');
+            avisos.className = 'avisos-trabajo';
+            avisos.setAttribute('role', 'status');
+            avisos.setAttribute('aria-live', 'polite');
+            if (conPopoverDeAvisos) avisos.setAttribute('popover', 'manual');
+            document.body.appendChild(avisos);
+        }
+        if (conPopoverDeAvisos && !avisos.matches(':popover-open')) avisos.showPopover();
+        return avisos;
+    }
+    function sacarAviso(aviso) {
+        aviso.classList.add('saliendo');
+        window.setTimeout(function () {
+            aviso.remove();
+            if (avisos && !avisos.children.length && conPopoverDeAvisos && avisos.matches(':popover-open')) avisos.hidePopover();
+        }, 300);
+    }
+    function avisar(texto, tipo, deshacer) {
+        if (!texto) return;
+        var lista = contenedorDeAvisos();
+        var aviso = document.createElement('div');
+        aviso.className = 'aviso-trabajo aviso-' + (tipo || 'info');
+        var mensaje = document.createElement('span');
+        mensaje.textContent = texto;
+        aviso.appendChild(mensaje);
+        if (deshacer) {
+            var boton = document.createElement('button');
+            boton.type = 'button';
+            boton.className = 'btn btn-sm btn-link';
+            boton.textContent = 'Deshacer';
+            boton.addEventListener('click', function () { sacarAviso(aviso); deshacer(); });
+            aviso.appendChild(boton);
+        }
+        var cerrar = document.createElement('button');
+        cerrar.type = 'button';
+        cerrar.className = 'aviso-cerrar';
+        cerrar.setAttribute('aria-label', 'Cerrar el aviso');
+        cerrar.textContent = '×';
+        cerrar.addEventListener('click', function () { sacarAviso(aviso); });
+        aviso.appendChild(cerrar);
+        lista.appendChild(aviso);
+        while (lista.children.length > 3) lista.firstElementChild.remove();
+        // Se va solo, pero no mientras tiene el mouse o el foco encima (para llegar a tocar «Deshacer»)
+        var reloj = null;
+        var irse = function () {
+            window.clearTimeout(reloj);
+            reloj = window.setTimeout(function () { sacarAviso(aviso); }, deshacer ? 9000 : 4500);
+        };
+        aviso.addEventListener('mouseenter', function () { window.clearTimeout(reloj); });
+        aviso.addEventListener('focusin', function () { window.clearTimeout(reloj); });
+        aviso.addEventListener('mouseleave', irse);
+        aviso.addEventListener('focusout', irse);
+        irse();
+    }
+    window.KairosTrabajo = {pedir: pedir, avisar: avisar};
 
     // ── Ayuda flotante: una sola burbuja (popover nativo: se cierra sola con Esc o tocando afuera) ──
     var burbuja = document.createElement('div');

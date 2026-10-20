@@ -252,7 +252,7 @@ class DetallesTests(TestCase):
                               falla_desde=timezone.now() - timedelta(days=2), fallas_seguidas=2,
                               por_que_falla='tiempo')
         respuesta = self.client.get(reverse('canales:organizar'), {'contenido': 'vivo'})
-        crudo = re.search(r'class="espejo-editar" data-datos="([^"]+)"', respuesta.content.decode()).group(1)
+        crudo = re.search(r'<article class="espejo-tarjeta[^"]*"\s+data-clave="[^"]*"\s+data-datos="([^"]+)"', respuesta.content.decode()).group(1)
         datos = json.loads(unescape(crudo))
         self.assertIn(['Salud', salud.TEXTOS_DE_CANAL[Salud.FALLA]], datos['datos'])
         senal = datos['fuentes'][0]

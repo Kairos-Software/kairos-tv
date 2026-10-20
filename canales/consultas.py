@@ -473,6 +473,60 @@ def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', orig
                         total=len(pares))
 
 
+def cuentas_de_organizar(contenido=Contenido.VIVO, texto='', origen='', idioma='', categoria='todas'):
+    """
+    Cuántos hay de cada filtro de arriba de Organizar (los chips: lo que queda por hacer), con la búsqueda y la
+    categoría que se están viendo. Cada número es lo que se ve al tocar ese chip:
+      {'todo': 120, 'app': 100, 'fuera': 7, 'caidos': 4, 'quitados': 3, 'senales': 12, 'destacados': 4, 'sin_logo': 34}
+    """
+    if contenido == Contenido.SERIE:
+        todas = series(texto=texto, origen=origen, idioma=idioma)
+        if categoria == 'ninguna':
+            todas = [s for s in todas if not s.categoria_id]
+        elif str(categoria).isdigit():
+            todas = [s for s in todas if s.categoria_id == int(categoria)]
+
+        def alguno_activo(serie):
+            return any(c.canal.activo for c in serie.capitulos)
+        return {
+            'todo': len(todas),
+            'app': sum(1 for s in todas if s.completa),
+            'fuera': sum(1 for s in todas if not s.completa),
+            'caidos': sum(1 for s in todas if not s.completa and alguno_activo(s)),
+            'quitados': sum(1 for s in todas if not alguno_activo(s)),
+            'senales': sum(1 for s in todas if s.completa and any(c.canal.fuentes_fuera for c in s.capitulos)),
+            'destacados': sum(1 for s in todas if any(c.canal.destacado for c in s.capitulos)),
+            # Como el filtro "Solo sin imagen": sin portada y con capítulos sin imagen
+            'sin_logo': sum(1 for s in todas if not s.portada and any(not c.canal.logo for c in s.capitulos)),
+        }
+
+    def de_la_categoria(canales):
+        if categoria == 'ninguna':
+            return canales.filter(categoria__isnull=True)
+        if str(categoria).isdigit():
+            return canales.filter(categoria_id=int(categoria))
+        return canales
+    filtros = {'texto': texto, 'origen': origen, 'idioma': idioma}
+    cuentas = {mostrar: de_la_categoria(canales_filtrados(contenido, mostrar, **filtros)).count() for mostrar in MOSTRAR}
+    cuentas['sin_logo'] = de_la_categoria(canales_filtrados(contenido, sin_logo=True, **filtros)).count()
+    return cuentas
+
+
+def series_vecinas(nombre):
+    """
+    La serie anterior y la siguiente de la MISMA categoría, en el orden de Organizar (por nombre): para pasar de
+    una a otra sin volver a la lista. (anterior, siguiente), cada una el nombre o ''.
+    """
+    todas = series()
+    actual = next((s for s in todas if s.nombre.lower() == (nombre or '').lower()), None)
+    if actual is None:
+        return '', ''
+    hermanas = [s.nombre for s in todas if s.categoria_id == actual.categoria_id]
+    posicion = hermanas.index(actual.nombre)
+    return (hermanas[posicion - 1] if posicion else '',
+            hermanas[posicion + 1] if posicion + 1 < len(hermanas) else '')
+
+
 def ultimas_importaciones(limite=10):
     return Importacion.objects.select_related('usuario')[:limite]
 

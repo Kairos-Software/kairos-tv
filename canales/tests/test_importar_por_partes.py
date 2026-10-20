@@ -180,7 +180,9 @@ class PantallaPorPartesTests(TestCase):
         self.assertContains(pagina, 'Qué trae esta lista')
         for parte in ('En vivo', 'Películas', 'Series'):
             self.assertContains(pagina, parte)
-        self.assertNotContains(pagina, 'Categorías de')   # primero se elige la parte
+        # Sin elegir una parte, las categorías de toda la lista (cada una dice de qué parte es)
+        self.assertContains(pagina, 'Categorías de toda la lista')
+        self.assertContains(pagina, 'href="?contenido=pelicula&amp;categoria=')
 
         pagina = self.client.get(url, {'contenido': 'vivo'})
         self.assertContains(pagina, 'Categorías de En vivo')

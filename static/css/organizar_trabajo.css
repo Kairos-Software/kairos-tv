@@ -1,0 +1,215 @@
+/*
+ * Kairos TV · Organizar para trabajar rápido (canales/organizar.html + js/organizar_trabajo.js): el panel de
+ * edición del costado, las tarjetas (abierta, guardando, soltar una imagen), la vista Lista como planilla,
+ * el selector de categoría y «Cambiar nombres». (Los avisos de abajo y las sugerencias de imágenes están en
+ * trabajo.css: los usan varias pantallas.) Aparte de kairos.css (que se edita en paralelo): solo usa sus colores (var(--...)).
+ */
+
+/* ── El panel de edición (a la derecha; en el celular, toda la pantalla) ── */
+.editor-contenido {
+    --editor-ancho: 430px;
+    position: fixed;
+    z-index: 1060;
+    top: calc(var(--barra-alto, 4rem) + .6rem);
+    right: .9rem;
+    bottom: .9rem;
+    width: var(--editor-ancho);
+    display: flex;
+    flex-direction: column;
+    background: var(--capa-maxima);
+    border: 1px solid var(--celeste-borde);
+    border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+}
+.editor-contenido > form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.editor-contenido.guardando { cursor: progress; }
+.editor-cabeza {
+    display: flex;
+    align-items: flex-start;
+    gap: .8rem;
+    padding: .85rem 1rem .7rem;
+    border-bottom: 1px solid var(--borde);
+}
+.editor-vista { width: 120px; flex: none; font-size: 1.2rem; }
+.editor-vista.poster { width: 78px; aspect-ratio: 2 / 3; }
+.editor-vista[data-soltar-imagen] { cursor: pointer; }
+.editor-vista[data-soltar-imagen]:hover,
+.editor-vista[data-soltar-imagen]:focus-visible { border-color: var(--celeste-borde); outline: none; }
+.editor-contenido.soltar-aca .editor-vista { border: 2px dashed var(--verde); }
+.editor-titulo { flex: 1; min-width: 0; }
+.editor-posicion { margin: 0; font-size: .72rem; color: var(--texto-apagado); }
+.editor-titulo h2 { margin: .1rem 0 .2rem; font-size: 1.05rem; font-weight: 700; line-height: 1.25; word-break: break-word; }
+.editor-estado { margin: 0; font-size: .8rem; }
+.editor-cuerpo {
+    flex: 1;
+    display: grid;
+    align-content: start;
+    gap: .8rem;
+    padding: .8rem 1rem 1rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.editor-campo { min-width: 0; }
+.editor-campo .form-label { margin-bottom: .25rem; font-size: .78rem; color: var(--texto-suave); }
+.editor-campo-cabeza { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .35rem; }
+.editor-imagen-botones { display: flex; flex-wrap: wrap; gap: .3rem; }
+.editor-imagen-botones .btn { padding: .15rem .5rem; font-size: .78rem; }
+.editor-fila { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 5.5rem; gap: .6rem; }
+.editor-fila:has(> .editor-campo-chico[hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.editor-fila:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.editor-checks { display: flex; flex-wrap: wrap; gap: .4rem 1.3rem; font-size: .88rem; }
+.editor-checks .form-check { display: flex; align-items: center; gap: .1rem; }
+.editor-ayuda { margin: .3rem 0 0; font-size: .74rem; line-height: 1.35; color: var(--texto-apagado); }
+.editor-ayuda:empty { display: none; }
+.editor-bloque { padding: .5rem .7rem; border: 1px solid var(--borde); border-radius: 12px; background: var(--capa-baja); }
+.editor-bloque > summary { cursor: pointer; font-size: .86rem; font-weight: 600; }
+.editor-bloque[open] > summary { margin-bottom: .45rem; }
+.editor-bloque-numero {
+    display: inline-block;
+    min-width: 1.35rem;
+    margin-left: .2rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    background: var(--capa-alta);
+    font-size: .74rem;
+    text-align: center;
+}
+.editor-bloque .detalle-datos { margin-bottom: 0; }
+.editor-pie { display: grid; gap: .45rem; padding: .6rem 1rem .7rem; border-top: 1px solid var(--borde); }
+.editor-pie-botones { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.editor-aviso { margin-left: .2rem; font-size: .78rem; color: var(--texto-suave); }
+.editor-aviso.aviso-bien { color: var(--verde); }
+.editor-aviso.aviso-mal { color: var(--rubi-claro); }
+.editor-pie-enlaces { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .9rem; font-size: .78rem; }
+.editor-pie-enlaces a, .editor-pie-enlaces .btn-link { color: var(--celeste-claro); font-size: .78rem; text-decoration: none; }
+.editor-pie-enlaces a:hover { text-decoration: underline; }
+.editor-pie-enlaces .text-danger { color: var(--rubi-claro) !important; }
+.editor-atajos { margin-left: auto; color: var(--texto-apagado); font-size: .7rem; }
+
+/* Con el panel abierto en una pantalla grande: el contenido se corre (no queda tapado) y las categorías
+   se esconden mientras se edita (vuelven al cerrarlo), para que entren más tarjetas */
+@media (min-width: 1200px) {
+    body.con-editor .pagina { padding-right: calc(430px + 1.6rem); }
+    body.con-editor .pagina-organizar .espejo,
+    body.con-editor.pagina-organizar .espejo { grid-template-columns: minmax(0, 1fr); }
+    body.con-editor .espejo-categorias { display: none; }
+    body.con-editor.pagina-organizar .espejo-barra { right: calc(430px + 2rem); }
+}
+@media (max-width: 1199.98px) {
+    .editor-contenido { width: min(var(--editor-ancho), calc(100vw - 1.5rem)); }
+}
+@media (max-width: 575.98px) {
+    .editor-contenido { top: .5rem; right: .5rem; bottom: .5rem; left: .5rem; width: auto; }
+    .editor-fila { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .editor-atajos { display: none; }
+}
+
+/* ── Las tarjetas: se tocan para abrirlas ──────────────────────── */
+.pagina-organizar .espejo-tarjeta { cursor: pointer; border-radius: 12px; }
+.pagina-organizar .espejo-tarjeta:focus { outline: none; }
+.pagina-organizar .espejo-tarjeta:focus-visible .espejo-imagen { outline: 2px solid var(--celeste); outline-offset: 3px; }
+.pagina-organizar .espejo-tarjeta .canal-elegir { width: 1.15rem; height: 1.15rem; cursor: pointer; }
+.espejo-tarjeta.abierta .espejo-imagen { border-color: var(--celeste); box-shadow: 0 0 0 3px rgba(0, 218, 243, .22); }
+.espejo-tarjeta.abierta .espejo-nombre { color: var(--celeste-claro); }
+.espejo-tarjeta.guardando { opacity: .55; pointer-events: none; }
+.espejo-tarjeta.soltar-aca .espejo-imagen { border: 2px dashed var(--verde); box-shadow: 0 0 0 4px rgba(69, 224, 183, .18); }
+.espejo-tarjeta.se-fue { opacity: .5; }
+.espejo-tarjeta.se-fue::after {
+    content: attr(data-se-fue);
+    position: absolute;
+    top: .4rem;
+    left: .4rem;
+    padding: .05rem .45rem;
+    border-radius: 999px;
+    background: var(--capa-maxima);
+    color: var(--dorado-claro);
+    font-size: .68rem;
+    font-weight: 700;
+}
+.espejo-estrella { color: var(--dorado-claro); }
+/* En tarjetas, la categoría y los botones rápidos no van (se cambian en el panel); en la lista sí */
+.pagina-organizar .espejo-categoria-boton,
+.pagina-organizar .espejo-rapidos { display: none; }
+
+html.vista-lista .pagina-organizar .espejo-categoria-boton {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    flex: 0 1 11rem;
+    min-width: 0;
+    padding: .15rem .5rem;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--texto-suave);
+    font-size: .76rem;
+    text-align: left;
+}
+html.vista-lista .pagina-organizar .espejo-categoria-boton span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.vista-lista .pagina-organizar .espejo-categoria-boton:hover,
+html.vista-lista .pagina-organizar .espejo-categoria-boton:focus-visible { border-color: var(--celeste-borde); color: var(--texto); }
+html.vista-lista .pagina-organizar .espejo-rapidos { display: inline-flex; gap: .1rem; }
+html.vista-lista .pagina-organizar .espejo-rapidos .btn-icono { width: 1.8rem; height: 1.8rem; }
+.espejo-rapidos .btn-icono.prendido { color: var(--dorado-claro); }
+.espejo-rapidos .btn-icono.apagado { color: var(--rubi-claro); }
+html.vista-lista .pagina-organizar [data-nombre-editable] { cursor: text; border-bottom: 1px dashed transparent; }
+html.vista-lista .pagina-organizar .espejo-tarjeta:hover [data-nombre-editable] { border-bottom-color: var(--celeste-borde); }
+.nombre-en-linea { width: 100%; min-width: 12rem; height: 1.85rem; padding: .1rem .45rem; font-size: .88rem; }
+@media (max-width: 767.98px) {
+    html.vista-lista .pagina-organizar .espejo-categoria-boton { flex: 1 1 auto; margin-left: calc(56px + .7rem); }
+}
+
+/* ── Elegir la categoría (vista Lista) ─────────────────────────── */
+.selector-categoria {
+    position: fixed;
+    z-index: 1080;
+    width: 17rem;
+    max-height: min(22rem, calc(100vh - 2rem));
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    padding: .5rem;
+    background: var(--capa-maxima);
+    border: 1px solid var(--celeste-borde);
+    border-radius: var(--radio);
+    box-shadow: var(--sombra);
+}
+.selector-categoria-lista { display: grid; gap: 1px; overflow-y: auto; }
+.selector-categoria-lista button,
+.selector-categoria-nueva {
+    padding: .35rem .55rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--texto);
+    font-size: .84rem;
+    text-align: left;
+}
+.selector-categoria-lista button:hover,
+.selector-categoria-lista button:focus-visible,
+.selector-categoria-nueva:hover,
+.selector-categoria-nueva:focus-visible { background: var(--capa-alta); outline: none; }
+.selector-categoria-lista button.actual { color: var(--celeste-claro); font-weight: 700; }
+.selector-categoria-lista button.actual::after { content: ' ✓'; }
+.selector-categoria-nueva { color: var(--celeste-claro); font-weight: 600; border-top: 1px solid var(--borde); border-radius: 0 0 8px 8px; }
+
+/* ── Los chips de arriba (qué mostrar, con cuántos hay) ────────── */
+.organizar-chips { margin: -.35rem 0 .9rem; }
+.organizar-chips .problema i { color: var(--texto-apagado); }
+.organizar-chips .problema-fuera span, .organizar-chips .problema-caidos span { color: var(--rubi-claro); }
+.organizar-chips .problema-senales span, .organizar-chips .problema-sin-imagen span { color: var(--dorado-claro); }
+.organizar-chips .problema.activo span, .organizar-chips .problema.activo i { color: inherit; }
+
+/* ── «Cambiar nombres» (barra de abajo) ────────────────────────── */
+.espejo-barra-fila.renombrar-fila { flex-direction: column; align-items: stretch; }
+.renombrar-reglas { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .8rem; }
+.renombrar-reglas > label { display: inline-flex; align-items: center; gap: .35rem; margin: 0; font-size: .82rem; color: var(--texto-suave); }
+.renombrar-reglas .form-control { width: 8.5rem; }
+.renombrar-reglas .form-check { padding-left: 0; }
+.renombrar-reglas .form-check .form-check-input { float: none; margin: 0; }
+.renombrar-vista { max-height: 9rem; overflow-y: auto; font-size: .8rem; color: var(--texto-suave); }
+.renombrar-vista ul { display: grid; gap: .15rem; margin: 0; padding: 0; list-style: none; }
+.renombrar-vista li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem; }
+.renombrar-antes { color: var(--texto-apagado); text-decoration: line-through; }
+.renombrar-vista strong { color: var(--texto); }
+.renombrar-vista i { color: var(--celeste); font-size: .75rem; }

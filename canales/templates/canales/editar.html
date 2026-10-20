@@ -1,18 +1,23 @@
 {% extends "base.html" %}
-{% load canales_extras %}
+{% load static canales_extras %}
 {% comment %}
     Editar un canal: nombre, logo, categoría (o una nueva), contenido,
     idioma, país, orden, si se muestra; sus fuentes (orden, apagar, borrar)
-    y agregar una fuente a mano. A la derecha, cómo se ve en la app.
+    y agregar una fuente a mano. A la derecha, cómo se ve en la app, con las herramientas de imagen (buscar una
+    con ese nombre, arrastrarla o pegarla con Ctrl+V: static/js/imagenes_contenido.js).
 {% endcomment %}
 
 {% block titulo %}Editar {{ canal.nombre }}{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021">{% endblock %}
 
 {% block encabezado %}
-<div class="pagina-encabezado">
-    <a href="{{ volver }}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Volver</a>
-    <h1 class="pagina-titulo">Editar canal</h1>
-    <p class="pagina-bajada">Los cambios llegan solos a la app la próxima vez que actualice la lista (como mucho en 15 minutos).</p>
+{% barra_contenido 'organizar' %}
+<div class="contenido-encabezado">
+    <div>
+        <a href="{{ volver }}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Volver</a>
+        <h1 class="contenido-titulo">Editar «{{ canal.nombre }}»</h1>
+        <p class="importacion-meta">Los cambios llegan solos a la app la próxima vez que actualice la lista (como mucho en 15 minutos).</p>
+    </div>
 </div>
 {% endblock %}
 
@@ -49,12 +54,15 @@
                 <h2 class="h6 mb-3" style="color:#9AA7A8">Así se ve en la app</h2>
                 <div class="grilla-canales" style="grid-template-columns: minmax(0, 220px)">
                     <article class="canal-tarjeta">
-                        <div class="canal-logo" id="vista-logo" data-iniciales="{{ canal.nombre|iniciales }}">{% if logo_ver %}<img src="{{ logo_ver }}" alt="" referrerpolicy="no-referrer">{% else %}{{ canal.nombre|iniciales }}{% endif %}</div>
+                        <div class="canal-logo" id="vista-logo" data-iniciales="{{ canal.nombre|iniciales }}" title="Arrastrá una imagen acá o pegala con Ctrl+V">{% if logo_ver %}<img src="{{ logo_ver }}" alt="" referrerpolicy="no-referrer">{% else %}{{ canal.nombre|iniciales }}{% endif %}</div>
                         <div class="canal-nombre" id="vista-nombre">{{ canal.nombre }}</div>
                         <div class="canal-meta"><span id="vista-numero" {% if not canal.numero %}hidden{% endif %}>{{ canal.numero }}</span></div>
                     </article>
                 </div>
-                <p class="small mt-3 mb-0" style="color:#9AA7A8">Para el logo sirve cualquier dirección de imagen (PNG, JPG, SVG), o subirla desde la compu. Si no carga, la app muestra las iniciales.</p>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-3" id="buscar-imagen"
+                        data-url="{% url 'canales:organizar_imagenes' %}" data-canal="{{ canal.pk }}" data-contenido="{{ canal.contenido }}"><i class="bi bi-search" aria-hidden="true"></i> Buscar imagen con este nombre</button>
+                <div class="editor-sugerencias" id="sugerencias-imagen" hidden></div>
+                <p class="small mt-3 mb-0" style="color:#9AA7A8">Para el logo sirve cualquier dirección de imagen (PNG, JPG, SVG), o subirla desde la compu. También podés arrastrar una imagen arriba de la vista previa o pegarla con Ctrl+V. Si no carga, la app muestra las iniciales.</p>
             </section>
         </div>
     </div>
@@ -103,6 +111,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'js/imagenes_contenido.js' %}?v=20261021"></script>
 <script>
 (function () {
     // La vista previa cambia mientras se escribe
@@ -134,6 +143,53 @@
     nombre.addEventListener('input', function () { vistaNombre.textContent = nombre.value; pintarLogo(); });
     logo.addEventListener('change', pintarLogo);
     subir.addEventListener('change', pintarLogo);
+
+    // Una imagen elegida, arrastrada o pegada: queda puesta en el formulario (se guarda con «Guardar»)
+    function ponerImagen(imagen) {
+        if (!imagen) return;
+        if (imagen.archivo) {
+            var archivos = new DataTransfer();
+            archivos.items.add(imagen.archivo);
+            subir.files = archivos.files;
+        } else {
+            logo.value = imagen.url;
+            subir.value = '';
+        }
+        pintarLogo();
+    }
+    if (window.KairosImagenes) {
+        var buscar = document.getElementById('buscar-imagen');
+        buscar.addEventListener('click', function () {
+            window.KairosImagenes.pintar(document.getElementById('sugerencias-imagen'), {
+                nombre: nombre.value.trim(), contenido: buscar.dataset.contenido, canal: buscar.dataset.canal,
+                urlPanel: buscar.dataset.url, poster: buscar.dataset.contenido !== 'vivo',
+                alElegir: function (url) { ponerImagen({url: url}); }
+            });
+        });
+        vistaLogo.addEventListener('dragover', function (evento) {
+            if (!window.KairosImagenes.trae(evento.dataTransfer)) return;
+            evento.preventDefault();
+            vistaLogo.classList.add('soltar-aca');
+        });
+        vistaLogo.addEventListener('dragleave', function () { vistaLogo.classList.remove('soltar-aca'); });
+        vistaLogo.addEventListener('drop', function (evento) {
+            evento.preventDefault();
+            vistaLogo.classList.remove('soltar-aca');
+            window.KairosImagenes.leer(evento.dataTransfer).then(ponerImagen);
+        });
+        // Pegar una imagen (o su link) con Ctrl+V, sin estar escribiendo en otro campo
+        document.addEventListener('paste', function (evento) {
+            var activo = document.activeElement;
+            if (activo && /^(INPUT|TEXTAREA)$/.test(activo.tagName) && activo !== logo) return;
+            var portapapeles = evento.clipboardData;
+            if (!portapapeles) return;
+            var conArchivo = Array.prototype.some.call(portapapeles.files || [], function (f) { return /^image\//.test(f.type); });
+            var texto = (portapapeles.getData('text') || '').trim();
+            if (!conArchivo && !/^(https?:\/\/|data:image\/)\S+$/i.test(texto)) return;
+            evento.preventDefault();
+            window.KairosImagenes.leer(portapapeles).then(ponerImagen);
+        });
+    }
     numero.addEventListener('input', function () { vistaNumero.textContent = numero.value; vistaNumero.hidden = !numero.value; });
 
     // Probar la fuente nueva tarda unos segundos

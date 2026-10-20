@@ -92,8 +92,11 @@ class _VideoDeMentira extends VideoPlayerPlatform {
   @override
   Future<void> setPlaybackSpeed(int playerId, double speed) async {}
 
+  /// Adónde se le pidió saltar, en orden.
+  final saltos = <Duration>[];
+
   @override
-  Future<void> seekTo(int playerId, Duration position) async {}
+  Future<void> seekTo(int playerId, Duration position) async => saltos.add(position);
 
   @override
   Future<Duration> getPosition(int playerId) async => Duration.zero;
@@ -173,9 +176,26 @@ void main() {
   test('cuánto se espera a que arranque cada fuente', () {
     expect(ControlSenal.esperaDeArranque(enVivo: true, tipo: 'hls'), const Duration(seconds: 15));
     expect(ControlSenal.esperaDeArranque(enVivo: true, tipo: 'directo'), const Duration(seconds: 40));
-    // Películas y capítulos, como siempre
-    expect(ControlSenal.esperaDeArranque(enVivo: false, tipo: 'directo'), const Duration(seconds: 30));
-    expect(ControlSenal.esperaDeArranque(enVivo: false, tipo: 'hls'), const Duration(seconds: 30));
+    // Películas y capítulos: hay servidores que tardan cerca de un minuto en mandar lo primero
+    expect(ControlSenal.esperaDeArranque(enVivo: false, tipo: 'directo'), const Duration(seconds: 90));
+    expect(ControlSenal.esperaDeArranque(enVivo: false, tipo: 'hls'), const Duration(seconds: 90));
+  });
+
+  _prueba('adelantar varias veces seguidas es UN solo salto (carga una vez)', (tester) async {
+    final control = await _abrir(tester, _canal([(11, 'http://x/movie/u/c/1.mp4', 'directo')], contenido: 'pelicula'), {});
+    expect(control.video, isNotNull);
+    control.saltar(const Duration(seconds: 10));
+    control.saltar(const Duration(seconds: 10));
+    control.saltar(const Duration(seconds: 10));
+    // La barra ya muestra adónde va, pero todavía no se pidió nada
+    expect(control.posicion, const Duration(seconds: 30));
+    expect(_video.saltos, isEmpty);
+    await _pasar(tester, const Duration(seconds: 1));
+    expect(_video.saltos, [const Duration(seconds: 30)]);
+    // Atrás de todo no pasa del principio
+    control.saltar(const Duration(minutes: -5));
+    await _pasar(tester, const Duration(seconds: 1));
+    expect(_video.saltos.last, Duration.zero);
   });
 
   _prueba('directo en vivo: si la primera vez no arranca, la segunda sí (y el servidor no se entera)', (tester) async {

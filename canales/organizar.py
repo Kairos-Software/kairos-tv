@@ -1147,3 +1147,140 @@ def ordenar_por_titulos(nombre_serie, de_corrido=False, usuario=None):
         registrar(usuario, Accion.EDITAR, f'Ordenó "{nombre_serie}" según los títulos: {len(cambiados)} capítulos '
                                           f'cambiaron de temporada o de número.', modulo='canales')
     return len(cambiados)
+
+
+# ── Para ir más rápido en Organizar: cambiar nombres de a muchos e imágenes que ya existen ──
+
+_PALABRAS_CHICAS = {'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'a', 'al', 'o', 'u', 'con', 'por',
+                    'para', 'un', 'una', 'the', 'of', 'and'}
+
+
+def mayuscula_inicial(texto):
+    """
+    'LA CASA DE PAPEL' -> 'La Casa de Papel'. Si el nombre mezcla mayúsculas y minúsculas, lo que está todo en
+    mayúsculas se deja (es una sigla: 'ESPN', 'TV'); lo que tiene números también ('S01', '4K', '(2019)').
+    """
+    todo_en_mayusculas = texto.upper() == texto
+    palabras = []
+    for posicion, palabra in enumerate(texto.split()):
+        if any(letra.isdigit() for letra in palabra):
+            palabras.append(palabra)
+        elif not todo_en_mayusculas and palabra.isupper() and len(palabra) > 1:
+            palabras.append(palabra)
+        elif posicion and palabra.lower() in _PALABRAS_CHICAS:
+            palabras.append(palabra.lower())
+        else:
+            palabras.append(palabra[:1].upper() + palabra[1:].lower())
+    return ' '.join(palabras)
+
+
+def nombre_con_reglas(nombre, sacar='', reemplazar='', por='', limpiar=False, mayusculas=False, largo=120):
+    """
+    El nombre después de aplicarle las reglas de «Cambiar nombres» (Organizar, con varios elegidos):
+      limpiar: como al importar (sin país, calidad ni "REPUESTO": clasificar.limpiar_nombre)
+      sacar: un texto que se borra donde aparezca (sin importar mayúsculas)
+      reemplazar / por: un texto que se cambia por otro
+      mayusculas: Mayúscula Inicial (ver mayuscula_inicial)
+    Si no queda nada, devuelve el nombre como estaba.
+    """
+    texto = nombre or ''
+    if limpiar:
+        texto = clasificar.limpiar_nombre(texto)
+    if sacar.strip():
+        texto = re.sub(re.escape(sacar), ' ', texto, flags=re.I)
+    if reemplazar.strip():
+        texto = re.sub(re.escape(reemplazar), lambda _: por, texto, flags=re.I)
+    if mayusculas:
+        texto = mayuscula_inicial(texto)
+    texto = ' '.join(texto.split()).strip(' -|:·')[:largo].strip()
+    return texto or nombre
+
+
+@dataclass
+class CambioDeNombre:
+    clave: str          # 'c<pk>' (canal, película...) o 's:<nombre>' (una serie entera)
+    antes: str
+    despues: str
+    error: str = ''
+
+
+def cambios_de_nombre(canales=(), series=(), **reglas):
+    """Cómo quedarían los nombres (solo los que cambian), sin tocar nada: la vista previa de «Cambiar nombres»."""
+    cambios = []
+    for canal in canales:
+        nuevo = nombre_con_reglas(canal.nombre, **reglas)
+        if nuevo != canal.nombre:
+            cambios.append(CambioDeNombre(f'c{canal.pk}', canal.nombre, nuevo))
+    for serie in series:
+        nuevo = nombre_con_reglas(serie, largo=90, **reglas)
+        if nuevo != serie:
+            cambios.append(CambioDeNombre(f's:{serie}', serie, nuevo))
+    return cambios
+
+
+def renombrar_en_lote(canales=(), series=(), usuario=None, **reglas):
+    """
+    Aplica las reglas a lo elegido. Una serie se renombra entera (todos sus capítulos: renombrar_serie). Lo que
+    no se puede (una serie que se pisaría con otra) se saltea y queda en `error`. Devuelve los cambios.
+    """
+    canales = list(canales)
+    por_pk = {canal.pk: canal for canal in canales}
+    cambios = cambios_de_nombre(canales, series, **reglas)
+    for cambio in cambios:
+        try:
+            with transaction.atomic():
+                if cambio.clave.startswith('s:'):
+                    renombrar_serie(cambio.antes, cambio.despues, usuario)
+                else:
+                    editar_canal(por_pk[int(cambio.clave[1:])], usuario, nombre=cambio.despues)
+        except NoSePuede as error:
+            cambio.error = str(error)
+    return cambios
+
+
+def imagenes_parecidas(nombre, contenido='', excluir=None, limite=12):
+    """
+    Imágenes que YA tienen otras cosas con el mismo nombre, para elegir una con un clic en vez de buscarla:
+    las de otras listas importadas (aunque no se hayan cargado) y las de otros canales o películas del panel.
+    En Series, `nombre` es la serie: sirven las de sus capítulos en otras listas.
+      [{'url': 'https://...', 'de': 'lista_amigo.m3u'}, ...]   (las de nombre idéntico primero)
+    """
+    clave = _clave(nombre)
+    palabras = sorted((p for p in re.split(r'\W+', nombre or '') if len(p) >= 3), key=len, reverse=True)
+    if not clave or not palabras:
+        return []
+    es_serie = contenido == Contenido.SERIE
+
+    def puntaje(otro):
+        if es_serie:
+            otro = clasificar.episodio(otro)[0]
+        otra = _clave(otro)
+        if otra == clave:
+            return 0
+        if clasificar.limpiar_nombre(otra).lower() == clasificar.limpiar_nombre(clave).lower():
+            return 1
+        return 2 if otra.startswith(clave) or clave.startswith(otra) else None
+
+    candidatas = []
+    entradas = (EntradaImportada.objects.filter(nombre__icontains=palabras[0]).exclude(logo='')
+                .select_related('importacion').order_by('-pk')[:400])
+    for entrada in entradas:
+        valor = puntaje(entrada.nombre)
+        if valor is not None:
+            candidatas.append((valor, entrada.logo, entrada.importacion.archivo))
+    otros = Canal.objects.filter(nombre__icontains=palabras[0]).exclude(logo='').order_by('-pk')
+    if excluir:
+        otros = otros.exclude(pk=excluir)
+    for canal in otros[:400]:
+        valor = puntaje(canal.nombre)
+        if valor is not None:
+            candidatas.append((valor, canal.logo, f'En el panel: {canal.nombre}'))
+    vistas, resultado = set(), []
+    for _, url, de in sorted(candidatas, key=lambda c: c[0]):
+        if url in vistas or not url.startswith(('http://', 'https://')):
+            continue
+        vistas.add(url)
+        resultado.append({'url': url, 'de': de})
+        if len(resultado) >= limite:
+            break
+    return resultado

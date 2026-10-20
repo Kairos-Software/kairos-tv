@@ -43,7 +43,10 @@ siguiente. Si una fuente se cae, el canal sigue andando.
 | `organizar.py` | Base | **Ordenar el contenido.** Cada categoría es de UNA sección (`Categoria.contenido`: En vivo, Películas o Series; la "Infantil" de canales no es la de películas). `categoria_por_nombre(nombre, contenido)` la usa la importación: si "Kids" se juntó en "Infantil", las listas nuevas con "Kids" van a "Infantil". `crear_categoria`, `renombrar_categoria` (el nombre viejo queda en `otros_nombres`), `juntar_categorias` (misma sección; las demás dejan de existir), `borrar_categoria` (con o sin su contenido), `ordenar_categorias`, `categorias_parecidas` ("Kids" / "Infantil" / "Animation;Kids"). `mover_a_categoria`, `cambiar_contenido` (pasa a otra sección con una categoría del mismo nombre; a serie exige el nombre de la serie si no dicen "S01 E01", para crear un T1:E1 identificable), `unir_en_una_serie` (ej: 239 videos de Pocoyó → una serie; si la serie ya tiene capítulos, los nuevos siguen después del último: `ultimo_capitulo`, así se puede unir de a una página), `eliminar_contenido` (si se reimporta, entra de nuevo; para que no vuelva, "quitar"), `eliminados_recientes` / `restaurar_eliminados` (deshacer una eliminación: las señales se rearman con lo anotado en el informe de cada lista y quedan sin verificar; la categoría vuelve si se había borrado), `ordenar_capitulos` (renumera una temporada en el orden elegido, desde la página de la serie), `mover_a_temporada` (pasa capítulos a otra temporada o a una nueva, al final, y renumera sin huecos la de donde salieron), `eliminar_capitulos` (elimina capítulos sueltos de una serie y renumera sin huecos; al restaurarlos vuelven a su lugar), `plan_por_titulos` / `ordenar_por_titulos` (reparte la serie entera en temporadas y números según lo que dice cada título, con vista previa), `categoria_para_la_serie` / `destino_de_serie` (una serie va en UNA categoría: lo que se le suma va a la suya; una nueva necesita que se elija), `editar_canal` / `editar_serie` / `renombrar_serie` (no deja usar el nombre de OTRA serie: se pisarían los capítulos; para eso, "unir"). `nombre_de_serie_valido` rechaza nombres que la app tomaría como número de capítulo ("4x4", "S2 E3"). |
 | `estadisticas.py` | Base | **Lo más visto.** `registrar()` suma lo que manda la app (`POST /api/v1/canales/visto/`: segundos mirados, vistas de más de 1 minuto y favoritos agregados) a los totales del día, **sin guardar quién lo mandó**. `lo_mas_visto(dias)`: el ranking de los últimos 7, 30 o 90 días, separado en canales en vivo, películas y series (los capítulos se juntan por serie). |
 | `views.py`, `urls.py`, `forms.py`, `templates/` | Panel | `/canales/` (resumen separado de en vivo, películas y series; en «Tu catálogo» el nombre de cada sección, «Los ve la app» y **«No se ven»** —caídos o quitados, `resumen_de()['no_se_ven']`— abren Organizar ya filtrado), `/canales/importaciones/<id>/` (avance e informe: pestañas por lo que pasó —Pasaron, Cargados, No pasaron...— con cuántos hay; al terminar la prueba abre en «Pasaron» para revisar antes de cargar; cada entrada es una ficha con todos sus datos y la dirección completa, sin correr de costado; antes de cargar se puede elegir a mano, de a una o varias: «No cargar» lo que pasó y «Cargar igual» lo que no pasó, no respondió o se descartó, en `/canales/importaciones/<id>/elegir/`), `/canales/catalogo/` y `/canales/series/` (pantallas viejas: llevan a Organizar contenido con los mismos filtros), `/canales/series/detalle/?nombre=...` (temporadas, capítulos y fuentes) `/canales/canal/<id>/editar/` y `/canales/lo-mas-visto/` (pestañas En vivo / Películas / Series, período 7/30/90 días). `/canales/categorias/` (recibe las acciones de categorías; al entrar, lleva a Organizar), `/canales/organizar/` (**Organizar contenido**: TODO en un lugar, sección por sección. A la izquierda las categorías de la sección con cuántos tienen, las que parecen la misma y elegir varias para juntarlas en una, crear; a la derecha su contenido como en la app, con edición rápida —nombre, imagen (link o subida), categoría, si se muestra y cada señal en el orden en que la prueba la app: **de dónde salió** (con link a su importación), formato, estado, códec, error y cuándo se probó— y una barra por pasos con lo que hace cada acción: mover, pasar a otra sección, unir en una serie, quitar, volver a mostrar, eliminar; usa `consultas.organizar_contenido`; filtros: nombre, qué mostrar —todo, lo que ve la app, lo que no se ve, caído, quitado a mano—, idioma, lista de origen y sin imagen; `/canales/como-en-la-app/` redirige acá; **con un filtro puesto, las acciones tocan SOLO lo que se ve**: en una serie, sus capítulos que coinciden; en una categoría, «Solo los N que ves» aparte de borrarla entera, que muestra su total real; **Eliminados** (`/canales/eliminados/`): lo eliminado en 30 días, de a una vez, con «Restaurar»; **Exportar**, arriba o en la barra con lo elegido: `/canales/organizar/exportar/` baja una lista M3U8 o un Excel, ver `exportar.py`). Permisos `ver_canales`, `importar_canales` y `ver_estadisticas` (lo más visto; solo lo da un superusuario). |
-| `templatetags/canales_extras.py` | Panel | Filtro `iniciales` (lo que muestra la app cuando un canal no tiene logo). |
+| `views_importacion.py` + `templates/canales/_importacion_entrada.html`, `_importacion_cuentas.html` | Panel | **Una lista importada sin recargar**: `/canales/importaciones/<id>/partes/` descarta varias categorías de una o las recupera («Deshacer»: `servicios.recuperar`) y contesta cómo quedó cada una; `filas_de_entradas` redibuja las entradas después de «No cargar» / «Cargar igual». Ver "Una lista grande: por partes". |
+| `views_organizar.py` + `templates/canales/_organizar_tarjeta.html` | Panel | **Organizar sin recargar la página**: `/canales/organizar/cambiar/` cambia UN dato de una tarjeta (nombre, categoría, se muestra, destacado o imagen; también la portada o el nombre de una serie y la imagen de un capítulo) y contesta la tarjeta redibujada (`tarjeta_json`, el mismo parcial que la página); `/canales/organizar/imagenes/` da las imágenes que ya tienen otras cosas con ese nombre (`organizar.imagenes_parecidas`); `/canales/organizar/renombrar/` es «Cambiar nombres» (vista previa en JSON y aplicarlo: `organizar.nombre_con_reglas` / `renombrar_en_lote`). El panel de edición guarda en `views.organizar_editar`, que también contesta JSON. Ver "Las pantallas de trabajo". |
+| `views_senales.py` + `senales.py` | Panel | **Señales**: cada fuente con problemas, una por una (ver "Señales"). |
+| `templatetags/canales_extras.py` | Panel | Filtro `iniciales` (lo que muestra la app cuando un canal no tiene logo) y `{% barra_contenido %}` (la barra de arriba de las pantallas de Contenido, con el número de señales con problemas). |
 | `admin.py` | Técnica | Editar canales, fuentes y categorías puntuales desde `/admin/`. |
 | `management/commands/importar_m3u.py` | Técnica | `python manage.py importar_m3u <archivo> [--sin-verificar] [--a-fondo] [--solo-espanol] [--descartar-sin-logo] [--con-peliculas] [--con-adultos]` |
 | `management/commands/verificar_fuentes.py` | Técnica | `python manage.py verificar_fuentes` (para programarlo con cron en producción). De madrugada además mide (calidad y velocidad) una tanda de fuentes de los canales que tienen más de una, para que la app arranque por la mejor; `--medir` lo fuerza. Después de verificar, hace la **limpieza automática** (`salud.limpiar`) y prepara los logos parejos que falten (`imagenes.emparejar_logos`). |
@@ -79,9 +82,14 @@ que está bien** (no la lista entera: se descarta la basura de cada lista):
 
 ### Varias listas de una (desde el 18/10/2026)
 
-En Contenido, el botón **Importar lista** abre la tarjeta y directo el
-explorador. Se eligen (o se arrastran a la tarjeta) varias listas y se suben
-solas, de a una, sin confirmar (`static/js/importar_varias.js`). Cada una es
+Arriba de **Contenido → Importar y estado** está siempre la zona para subir:
+se toca (abre el explorador) o se le sueltan encima varias listas, y se suben
+solas, de a una, sin confirmar (`static/js/importar_varias.js`). Las opciones
+de la prueba son casillas cortas (Prueba a fondo, Solo español, Sin adultos,
+Sin películas ni series, Solo con logo; la explicación está en el "?") y
+"Mandar todo a una categoría" va plegado. Abajo, el historial muestra cómo va
+cada lista sin abrirla (barrita y números, `servicios.con_sus_cuentas`) y su
+próximo paso: Seguir probando / Cargar N / Ver. Cada una es
 su propio pedido a `inicio` con `X-Requested-With: XMLHttpRequest`, y la
 respuesta es JSON: `{"ok": true, "url": ..., "total": ...}` o `{"ok": false,
 "error": ...}`. Las opciones de la tarjeta valen para todas. Cada lista queda
@@ -99,20 +107,40 @@ servidor chico ni siquiera se puede leer de una (gunicorn corta a los 5 min).
   15 000 con una barra (`importacion_leer` → `servicios.leer_lote`). No arranca
   a probar sola: después se elige qué.
 - **Se trabaja por partes** (`servicios.Seleccion`: En vivo / Películas /
-  Series, una categoría, lo buscado). La pantalla muestra, de arriba abajo:
-  "Qué trae esta lista" (una tarjeta por parte con cuántos pasaron, se
-  cargaron y faltan probar), las **categorías** de la parte elegida (tabla con
-  buscador) y "Estás trabajando con…" en cuatro pasos: **1 Probar**, **2
-  Revisar**, **3 ¿Dónde va?** (ver abajo), **4 Cargar a la app**, más **"No quiero esto: descartar"**
-  (`importacion_descartar` → `servicios.descartar`: lo que no interesa, o no
-  se tienen derechos para pasar). Probar, cargar y descartar son solo de esa
-  parte: se puede cargar una categoría apenas se terminó de probar, aunque
-  falte el resto. Las series de esa parte se revisan (¿está el capítulo 1?)
-  al terminar de probarla.
+  Series, una categoría, lo buscado). La pantalla (desde el 21/10/2026, para
+  trabajar de a muchas categorías sin recargar) muestra, de arriba abajo:
+  - "Qué trae esta lista": una pestaña por parte con su barrita de colores
+    (cargados, pasaron, no pasaron, descartados, ya estaban; lo vacío es lo
+    que falta probar: `_importacion_cuentas.html`).
+  - "Estás trabajando con…" en una tarjeta baja: cuánto se probó, los números
+    (cada uno abre su pestaña abajo), **Probar**, **Cargar**, **Descartar**
+    (`importacion_descartar` → `servicios.descartar`) y, plegado,
+    **¿Dónde va?** (ver abajo).
+  - **Las categorías** (de la parte elegida o, sin elegir, de toda la lista:
+    `servicios.categorias_de(importacion)` dice de qué parte es cada una), el
+    lugar de trabajo: cada fila con su barrita y el botón de su **próximo
+    paso** (Probar → Cargar N → Cargada) y la ✕ para descartarla. Se tildan
+    varias (Shift = un rango; con una búsqueda, "todas" tilda solo las que
+    coinciden) y la barra de abajo las encola: **Probar y cargar**, **Solo
+    probar**, **Cargar lo que pasó** o **Descartar**. Se hacen de a una, sin
+    recargar (`static/js/importacion_trabajo.js` usa las mismas tandas de
+    `importacion_lote` / `importacion_cargar` con cada categoría), con
+    "Parar". Descartar es `/canales/importaciones/<id>/partes/`
+    (`views_importacion.partes`) y tiene **Deshacer** (`servicios.recuperar`:
+    cada una vuelve a como estaba —por probar o que pasó—, porque
+    `descartar` deja anotado cuál era).
+  - **Uno por uno**: pestañas por lo que pasó, búsqueda y cada entrada en una
+    línea (`_importacion_entrada.html`). "No cargar" / "Cargar igual" (de una
+    o de las tildadas) contestan JSON con las filas redibujadas
+    (`views_importacion.filas_de_entradas`) y la fila ofrece el botón al revés.
+
+  Probar, cargar y descartar son solo de esa parte: se puede cargar una
+  categoría apenas se terminó de probar, aunque falte el resto. Las series de
+  esa parte se revisan (¿está el capítulo 1?) al terminar de probarla.
 
 ### ¿Dónde va? (desde el 18/10/2026)
 
-En el paso 3 de una parte elegida se ve **adónde iría hoy** (`servicios.como_va`:
+En "¿Dónde va?" (plegado, en «Estás trabajando con…») de una parte elegida se ve **adónde iría hoy** (`servicios.como_va`:
 cada categoría de la lista, si ya existe en el panel —o se juntó ahí— o si se
 crearía nueva, y en Series cuántas series ya están) y se elige, antes de cargar
 (`importacion_destino` → `servicios.ubicar`; `static/js/importacion_destino.js`):
@@ -580,7 +608,7 @@ lista TODAS las fuentes con algún problema, aunque su canal se vea:
   de a muchas prueba hasta 40 por vez; las retiradas que andan vuelven solas.
 - Se llega también desde: el número rojo de **Señales** en la barra de
   Contenido (`senales.contar`, guardado 2 minutos), el "2 de 4 señales" / "No
-  se ve" de cada tarjeta de Organizar, "En Señales" en su panel de Detalles, y
+  se ve" de cada tarjeta de Organizar, "En Señales" en su panel de edición, y
   los números de señales de **Importar y estado**.
 
 ### Las pantallas de trabajo (desde el 20/10/2026)
@@ -588,14 +616,56 @@ lista TODAS las fuentes con algún problema, aunque su canal se vea:
 Todas las de Contenido tienen arriba la misma barra (`{% barra_contenido %}`,
 `templatetags/canales_extras.py`): Organizar · Señales · Para revisar ·
 Importar y estado · YouTube · Probar un link · Lo más visto · Eliminados. Las
-explicaciones largas pasaron a botones **"?"** (burbuja flotante). Organizar
-tiene **Tarjetas / Lista** (una fila por canal: mucho más por pantalla) y, al
-editar, **Guardar y seguir** (abre la tarjeta siguiente), **Buscar imagen**
-(Google Imágenes con el nombre) y **pegar una imagen con Ctrl+V**; al guardar
-vuelve a la misma tarjeta. En la página de una serie cada capítulo ocupa una
-línea y su **título se cambia ahí mismo** (tocarlo, Enter:
-`organizar.titular_capitulo`, `/canales/series/capitulo/<id>/titulo/`). Lo
-común está en `static/js/trabajo.js` y `static/css/trabajo.css`.
+explicaciones largas pasaron a botones **"?"** (burbuja flotante). Lo común
+está en `static/js/trabajo.js` y `static/css/trabajo.css`.
+
+**Organizar, para ir de uno en uno sin recargar** (desde el 20/10/2026, segunda vuelta):
+
+- **Tocar una tarjeta abre el panel de edición** al costado (antes había
+  "Detalles" y "Editar" por separado: ahora es uno solo). Nombre, imagen,
+  categoría (o una nueva), sección, número, si se muestra, destacado, sus
+  señales (con sus botones) y sus datos. **Guarda sin recargar** la página:
+  `views.organizar_editar` contesta JSON si se le pide y la tarjeta se
+  redibuja con el mismo parcial que la página (`_organizar_tarjeta.html`,
+  `views_organizar.tarjeta_json`). **Anterior / Siguiente** pasan a la de al
+  lado guardando antes lo que cambió (**Ctrl+Enter** = guardar y seguir); al
+  terminar la página sigue en la próxima (`?abrir=primera`). Mientras está
+  abierto, las categorías de la izquierda se esconden para que entren más
+  tarjetas. El link de la imagen se revisa **solo si cambió**: un logo raro
+  que vino en una lista no impide guardar el nombre.
+- **Imágenes sin salir del panel** (`static/js/imagenes_contenido.js`):
+  «Buscar» muestra las que YA tienen otras cosas con ese nombre (otras listas
+  importadas, aunque no se hayan cargado, y otros canales:
+  `organizar.imagenes_parecidas`, `/canales/organizar/imagenes/`) y las de
+  Wikipedia (las pide el navegador); se elige con un clic. También se
+  **arrastra una imagen** desde otra ventana (o un resultado de Google
+  Imágenes: se queda con la grande) **arriba de cualquier tarjeta** y se
+  guarda en el momento, con «Deshacer»; o se pega con Ctrl+V en el panel.
+- **La vista Lista es una planilla**: el nombre se cambia ahí mismo (Enter
+  guarda, **Tab** pasa al siguiente, Esc cancela), la categoría con su botón
+  (buscador; Enter elige la primera que coincide, o crea una nueva si no hay
+  ninguna) y ★ / «se muestra» con un toque. Cada cambio va a
+  `/canales/organizar/cambiar/` (`views_organizar.cambiar`: un dato por vez).
+- **Chips con lo que queda por hacer**, cada uno con su número
+  (`consultas.cuentas_de_organizar`): Todo · Se ven · No se ven · Con señales
+  caídas · Quitados · ★ Destacados · Sin imagen. Idioma y lista se filtran
+  apenas se eligen.
+- **Cambiar nombres de a muchos** (barra de abajo): sacar un texto
+  («HD»), cambiar uno por otro, limpiar como al importar o Mayúscula Inicial,
+  con **vista previa** antes de aplicarlo (`organizar.nombre_con_reglas`,
+  `renombrar_en_lote`, `/canales/organizar/renombrar/`). Una serie se renombra
+  entera; la que se pisaría con otra se saltea y lo avisa.
+- **La página de una serie** (`static/js/serie_trabajo.js`): la portada se
+  cambia ahí mismo (buscar, subir, link, arrastrar o pegar), el nombre
+  tocándolo (renombra todos los capítulos), la categoría eligiéndola, y la
+  imagen de un capítulo arrastrándole una encima. Arriba, la serie anterior y
+  la siguiente de la misma categoría (`consultas.series_vecinas`). Cada
+  capítulo ocupa una línea y su **título se cambia ahí mismo** (tocarlo,
+  Enter: `organizar.titular_capitulo`, `/canales/series/capitulo/<id>/titulo/`).
+- **Una lista importada** quedó más junta: la barra de Contenido, los cuatro
+  pasos en una fila y cada entrada en una línea.
+- **Editar canal** («Más opciones») tiene la misma búsqueda de imágenes, y se
+  le arrastra o pega una imagen.
 
 ### Para revisar (la bandeja del panel)
 

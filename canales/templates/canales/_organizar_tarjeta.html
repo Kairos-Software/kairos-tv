@@ -1,0 +1,34 @@
+{% load canales_extras %}{% comment %}
+    Una tarjeta de Organizar: un canal, una película o una serie entera. La usan organizar.html y
+    views_organizar.tarjeta_json, que la redibuja después de guardar sin recargar la página.
+    Tocarla abre el panel de edición (static/js/organizar_trabajo.js); la casilla la elige para la barra de abajo.
+    En la vista Lista, el nombre, la categoría, ★ y "se muestra" se cambian ahí mismo. Arrastrarle una imagen
+    encima se la pone. data-datos: lo que arma views._preparar_para_editar.
+{% endcomment %}<article class="espejo-tarjeta{% if contenido == 'serie' %}{% if not item.completa %} fuera{% endif %}{% elif item.no_se_ve %} fuera{% endif %}"
+         data-clave="{% if contenido == 'serie' %}s:{{ item.nombre }}{% else %}c{{ item.pk }}{% endif %}"
+         data-datos="{{ item.datos }}" tabindex="0" aria-label="{{ item.nombre }}">
+    {% if puede_editar %}
+    <input type="checkbox" class="form-check-input canal-elegir" name="{% if contenido == 'serie' %}serie{% else %}canal{% endif %}"
+           value="{% if contenido == 'serie' %}{{ item.nombre }}{% else %}{{ item.pk }}{% endif %}" aria-label="Elegir {{ item.nombre }}">
+    {% endif %}
+    <span class="espejo-imagen" data-iniciales="{{ item.nombre|iniciales }}">{% if item.logo_ver %}<img src="{{ item.logo_ver }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ item.nombre|iniciales }}{% endif %}</span>
+    <span class="espejo-nombre" title="{{ item.nombre }}">{% if item.destacado %}<span class="espejo-estrella" title="Destacado en la TV" aria-label="Destacado en la TV">★</span> {% endif %}<span class="espejo-nombre-texto"{% if puede_editar %} data-nombre-editable{% endif %}>{{ item.nombre }}</span></span>
+    {% if puede_editar %}
+    <button type="button" class="espejo-categoria-boton" data-elegir-categoria title="Cambiar la categoría"><span>{% if contenido == 'serie' %}{{ item.categoria|default:"Sin categoría" }}{% else %}{{ item.categoria.nombre|default:"Sin categoría" }}{% endif %}</span> <i class="bi bi-chevron-down" aria-hidden="true"></i></button>
+    {% endif %}
+    <span class="espejo-detalle">
+        {% if contenido == 'serie' %}
+        <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% elif item.fuera %} · <span class="estado-mal" title="Capítulos que la app no muestra (caídos o quitados)">{{ item.fuera }} no se ve{{ item.fuera|pluralize:"n" }}</span>{% endif %}
+        {% else %}
+        {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<a href="{% url 'canales:senales' %}?problema=cualquiera&amp;canal={{ item.pk }}" class="estado-mal espejo-senales" title="{{ item.no_se_ve }} · Ver sus señales">No se ve</a>{% else %}Se ve en la app{% if item.fuentes_fuera %} · <a href="{% url 'canales:senales' %}?problema=cualquiera&amp;canal={{ item.pk }}" class="estado-mal espejo-senales" title="Las otras están caídas, ocultas, quitadas o retiradas: ver cada una">{{ item.senales_en_app }} de {{ item.fuentes_total }} señales</a>{% endif %}{% endif %}
+        {% endif %}
+    </span>
+    {% if puede_editar %}
+    <span class="espejo-rapidos">
+        <button type="button" class="btn-icono{% if item.destacado %} prendido{% endif %}" data-rapido="destacado" aria-pressed="{% if item.destacado %}true{% else %}false{% endif %}"
+                title="{% if item.destacado %}Destacado en la TV: tocá para sacarlo{% else %}Destacar en la TV (sale más en la vidriera){% endif %}"><i class="bi bi-star{% if item.destacado %}-fill{% endif %}" aria-hidden="true"></i><span class="visually-hidden">Destacado</span></button>
+        <button type="button" class="btn-icono{% if not item.activo %} apagado{% endif %}" data-rapido="activo" aria-pressed="{% if item.activo %}true{% else %}false{% endif %}"
+                title="{% if item.activo %}Se muestra en la app: tocá para quitarlo{% else %}Quitado de la app: tocá para volver a mostrarlo{% endif %}"><i class="bi bi-eye{% if not item.activo %}-slash{% endif %}" aria-hidden="true"></i><span class="visually-hidden">Se muestra en la app</span></button>
+    </span>
+    {% endif %}
+</article>

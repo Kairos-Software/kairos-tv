@@ -45,7 +45,8 @@ from herramientas.excel import TIPO_XLSX
 from usuarios.decoradores import requiere_permiso
 from usuarios.permisos import chequear_permiso
 
-from . import consultas, estadisticas, exportar, imagenes, organizar, salud, secciones, servicios, youtube
+from . import (consultas, estadisticas, exportar, imagenes, organizar, salud, secciones, servicios, views_importacion,
+               views_organizar, youtube)
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
 from .forms import (CanalForm, CanalNuevoForm, EditarDesdeOrganizarForm, FuentesFormSet, ImportarListaForm,
                     ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
@@ -54,6 +55,11 @@ from .models import (PROPORCION_PANTALLA_COMPLETA, Canal, Categoria, Contenido, 
 from .verificacion import NOMBRES_DE_CODECS, Resultado, verificar_url, verificar_varias
 
 ENTRADAS_POR_PAGINA = 100
+
+# Los chips de arriba de Organizar: qué mostrar, con cuántos hay de cada uno (consultas.cuentas_de_organizar).
+# "Caídos" solo aparece cuando se llega con ese filtro (es una parte de "No se ven").
+CHIPS_DE_ORGANIZAR = [('todo', 'Todo'), ('app', 'Se ven'), ('fuera', 'No se ven'), ('caidos', 'Caídos'),
+                      ('senales', 'Con señales caídas'), ('quitados', 'Quitados'), ('destacados', '★ Destacados')]
 
 
 def _parametros_sin_pagina(request):
@@ -87,8 +93,13 @@ def inicio(request):
 
     return render(request, 'canales/inicio.html', {
         'form': form,
+        # Las opciones de la prueba, como casillas cortas (la explicación larga está en el "?")
+        'opciones_de_importar': [(form['a_fondo'], 'Prueba a fondo'), (form['solo_espanol'], 'Solo español'),
+                                 (form['descartar_adultos'], 'Sin adultos'),
+                                 (form['descartar_vod'], 'Sin películas ni series'),
+                                 (form['descartar_sin_logo'], 'Solo con logo')],
         'resumen': consultas.resumen(),
-        'importaciones': consultas.ultimas_importaciones(),
+        'importaciones': servicios.con_sus_cuentas(consultas.ultimas_importaciones()),
         'puede_importar': chequear_permiso(request.user, 'importar_canales'),
         # Mantenimiento: "Qué revisar" (una sección o una lista) y lo que dio "Limpiar nombres"
         'secciones_para_revisar': secciones.todas(),
@@ -190,8 +201,16 @@ def importacion(request, pk):
     pestanias = [(estado, texto, parte[clave]) for estado, texto, clave in PESTANIAS_DE_LA_IMPORTACION
                  if parte[clave] or estado == EntradaImportada.Estado.APTA]
     por_contenido = servicios.por_contenido(importacion)
-    # De la parte elegida, sus categorías (con una sola parte, como una lista de canales, directo esas)
+    # Las categorías de la parte elegida; sin elegir, las de toda la lista (cada una dice de qué parte es)
     de_las_categorias = seleccion.contenido or (por_contenido[0][0] if len(por_contenido) == 1 else '')
+    categorias = servicios.categorias_de(importacion, de_las_categorias)
+    nombres_de_las_partes = {clave: nombre for clave, nombre, _ in por_contenido}
+    for categoria in categorias:
+        categoria['parte'] = nombres_de_las_partes.get(categoria['contenido'], '')
+        # Para la pantalla (importacion_trabajo.js): qué le falta a cada una, sin pedírselo al servidor
+        categoria['cuentas_json'] = json.dumps({clave: categoria[clave] for clave in (
+            'pendientes', 'aptas', 'agregadas', 'rechazadas', 'caidas', 'descartadas', 'repetidas', 'no_pasaron',
+            'total', 'porcentaje')})
     pagina = Paginator(entradas, ENTRADAS_POR_PAGINA).get_page(request.GET.get('pagina'))
     se_pueden_elegir = [EntradaImportada.Estado.APTA, *servicios.SE_PUEDEN_CARGAR_IGUAL]
     puede_importar = chequear_permiso(request.user, 'importar_canales')
@@ -199,12 +218,15 @@ def importacion(request, pk):
         **(_donde_va(importacion, seleccion) if puede_importar and seleccion.contenido else {}),
         'importacion': importacion,
         'avance': avance,
+        # Toda la lista con los mismos números que cada parte (para la pestaña "Toda la lista")
+        'toda': {**avance, 'total': importacion.total - importacion.por_leer,
+                 'no_pasaron': avance['rechazadas'] + avance['caidas']},
         'parte': parte,
         'seleccion': seleccion,
         'datos_de_la_seleccion': urlencode(seleccion.como_datos()),
         'que_es': servicios.que_es(seleccion),
         'por_contenido': por_contenido,
-        'categorias': servicios.categorias_de(importacion, de_las_categorias) if de_las_categorias else [],
+        'categorias': categorias,
         'contenido_de_las_categorias': de_las_categorias,
         'nombre_de_la_parte': secciones.nombre(de_las_categorias) if de_las_categorias else '',
         'sin_categoria': servicios.SIN_CATEGORIA,
@@ -218,6 +240,7 @@ def importacion(request, pk):
         'se_pueden_elegir': se_pueden_elegir,
         'se_pueden_cargar_igual': servicios.SE_PUEDEN_CARGAR_IGUAL,
         'hay_para_elegir': any(e.estado in se_pueden_elegir for e in pagina),
+        'volver': request.get_full_path(),
         'filtros': filtros,
         'hay_filtros': any(filtros.values()),
         'parametros': _parametros_sin_pagina(request),
@@ -401,13 +424,18 @@ def importacion_elegir(request, pk):
     else:
         cantidad = servicios.no_cargar(importacion, entradas, request.user)
         texto = f'{cantidad} pasaron a «Descartados»: no se van a cargar.'
+    volver = request.POST.get('volver', '')
+    if not url_has_allowed_host_and_scheme(volver, allowed_hosts={request.get_host()}):
+        volver = importacion_url(importacion)
+    if views_organizar.quiere_json(request):
+        # Sin recargar (static/js/importacion_trabajo.js): las filas redibujadas, cada una con su botón al revés
+        return JsonResponse({'ok': True, 'cantidad': cantidad,
+                             'mensaje': texto if cantidad else 'No había nada elegido para cambiar.',
+                             'filas': views_importacion.filas_de_entradas(request, importacion, entradas, volver)})
     if cantidad:
         messages.success(request, texto)
     else:
         messages.info(request, 'No había nada elegido para cambiar.')
-    volver = request.POST.get('volver', '')
-    if not url_has_allowed_host_and_scheme(volver, allowed_hosts={request.get_host()}):
-        volver = importacion_url(importacion)
     return redirect(volver)
 
 
@@ -606,7 +634,8 @@ def _preparar_para_editar(pagina, contenido):
             serie.datos = json.dumps({
                 'tipo': 'serie', 'nombre': serie.nombre, 'logo': serie.logo, 'portada': bool(serie.portada),
                 'activo': serie.activo, 'destacado': serie.destacado,
-                'categoria': serie.categoria_id or 'ninguna', 'capitulos': serie.cantidad,
+                'categoria': serie.categoria_id or 'ninguna', 'categoria_nombre': serie.categoria or '',
+                'capitulos': serie.cantidad,
                 'en_app': serie.completa, 'motivo': serie.por_que_no_se_ve,
                 'datos': [
                     ('Sección', 'Series'),
@@ -633,7 +662,9 @@ def _preparar_para_editar(pagina, contenido):
         canal.datos = json.dumps({
             'tipo': 'canal', 'pk': canal.pk, 'nombre': canal.nombre, 'logo': canal.logo, 'logo_ver': canal.logo_ver,
             'numero': canal.numero,
-            'categoria': canal.categoria_id or 'ninguna', 'contenido': canal.contenido, 'activo': canal.activo,
+            'categoria': canal.categoria_id or 'ninguna',
+            'categoria_nombre': canal.categoria.nombre if canal.categoria_id else '',
+            'contenido': canal.contenido, 'activo': canal.activo,
             'destacado': canal.destacado,
             'en_app': not canal.no_se_ve, 'motivo': canal.no_se_ve,
             'datos': datos,
@@ -690,9 +721,32 @@ def organizar_contenido(request):
     categorias = list(organizar.categorias_con_cantidades(contenido))
     # Los filtros de ahora, para los links del árbol (que cambian solo la categoría)
     base = request.GET.copy()
-    for clave in ('categoria', 'pagina'):
+    for clave in ('categoria', 'pagina', 'abrir', 'ir'):
         base.pop(clave, None)
     base['contenido'] = contenido
+    # Los chips de arriba (lo que queda por hacer, con su número): cambian solo "mostrar" o "sin imagen"
+    sin_mostrar = request.GET.copy()
+    for clave in ('mostrar', 'pagina', 'abrir', 'ir'):
+        sin_mostrar.pop(clave, None)
+    sin_mostrar['contenido'] = contenido
+    alternar_sin_logo = sin_mostrar.copy()
+    alternar_sin_logo['mostrar'] = filtros['mostrar']
+    if filtros['sin_logo']:
+        alternar_sin_logo.pop('sin_logo', None)
+    else:
+        alternar_sin_logo['sin_logo'] = '1'
+    cuentas = consultas.cuentas_de_organizar(contenido, texto=filtros['texto'], origen=filtros['origen'],
+                                             idioma=filtros['idioma'], categoria=datos.elegida)
+    chips = [(clave, nombre, cuentas.get(clave, 0)) for clave, nombre in CHIPS_DE_ORGANIZAR
+             if clave != 'caidos' or filtros['mostrar'] == 'caidos']
+    # "Siguiente" en el panel de edición sigue en la página que viene (y "Anterior", en la de antes)
+    def otra_pagina(numero):
+        parametros = request.GET.copy()
+        for clave in ('abrir', 'ir'):
+            parametros.pop(clave, None)
+        parametros['contenido'] = contenido
+        parametros['pagina'] = numero
+        return f'{request.path}?{parametros.urlencode()}'
     puede_editar = chequear_permiso(request.user, 'importar_canales')
     return render(request, 'canales/organizar.html', {
         'contenido': contenido,
@@ -713,6 +767,12 @@ def organizar_contenido(request):
         'iconos': Seccion.Icono.choices,
         'parametros': _parametros_sin_pagina(request),
         'base': base.urlencode(),
+        'chips': chips,
+        'sin_mostrar': sin_mostrar.urlencode(),
+        'alternar_sin_logo': alternar_sin_logo.urlencode(),
+        'cuenta_sin_logo': cuentas.get('sin_logo', 0),
+        'pagina_siguiente': otra_pagina(datos.pagina.next_page_number()) if datos.pagina.has_next() else '',
+        'pagina_anterior': otra_pagina(datos.pagina.previous_page_number()) if datos.pagina.has_previous() else '',
         'puede_editar': puede_editar,
         # Para "Unir en una sola serie" y "Pasar a Series": Categoría -> Serie -> Temporada (js/destino_serie.js,
         # que pide las series a series_arbol recién cuando se abre una de esas dos)
@@ -748,30 +808,50 @@ def _descripcion_de_filtros(filtros):
 @require_POST
 @requiere_permiso('importar_canales')
 def organizar_editar(request):
-    """La edición rápida de una cosa (o de una serie entera) desde Organizar contenido."""
+    """
+    La edición rápida de una cosa (o de una serie entera) desde Organizar contenido. Si la página lo pide en
+    JSON (el panel de edición guarda sin recargar), contesta la tarjeta redibujada (views_organizar.tarjeta_json).
+    """
+    en_json = views_organizar.quiere_json(request)
+
+    def no_se_guardo(mensaje):
+        if en_json:
+            return JsonResponse({'ok': False, 'error': mensaje}, status=400)
+        messages.error(request, mensaje)
+        return redirect(_volver(request))
+
     form = EditarDesdeOrganizarForm(request.POST)
     if not form.is_valid():
-        errores = '; '.join(f'{campo}: {" ".join(lista)}' for campo, lista in form.errors.items())
-        messages.error(request, f'No se guardó: {errores}')
-        return redirect(_volver(request))
+        nombres = {'nombre': 'Nombre', 'logo': 'Imagen', 'numero': 'Número', 'contenido': 'Sección'}
+        errores = '; '.join(f'{nombres.get(campo, campo)}: {" ".join(lista)}' for campo, lista in form.errors.items())
+        return no_se_guardo(f'No se guardó: {errores}')
     datos = form.cleaned_data
+    datos['logo'] = datos['logo'].strip()
+    es_serie = request.POST.get('tipo') == 'serie'
+    nombre = request.POST.get('serie', '')
+    canal = None if es_serie else get_object_or_404(Canal, pk=request.POST.get('canal', '0') or 0)
     if request.FILES.get('imagen'):
         # Una imagen subida desde la compu gana sobre el link
         try:
             datos['logo'] = imagenes.guardar_subida(request.FILES['imagen'], request)
         except imagenes.ImagenInvalida as error:
-            messages.error(request, f'No se guardó: {error}')
-            return redirect(_volver(request))
+            return no_se_guardo(f'No se guardó: {error}')
+    else:
+        # El link se revisa solo si cambió: el que ya tenía (aunque sea raro) no impide guardar lo demás
+        antes = (imagenes.portada_de(nombre) or organizar.primera_imagen(nombre)) if es_serie else canal.logo
+        if datos['logo'] != antes:
+            try:
+                views_organizar.revisar_link_de_imagen(datos['logo'])
+            except organizar.NoSePuede as error:
+                return no_se_guardo(f'No se guardó: {error}')
     try:
-        if request.POST.get('tipo') == 'serie':
+        if es_serie:
             categoria = _categoria_elegida(request, Contenido.SERIE)
-            nombre = request.POST.get('serie', '')
             cambios = organizar.editar_serie(nombre, request.user, nombre=datos['nombre'], logo=datos['logo'],
                                              categoria=categoria, activo=datos['activo'],
                                              destacado=datos['destacado'])
-            titulo = datos['nombre'] or nombre
+            titulo = organizar.nombre_de_serie_valido(datos['nombre']) if 'nombre' in cambios else nombre
         else:
-            canal = get_object_or_404(Canal, pk=request.POST.get('canal', '0'))
             categoria = _categoria_elegida(request, datos['contenido'] or canal.contenido)
             extra = {'contenido': datos['contenido']} if datos['contenido'] else {}
             cambios = organizar.editar_canal(canal, request.user, nombre=datos['nombre'], logo=datos['logo'],
@@ -781,9 +861,15 @@ def organizar_editar(request):
                 imagenes.emparejar_logo_al_guardar(canal)
             titulo = canal.nombre
     except organizar.NoSePuede as error:
-        messages.error(request, str(error))
-        return redirect(_volver(request))
-    messages.success(request, f'Se guardó "{titulo}".' if cambios else f'"{titulo}" no tenía cambios.')
+        return no_se_guardo(str(error))
+    mensaje = f'Se guardó «{titulo}».' if cambios else f'«{titulo}» no tenía cambios.'
+    if en_json:
+        if es_serie:
+            return views_organizar.tarjeta_json(request, views_organizar._serie_para_tarjeta(titulo), Contenido.SERIE,
+                                                mensaje)
+        return views_organizar.tarjeta_json(request, views_organizar._canal_para_tarjeta(canal.pk), canal.contenido,
+                                            mensaje)
+    messages.success(request, mensaje)
     return redirect(_volver(request))
 
 
@@ -908,8 +994,12 @@ def serie_detalle(request):
         serie.temporadas_ordenadas.append((numero, capitulos, _como_esta_el_orden(capitulos, numero)))
 
     numeros = serie.numeros_de_temporada
+    # Para pasar a la serie de al lado (de la misma categoría) sin volver a la lista
+    anterior, siguiente = consultas.series_vecinas(serie.nombre)
     return render(request, 'canales/serie_detalle.html', {
         'serie': serie,
+        'serie_anterior': anterior,
+        'serie_siguiente': siguiente,
         'puede_editar': chequear_permiso(request.user, 'importar_canales'),
         'categorias_de_series': Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre'),
         'temporada_nueva': (max(numeros) + 1) if numeros else 1,

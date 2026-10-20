@@ -81,6 +81,14 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
   rendía con "Source error" aunque VLC (que espera más) lo viera. Acá espera
   **25 s** a conectar y **30 s** a leer (`KAIROS_ESPERA_CONEXION_MS`,
   `KAIROS_ESPERA_LECTURA_MS`).
+- Una **película o capítulo** (un archivo: `.mp4`, `.mkv`, `.avi`...) espera
+  **90 s** a leer (`KAIROS_ESPERA_LECTURA_ARCHIVO_MS`, `kairosEsperaLectura`):
+  hay servidores que tardan cerca de un minuto en mandar lo primero de una
+  película (VLC también). Con 30 s ExoPlayer cortaba, la volvía a pedir desde
+  cero y no arrancaba nunca. Del lado de Dart una película espera 90 s a
+  arrancar, 60 s cargando antes de darse por trabada (volver a abrirla cuesta
+  otra vez toda la conexión) y los toques seguidos de adelantar/atrasar se
+  juntan en un solo salto (`ControlSenal.saltar`, desde la app 1.2.34).
 - Una dirección que termina en `.ts` (sin pista de formato) se abre como
   **MPEG-TS** (`video/mp2t`, `kairosMimeDirecto`), nunca como HLS.
 - Las redirecciones (también de https a http) las sigue el mismo

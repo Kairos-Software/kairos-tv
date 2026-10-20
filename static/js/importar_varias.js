@@ -1,7 +1,7 @@
 /*
  * Importar varias listas de una (Contenido → "Importar lista", canales/inicio.html):
  *
- *   - El botón "Importar lista" de arriba abre la tarjeta Y el explorador de archivos.
+ *   - Tocar la zona de arriba (o el botón "Importar lista", si lo hay) abre el explorador de archivos.
  *   - Se eligen (o se arrastran) varias listas a la vez, y se suben solas, de a una,
  *     apenas se eligen: sin "Subir y analizar".
  *   - Cada una muestra cómo va (esperando, subiendo 40 %, analizando, lista o el error) y,
@@ -28,7 +28,7 @@
     var resumen = document.createElement('p');
     resumen.className = 'subidas-resumen';
     resumen.hidden = true;
-    var lugar = campo.closest('[class*="col-"]') || campo.parentNode;
+    var lugar = form.querySelector('[data-subidas]') || campo.closest('[class*="col-"]') || campo.parentNode;
     lugar.appendChild(lista);
     lugar.appendChild(resumen);
     // Ya no hace falta confirmar: se sube al elegir

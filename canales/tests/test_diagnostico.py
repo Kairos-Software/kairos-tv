@@ -78,7 +78,7 @@ class DiagnosticoTests(TestCase):
         rol = Rol.objects.create(nombre='Canales', permisos=['ver_canales', 'importar_canales'])
         self.client.force_login(Usuario.objects.create_user('marcos', None, 'x', rol=rol))
         pagina = self.client.get(reverse('canales:organizar'), {'contenido': 'vivo'}).content.decode()
-        crudo = re.search(r'class="espejo-editar" data-datos="([^"]+)"', pagina).group(1)
+        crudo = re.search(r'<article class="espejo-tarjeta[^"]*"\s+data-clave="[^"]*"\s+data-datos="([^"]+)"', pagina).group(1)
         senal = json.loads(unescape(crudo))['fuentes'][0]
         self.assertTrue(senal['problema'].startswith('Último problema en un aparato ('))
         self.assertIn('el servidor de la señal la cortó', senal['problema'])

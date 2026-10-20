@@ -33,3 +33,67 @@
 .subida.error { border-color: var(--rubi-claro); }
 .subida.error > .bi, .subida.error .subida-estado { color: var(--rubi-claro); }
 .subidas-resumen { margin: .6rem 0 0; font-size: .9rem; }
+
+/* La zona de subir (siempre a la vista): se toca para elegir o se le sueltan los archivos encima */
+.importar-zona { padding: 1rem 1.15rem; margin-bottom: 1.25rem; }
+.importar-soltar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    padding: 1rem 1.2rem;
+    border: 2px dashed var(--borde-fuerte);
+    border-radius: var(--radio);
+    background: var(--capa-baja);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.importar-soltar:hover, .importar-soltar:focus-within,
+#importar-lista.soltar-aca .importar-soltar { border-color: var(--celeste); background: var(--celeste-fondo); }
+.importar-soltar:focus-within { box-shadow: 0 0 0 3px rgba(0, 240, 255, .25); }
+.importar-soltar > .bi { font-size: 1.8rem; color: var(--celeste); }
+.importar-soltar strong { display: block; font-size: 1rem; }
+.importar-soltar small { display: block; color: var(--texto-suave); font-size: .8rem; }
+/* El campo de archivo de verdad queda invisible encima de la zona (sigue andando con teclado y sin JavaScript) */
+.importar-soltar input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.importar-opciones-fila { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem; margin-top: .75rem; font-size: .85rem; }
+.importar-opciones-titulo { color: var(--texto-suave); font-weight: 600; }
+.importar-opcion {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .25rem .65rem;
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    background: var(--capa-baja);
+    cursor: pointer;
+    user-select: none;
+}
+.importar-opcion:has(input:checked) { border-color: var(--celeste-borde); background: var(--celeste-fondo); color: var(--celeste-claro); }
+.importar-opcion .form-check-input { margin: 0; }
+.importar-destino { margin-top: .6rem; font-size: .85rem; }
+.importar-destino > summary { cursor: pointer; color: var(--texto-suave); }
+.importar-destino > summary .texto-suave { font-size: .78rem; }
+.importar-enviar { margin-top: .75rem; }
+
+/* El historial: cómo va cada lista */
+.tabla-importaciones td { vertical-align: middle; }
+.tabla-importaciones .num { text-align: right; }
+.importacion-nombre { font-weight: 600; overflow-wrap: anywhere; }
+.importacion-como { min-width: 14rem; }
+.importacion-como .imp-barra { margin-bottom: .25rem; }
+@media (max-width: 767.98px) {
+    /* El historial en el celular: cada lista en dos renglones (nombre y cuántos; barrita y botón) */
+    .tabla-importaciones, .tabla-importaciones tbody { display: block; }
+    .tabla-importaciones thead { display: none; }
+    .tabla-importaciones tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: .3rem .6rem;
+        padding: .7rem .9rem;
+        border-bottom: 1px solid rgba(59, 73, 75, .35);
+    }
+    .tabla-importaciones td { display: block; padding: 0; border: 0; }
+    .tabla-importaciones td.importacion-como { min-width: 0; }
+    .tabla-importaciones td.text-end { align-self: center; }
+}
