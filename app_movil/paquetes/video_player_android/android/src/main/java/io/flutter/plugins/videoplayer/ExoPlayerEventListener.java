@@ -115,6 +115,22 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
         + (veces > 0 ? " · se reconectó sola " + veces + (veces == 1 ? " vez" : " veces") : "");
   }
 
+  /**
+   * Kairos TV: la duración que se le pasa a la app. Un canal en vivo no tiene:
+   * ExoPlayer da C.TIME_UNSET (un número enorme negativo), que video_player
+   * convierte a microsegundos, se desborda y queda en 1 ms. Apenas arrancaba,
+   * la posición "llegaba al final": video_player lo daba por terminado, lo
+   * pausaba y la app pasaba a otra señal ("medio segundo de imagen y se
+   * corta", en los canales TS directos). En vivo se pasa {@link #KAIROS_SIN_FIN_MS}.
+   */
+  protected long kairosDuracion() {
+    long duracion = exoPlayer.getDuration();
+    return exoPlayer.isCurrentMediaItemLive() || duracion == C.TIME_UNSET ? KAIROS_SIN_FIN_MS : duracion;
+  }
+
+  /** Unos 100 años: la posición nunca llega (y en microsegundos no se desborda). */
+  static final long KAIROS_SIN_FIN_MS = 100L * 365 * 24 * 60 * 60 * 1000;
+
   @Override
   public void onRenderedFirstFrame() {
     kairosSeVio = true;

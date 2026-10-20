@@ -58,7 +58,8 @@ public final class TextureExoPlayerEventListener extends ExoPlayerEventListener 
         }
       }
     }
-    events.onInitialized(width, height, exoPlayer.getDuration(), rotationCorrection.getDegrees());
+    // Kairos TV: en vivo, una duración que no se alcanza (ver kairosDuracion)
+    events.onInitialized(width, height, kairosDuracion(), rotationCorrection.getDegrees());
   }
 
   @OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)

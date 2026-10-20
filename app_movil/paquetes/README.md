@@ -147,6 +147,15 @@ sale igual que ffmpeg) y `android/src/test/.../KairosAudioRendererTest.java`
   aparato").
 - Un video directo sin duración conocida se toma como en vivo. Una película
   (con duración) termina normal.
+- **La duración en vivo (app 1.2.33)** — el error de verdad de los canales TS
+  directos que "muestran medio segundo y se cortan" aunque en VLC anden: un
+  canal en vivo no tiene duración y ExoPlayer da `C.TIME_UNSET` (un número
+  enorme negativo). `video_player` lo pasa a microsegundos, **se desborda y
+  queda en 1 ms**: apenas arrancaba, la posición "llegaba al final",
+  `video_player` lo daba por terminado, lo pausaba y la app pasaba a otra
+  señal. Ahora `kairosDuracion()` (en `ExoPlayerEventListener`, lo usan los dos
+  `sendInitialized`) pasa unos 100 años en vivo (`KAIROS_SIN_FIN_MS`). Las
+  películas siguen pasando su duración real.
 
 Tests: `android/src/test/.../KairosReconexionTest.java`.
 

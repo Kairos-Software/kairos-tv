@@ -168,4 +168,28 @@ public final class KairosReconexionTest {
     verify(exoPlayer, never()).seekToDefaultPosition();
     verify(events).onPlaybackStateChanged(PlatformPlaybackState.ENDED);
   }
+
+  @Test
+  public void unCanalEnVivoSinDuracionLePasaALaAppUnaQueNoSeAlcanza() {
+    // Antes: C.TIME_UNSET llegaba a video_player como 1 ms (se desbordaba) y
+    // apenas arrancaba lo daba por terminado: "medio segundo de imagen y se corta"
+    ExoPlayer exoPlayer = mock(ExoPlayer.class);
+    when(exoPlayer.getDuration()).thenReturn(C.TIME_UNSET);
+    Escucha escucha = new Escucha(exoPlayer, mock(VideoPlayerCallbacks.class));
+    assertEquals(ExoPlayerEventListener.KAIROS_SIN_FIN_MS, escucha.kairosDuracion());
+    // En microsegundos (como la guarda Dart) no se desborda
+    assertTrue(ExoPlayerEventListener.KAIROS_SIN_FIN_MS < Long.MAX_VALUE / 1000);
+
+    when(exoPlayer.getDuration()).thenReturn(12_000L);
+    when(exoPlayer.isCurrentMediaItemLive()).thenReturn(true); // HLS en vivo: la ventana, tampoco se usa
+    assertEquals(ExoPlayerEventListener.KAIROS_SIN_FIN_MS, escucha.kairosDuracion());
+  }
+
+  @Test
+  public void unaPeliculaPasaSuDuracionReal() {
+    ExoPlayer exoPlayer = mock(ExoPlayer.class);
+    when(exoPlayer.getDuration()).thenReturn(5_400_000L);
+    Escucha escucha = new Escucha(exoPlayer, mock(VideoPlayerCallbacks.class));
+    assertEquals(5_400_000L, escucha.kairosDuracion());
+  }
 }
