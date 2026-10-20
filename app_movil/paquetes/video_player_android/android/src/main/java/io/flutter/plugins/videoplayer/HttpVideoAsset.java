@@ -111,12 +111,20 @@ final class HttpVideoAsset extends VideoAsset {
    */
   @VisibleForTesting
   static int kairosEsperaLectura(@Nullable String url, @NonNull StreamingFormat formato) {
+    return kairosEsArchivo(url, formato) ? KAIROS_ESPERA_LECTURA_ARCHIVO_MS : KAIROS_ESPERA_LECTURA_MS;
+  }
+
+  /**
+   * Kairos TV: si es un archivo (película o capítulo: .mp4, .mkv, .avi...) y no un canal
+   * en vivo (una lista HLS o un ".ts" que llega de corrido).
+   */
+  @VisibleForTesting
+  static boolean kairosEsArchivo(@Nullable String url, @NonNull StreamingFormat formato) {
     if (formato != StreamingFormat.UNKNOWN || url == null) {
-      return KAIROS_ESPERA_LECTURA_MS;
+      return false;
     }
     String ruta = url.split("[?#]", 2)[0].toLowerCase(Locale.ROOT);
-    boolean enVivo = ruta.endsWith(".ts") || ruta.endsWith(".m3u8") || ruta.endsWith(".m3u");
-    return enVivo ? KAIROS_ESPERA_LECTURA_MS : KAIROS_ESPERA_LECTURA_ARCHIVO_MS;
+    return !(ruta.endsWith(".ts") || ruta.endsWith(".m3u8") || ruta.endsWith(".m3u"));
   }
 
   @NonNull
@@ -137,10 +145,24 @@ final class HttpVideoAsset extends VideoAsset {
   @VisibleForTesting
   MediaSource.Factory getMediaSourceFactory(
       Context context, DefaultHttpDataSource.Factory initialFactory) {
+    DataSource.Factory dataSourceFactory = kairosFabricaDeDatos(context, initialFactory);
+    return new DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory);
+  }
+
+  /**
+   * Kairos TV: lo que abre las conexiones de este video (las pruebas lo usan tal cual). Una
+   * película pide el archivo varias veces; desde la segunda, directo a donde redirigió el link
+   * (ver KairosRedireccionFija). En vivo, siempre el link (así se renueva el permiso).
+   */
+  @VisibleForTesting
+  DataSource.Factory kairosFabricaDeDatos(Context context, DefaultHttpDataSource.Factory initialFactory) {
     unstableUpdateDataSourceFactory(
         initialFactory, httpHeaders, userAgent, kairosEsperaLectura(assetUrl, streamingFormat));
-    DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context, initialFactory);
-    return new DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory);
+    DataSource.Factory http =
+        kairosEsArchivo(assetUrl, streamingFormat)
+            ? new KairosRedireccionFija.Factory(initialFactory)
+            : initialFactory;
+    return new DefaultDataSource.Factory(context, http);
   }
 
   // TODO: Migrate to stable API, see https://github.com/flutter/flutter/issues/147039.

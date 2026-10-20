@@ -20,6 +20,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../api/modelos.dart';
 import '../sesion.dart';
 import '../marca.dart';
+import '../widgets/espera_larga.dart';
 import 'ajustes_video.dart';
 import 'componentes.dart';
 import 'control_senal.dart';
@@ -499,7 +500,21 @@ class _Video extends StatelessWidget {
                   : Center(
                       child: AspectRatio(aspectRatio: video.value.aspectRatio, child: VideoPlayer(video)),
                     ),
-            if (control.cargando) const Center(child: CircularProgressIndicator()),
+            if (control.cargando)
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 14),
+                    // Si tarda: que es el servidor preparando la película (no se colgó)
+                    EsperaLarga(
+                      control: control,
+                      estilo: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
             AnimatedOpacity(
               opacity: visibles ? 1 : 0,
               duration: const Duration(milliseconds: 250),

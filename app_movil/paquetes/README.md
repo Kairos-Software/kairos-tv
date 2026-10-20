@@ -89,6 +89,25 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
   arrancar, 60 s cargando antes de darse por trabada (volver a abrirla cuesta
   otra vez toda la conexión) y los toques seguidos de adelantar/atrasar se
   juntan en un solo salto (`ControlSenal.saltar`, desde la app 1.2.34).
+- **Una película pasa UNA sola vez por el link** (desde la app 1.2.35,
+  `KairosRedireccionFija.java`). ExoPlayer pide el archivo varias veces: un
+  `.avi` (y un `.mp4` con el índice al final) **3 veces antes de la primera
+  imagen** (el principio, el índice del final y otra vez el principio), y cada
+  salto, otra. Y siempre pide el **link original**: en Xtream
+  (`.../movie/usuario/clave/123.avi`) ese link redirige a otro servidor, y ese
+  paso es el que tarda cerca de un minuto. Así una película tardaba unos 3
+  minutos en arrancar (la app se rendía a los 90 s) y adelantar costaba otro
+  minuto. VLC pide el link una vez y después usa adonde lo mandaron: por eso
+  tarda un minuto y después adelanta en segundos. Ahora la app hace lo mismo:
+  recuerda adonde redirigió el link (en toda la app, 1 hora: también al
+  reconectar o volver a la app) y, si esa dirección dejó de servir (403,
+  404...: el permiso venció), vuelve a pedir el link. Solo películas y
+  capítulos (`kairosEsArchivo`); en vivo se sigue pidiendo el link (renueva el
+  permiso). Lo arma `HttpVideoAsset.kairosFabricaDeDatos`.
+- Mientras una película tarda en arrancar, debajo de la ruedita dice que el
+  servidor la está preparando y cuántos segundos van
+  (`ControlSenal.avisoDeEspera`, `lib/widgets/espera_larga.dart`): con la
+  ruedita sola parecía colgada.
 - Una dirección que termina en `.ts` (sin pista de formato) se abre como
   **MPEG-TS** (`video/mp2t`, `kairosMimeDirecto`), nunca como HLS.
 - Las redirecciones (también de https a http) las sigue el mismo
@@ -100,10 +119,16 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
   otra fuente; recién ahí se le avisa al servidor. Nunca hay dos conexiones a
   la vez.
 
-Está en `.../videoplayer/HttpVideoAsset.java` (buscar "Kairos TV"). Tests:
-`android/src/test/.../KairosHttpVideoAssetTest.java` (se corren con
-`gradlew :video_player_android:testDebugUnitTest` desde `app_movil/android`) y
-`app_movil/test/arranque_directo_test.dart`.
+Está en `.../videoplayer/HttpVideoAsset.java` (buscar "Kairos TV") y
+`KairosRedireccionFija.java`. Tests: `android/src/test/.../KairosHttpVideoAssetTest.java`,
+`KairosRedireccionFijaTest.java` y `KairosPeliculaQueArrancaTest.java` (se
+corren con `gradlew :video_player_android:testDebugUnitTest` desde
+`app_movil/android`) y `app_movil/test/arranque_directo_test.dart`. Los de la
+redirección usan `ServidorXtreamDePrueba.java`, un servidor HTTP local que se
+porta como Xtream y cuenta los pedidos; `KairosPeliculaQueArrancaTest` lee dos
+películas de verdad con el índice al final (`src/test/resources/kairos/`,
+hechas con ffmpeg: 12 s de imagen de prueba y un tono) como lo hace ExoPlayer,
+hasta la primera imagen.
 
 ### 6. El audio MP2 (desde la app 1.2.31)
 

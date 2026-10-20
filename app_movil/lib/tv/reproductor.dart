@@ -47,6 +47,7 @@ import '../movil/detalle.dart' show proximoEpisodio;
 import '../movil/estilo.dart';
 import '../movil/reproductor_youtube.dart';
 import '../sesion.dart';
+import '../widgets/espera_larga.dart';
 import 'estructura.dart' show DialogoTv;
 import 'foco.dart';
 import 'mi_agenda.dart';
@@ -1680,6 +1681,9 @@ class _EstadoSenal extends StatelessWidget {
             control.fuente > 0 ? 'Esta señal no responde. Probando otra señal…' : 'Conectando…',
             style: LetraTv.cuerpo.copyWith(color: Tono.texto),
           ),
+          // Si una película tarda: que es el servidor preparándola (no se colgó)
+          const SizedBox(height: 12),
+          EsperaLarga(control: control, estilo: LetraTv.ayuda, ancho: 640),
         ],
       ),
     );

@@ -258,6 +258,32 @@ void main() {
     expect(control.fuente, 1);
   });
 
+  _prueba('una película que tarda en arrancar avisa que es el servidor (y cuánto va)', (tester) async {
+    const pelicula = 'http://x/movie/u/c/26480.avi';
+    final control = await _abrir(tester, _canal([(11, pelicula, 'directo')], contenido: 'pelicula'), {
+      pelicula: ['cuelga'],
+    });
+    expect(control.cargando, isTrue);
+    expect(control.avisoDeEspera(), isNull); // recién empieza: solo la ruedita
+    final despues = DateTime.now().add(const Duration(seconds: 23));
+    expect(control.avisoDeEspera(despues), contains('preparando'));
+    expect(control.avisoDeEspera(despues), contains('Van 23 s'));
+    await tester.pump(const Duration(seconds: 91)); // que se rinda (no queda nada pendiente)
+    await _pasar(tester);
+    expect(control.avisoDeEspera(despues), isNull); // con el error, ya no
+  });
+
+  _prueba('un canal en vivo no muestra ese aviso', (tester) async {
+    final control = await _abrir(tester, _canal([(11, _xtream, 'directo')]), {
+      _xtream: ['cuelga'],
+    });
+    expect(control.avisoDeEspera(DateTime.now().add(const Duration(seconds: 30))), isNull);
+    for (var vez = 0; vez < 2; vez++) {
+      await tester.pump(const Duration(seconds: 41)); // se rinde, reintenta una vez y se rinde
+      await _pasar(tester, const Duration(seconds: 2));
+    }
+  });
+
   _prueba('una película directa: sin reintento (como siempre)', (tester) async {
     final control = await _abrir(tester, _canal([(11, _xtream, 'directo'), (12, _otra, 'directo')], contenido: 'pelicula'), {
       _xtream: ['falla'],

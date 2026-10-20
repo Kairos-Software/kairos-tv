@@ -142,6 +142,12 @@ class ControlSenal extends ChangeNotifier {
   /// Cuándo se empezó a conectar la fuente actual (para el diagnóstico: "a los 1,2 s").
   DateTime? _empezoAConectar;
 
+  /// Desde cuándo se está esperando (conectando, o cargando después de un salto); null si se ve.
+  DateTime? _esperandoDesde;
+
+  /// Cuánto tiene que tardar una película para avisar que es el servidor (ver [avisoDeEspera]).
+  static const _esperaParaAvisar = Duration(seconds: 8);
+
   /// Alguna fuente de este canal llegó a andar bien.
   bool _seVio = false;
 
@@ -233,6 +239,19 @@ class ControlSenal extends ChangeNotifier {
 
   bool get cargando => error == null && (video == null || video!.value.isBuffering);
 
+  /// Una película o capítulo que tarda en arrancar: el texto para mostrar debajo de la
+  /// ruedita (que no parezca colgada), con los segundos que van. Hay servidores que
+  /// tardan cerca de un minuto en preparar el archivo (VLC también espera). null si no
+  /// hace falta: en vivo, o si todavía no pasaron [_esperaParaAvisar].
+  String? avisoDeEspera([DateTime? ahora]) {
+    final desde = _esperandoDesde;
+    if (!cargando || _enVivo || canal == null || desde == null) return null;
+    final van = (ahora ?? DateTime.now()).difference(desde);
+    if (van < _esperaParaAvisar) return null;
+    return 'El servidor está preparando el video: hay películas que tardan hasta un minuto en '
+        'empezar. Van ${van.inSeconds} s.';
+  }
+
   bool get silenciado => _volumen == 0;
 
   /// Empieza a reproducir [nuevo] (corta lo que estaba). [desde]: para seguir donde se dejó.
@@ -299,6 +318,7 @@ class ControlSenal extends ChangeNotifier {
   Future<void> _probar(int indice, {bool reintento = false}) async {
     final intento = ++_intento;
     _empezoAConectar = DateTime.now();
+    _esperandoDesde = _empezoAConectar;
     _detenido = false;
     _cancelarVigias();
     _medir(seVe: false);
@@ -469,11 +489,13 @@ class ControlSenal extends ChangeNotifier {
       _seEstabaViendo = true;
     }
     if (actual.value.isBuffering) {
+      _esperandoDesde ??= DateTime.now();
       _vigiaTrabado ??= Timer(_enVivo ? _esperaTrabado : _esperaTrabadoArchivo, () {
         _vigiaTrabado = null;
         if (!_cerrado && video == actual && actual.value.isBuffering) _fallo(actual, Falla.trabada);
       });
     } else {
+      _esperandoDesde = null;
       _vigiaTrabado?.cancel();
       _vigiaTrabado = null;
     }
