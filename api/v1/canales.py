@@ -35,6 +35,8 @@ reproducir esa versión de la app (sin `formatos` = solo HLS, como la 1.0.0).
       Si no se puede: 422 {"detalle": "El canal no está transmitiendo en vivo ahora."}
 
     POST /api/v1/canales/fuentes/<id>/falla/   {"motivo": "formato", "detalle": "..."}  (los dos opcionales)
+      "detalle": lo técnico (el error del reproductor, a los cuántos segundos...;
+      hasta 250 letras): queda como "Último problema en un aparato" en el panel.
       -> {"estado": "funciona" | "caida" | "sin_verificar"}
       La app avisa que no pudo reproducir esa fuente. El servidor la vuelve a
       probar por su cuenta y, si también le falla, deja de mandarla. Si al
@@ -70,7 +72,8 @@ from rest_framework.response import Response
 from canales import clasificar, estadisticas, imagenes, paginas, secciones
 from canales.consultas import agrupar_por_categoria, canales_disponibles, fuentes_usables, tipos_pedidos
 from canales.models import Contenido, Fuente
-from canales.servicios import registrar_estabilidad, registrar_falla_en_aparato, reverificar_por_aviso
+from canales.servicios import (CAMPOS_DEL_PROBLEMA, anotar_problema, registrar_estabilidad,
+                               registrar_falla_en_aparato, reverificar_por_aviso)
 from canales.verificacion import verificar_url
 
 from .serializers import CanalSerializer
@@ -108,12 +111,15 @@ def secciones_de_la_app(request):
 @api_view(['POST'])
 def avisar_falla(request, pk):
     fuente = get_object_or_404(fuentes_usables().select_related('canal'), pk=pk)
+    motivo = str(request.data.get('motivo', ''))[:20]
+    detalle = str(request.data.get('detalle', ''))[:250]
+    # El detalle técnico queda siempre (Organizar → Detalles: "Último problema en un aparato")
+    anotar_problema(fuente, motivo, detalle)
+    fuente.save(update_fields=CAMPOS_DEL_PROBLEMA)
     estado = reverificar_por_aviso(fuente, verificar_url)
     if estado != Fuente.Estado.CAIDA:
         # Al servidor le anda: se cuenta el aviso del aparato (cada sesión es un aparato)
         quien = f'{type(request.auth).__name__}:{getattr(request.auth, "pk", request.user.pk)}'
-        motivo = str(request.data.get('motivo', ''))[:20]
-        detalle = str(request.data.get('detalle', ''))[:120]
         if registrar_falla_en_aparato(fuente, quien, motivo, detalle):
             estado = Fuente.Estado.CAIDA
     return Response({'estado': estado})

@@ -1,0 +1,60 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-RelWithDebInfo-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10.0"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "RelWithDebInfo",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "kairos_audio",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "kairos_audio::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-kairos_audio-RelWithDebInfo-30ba2ba4268df52b5c8c.json",
+					"name" : "kairos_audio",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/.cxx/RelWithDebInfo/4m3o3a48/armeabi-v7a",
+		"source" : "D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/src/main/cpp"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

@@ -1707,6 +1707,20 @@ def _texto_de_tiempo(tiempo):
     return f'{dias} día{"s" if dias != 1 else ""}'
 
 
+def anotar_problema(fuente, motivo, detalle='', ahora=None):
+    """
+    Guarda el último problema que tuvo la fuente en un aparato, con el detalle
+    técnico que manda la app (Fuente.problema_en_aparato): para saber por qué
+    un canal no conecta. No guarda (los campos cambian en `fuente`).
+    """
+    texto = MOTIVOS_DE_LOS_APARATOS.get(motivo, MOTIVOS_DE_LOS_APARATOS['error'])
+    fuente.problema_en_aparato = (f'{texto}: {detalle}' if detalle else texto)[:300]
+    fuente.problema_en = ahora or timezone.now()
+
+
+CAMPOS_DEL_PROBLEMA = ['problema_en_aparato', 'problema_en']
+
+
 def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):
     """
     Cuenta un aviso de falla de un aparato (`quien`: algo que lo identifique,

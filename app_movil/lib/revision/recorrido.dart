@@ -42,7 +42,11 @@ class FuenteARevisar {
 class Prueba {
   const Prueba.anduvo() : anduvo = true, motivo = '', mensaje = 'Anda', detalle = '';
 
-  Prueba.fallo(Falla falla) : anduvo = false, motivo = falla.motivo, mensaje = falla.mensaje, detalle = falla.detalle;
+  Prueba.fallo(Falla falla, {String? detalle})
+    : anduvo = false,
+      motivo = falla.motivo,
+      mensaje = falla.mensaje,
+      detalle = detalle ?? falla.detalle;
 
   final bool anduvo;
 
@@ -294,6 +298,16 @@ Future<Prueba> _probarUnaVez(
     httpHeaders: senal.cabeceras,
     viewType: ControlSenal.enSuperficie ? VideoViewType.platformView : VideoViewType.textureView,
   );
+  final inicio = DateTime.now();
+  // Lo que se le cuenta al servidor: qué pasó y a los cuántos segundos (como ControlSenal)
+  Prueba fallo(Falla falla) => Prueba.fallo(
+    falla,
+    detalle: ControlSenal.detalleDeLaFalla(
+      falla,
+      desde: inicio,
+      imagen: video.value.isInitialized ? video.value.size : null,
+    ),
+  );
   try {
     await video.initialize().timeout(espera);
     await video.setVolume(0);
@@ -306,15 +320,15 @@ Future<Prueba> _probarUnaVez(
       await Future<void>.delayed(paso);
       final valor = video.value;
       if (valor.hasError) {
-        return Prueba.fallo(Falla.de(PlatformException(code: 'video', message: valor.errorDescription)));
+        return fallo(Falla.de(PlatformException(code: 'video', message: valor.errorDescription)));
       }
       // Se ve: reproduciendo y sin quedarse cargando (si se frena, se vuelve a contar desde cero)
       visto = valor.isPlaying && !valor.isBuffering ? visto + paso : Duration.zero;
       if (visto >= alcanza) return const Prueba.anduvo();
     }
-    return Prueba.fallo(Falla.trabada);
+    return fallo(Falla.trabada);
   } catch (error) {
-    return Prueba.fallo(Falla.de(error));
+    return fallo(Falla.de(error));
   } finally {
     mostrar(null);
     await video.dispose();

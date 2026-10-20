@@ -1,0 +1,1 @@
+D:\Desktop\migracion\KAIROS SOFTWARE SISTEMAS\KAIROS TV\kairos-tv\app_movil\paquetes\video_player_android\android\src\main\cpp\CMakeLists.txt

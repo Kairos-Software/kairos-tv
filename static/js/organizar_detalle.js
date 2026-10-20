@@ -92,6 +92,7 @@
             if (f.aparatos) li.appendChild(crear('div', 'senal-dato', 'En los aparatos: ' + f.aparatos));
             if (f.oculta) li.appendChild(crear('div', 'senal-dato estado-mal', f.oculta));
             if (f.retirada) li.appendChild(crear('div', 'senal-dato estado-mal', f.retirada));
+            if (f.problema) li.appendChild(crear('div', 'senal-dato senal-aviso', f.problema));
             if (f.salud) li.appendChild(crear('div', 'senal-dato' + (f.salud_mal ? ' estado-mal' : ''), 'Salud: ' + f.salud));
             if (f.aviso_codec) li.appendChild(crear('div', 'senal-dato senal-aviso', f.aviso_codec));
             if (f.url) {

@@ -29,6 +29,7 @@ from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.utils import timezone
 
 from . import salud
+from .servicios import CAMPOS_DEL_PROBLEMA, anotar_problema
 from .models import Contenido, Fuente, Seccion
 
 TIPOS_DEL_RECORRIDO = [Fuente.Tipo.HLS, Fuente.Tipo.DASH, Fuente.Tipo.DIRECTO, Fuente.Tipo.RTSP]
@@ -94,12 +95,15 @@ def anotar(resultados, ahora=None):
     for fuente in fuentes:
         resultado = por_id[fuente.pk]
         anduvo = resultado.get('anduvo') is True
-        salud.anotar_del_recorrido(fuente, anduvo, str(resultado.get('motivo', ''))[:20], ahora)
+        motivo = str(resultado.get('motivo', ''))[:20]
+        salud.anotar_del_recorrido(fuente, anduvo, motivo, ahora)
         fuente.recorrida = ahora
+        if not anduvo:
+            anotar_problema(fuente, motivo, f'modo revisión: {str(resultado.get("detalle", ""))[:250]}', ahora)
         if anduvo and fuente.estado == Fuente.Estado.CAIDA:
             # El servidor no la podía ver, pero desde una casa anda: que la app la vuelva a intentar
             fuente.estado = Fuente.Estado.SIN_VERIFICAR
-    Fuente.objects.bulk_update(fuentes, [*salud.CAMPOS, 'recorrida', 'estado'])
+    Fuente.objects.bulk_update(fuentes, [*salud.CAMPOS, 'recorrida', 'estado', *CAMPOS_DEL_PROBLEMA])
     andan = [f for f in fuentes if por_id[f.pk].get('anduvo') is True]
     if andan:
         salud.devolver_senales(ahora, fuentes=[f.pk for f in andan])

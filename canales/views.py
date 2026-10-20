@@ -543,6 +543,8 @@ def _origenes_de(fuentes, importaciones, borrables=True):
              'aviso_codec': _aviso_de_codec(f.codec),
              'salud': salud.texto_de_fuente(f),
              'salud_mal': salud.de_fuente(f) in (salud.Salud.FALLA, salud.Salud.RECHAZA, salud.Salud.MUERTA),
+             'problema': (f'Último problema en un aparato ({_fecha(f.problema_en)}): {f.problema_en_aparato}'
+                          if f.problema_en_aparato else ''),
              'retirada': (f'Retirada sola el {_fecha(f.retirada)}: no anduvo en {salud.DIAS_PARA_QUITAR} días y el '
                           f'canal sigue con sus otras señales. Si vuelve a andar, vuelve sola.' if f.retirada and not f.activa
                           else ''),

@@ -17,4 +17,25 @@ void main() {
     expect(Falla.de(exo('java.net.UnknownHostException: Unable to resolve host "x"')).motivo, 'sin_internet');
     expect(Falla.de(exo('Source error')).motivo, 'conexion');
   });
+
+  test('el detalle que llega al panel dice qué pasó y cuándo (para diagnosticar)', () {
+    final desde = DateTime(2026, 10, 19, 21, 42, 0);
+    final ahora = desde.add(const Duration(milliseconds: 1240));
+    // La transmisión empezó (llegó un cuadro) y el servidor la cortó
+    expect(
+      ControlSenal.detalleDeLaFalla(Falla.cortada, desde: desde, ahora: ahora, imagen: const Size(1920, 1080)),
+      'la transmisión terminó: el servidor de la señal la cortó · a los 1,2 s de empezar a conectar · '
+      'llegó imagen 1920x1080',
+    );
+    // El error del reproductor, tal cual, y que venía andando
+    final rechazo = Falla.de(PlatformException(code: 'VideoError', message: 'Source error: Response code: 403'));
+    expect(
+      ControlSenal.detalleDeLaFalla(rechazo, desde: desde, ahora: ahora, andaba: true),
+      allOf(contains('Response code: 403'), contains('a los 1,2 s'), endsWith('venía andando bien')),
+    );
+    expect(ControlSenal.detalleDeLaFalla(Falla.tiempo), contains('no arrancó a tiempo'));
+    // Nunca más largo de lo que guarda el servidor
+    final larga = Falla('error', 'x', 'y' * 400);
+    expect(ControlSenal.detalleDeLaFalla(larga, desde: desde, ahora: ahora).length, 250);
+  });
 }

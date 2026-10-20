@@ -1,0 +1,4 @@
+# ninja log v5
+1	185	8141635309651258	CMakeFiles/kairos_audio.dir/kairos_audio_jni.c.o	78b912ce722ebe00
+30	5384	8141635361580303	CMakeFiles/kairos_audio.dir/kairos_audio.c.o	4e46ae05dd078bcb
+5385	5579	8141635363651239	D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/build/video_player_android/intermediates/cxx/RelWithDebInfo/4m3o3a48/obj/x86_64/libkairos_audio.so	aa1fbf8adf548151

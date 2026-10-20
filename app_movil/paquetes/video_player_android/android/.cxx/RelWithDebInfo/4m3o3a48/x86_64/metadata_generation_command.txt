@@ -1,0 +1,18 @@
+                        -HD:\Desktop\migracion\KAIROS SOFTWARE SISTEMAS\KAIROS TV\kairos-tv\app_movil\paquetes\video_player_android\android\src\main\cpp
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=24
+-DANDROID_PLATFORM=android-24
+-DANDROID_ABI=x86_64
+-DCMAKE_ANDROID_ARCH_ABI=x86_64
+-DANDROID_NDK=C:\Users\Marcos\AppData\Local\Android\sdk\ndk\28.2.13676358
+-DCMAKE_ANDROID_NDK=C:\Users\Marcos\AppData\Local\Android\sdk\ndk\28.2.13676358
+-DCMAKE_TOOLCHAIN_FILE=C:\Users\Marcos\AppData\Local\Android\sdk\ndk\28.2.13676358\build\cmake\android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=C:\Users\Marcos\AppData\Local\Android\Sdk\cmake\3.22.1\bin\ninja.exe
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=D:\Desktop\migracion\KAIROS SOFTWARE SISTEMAS\KAIROS TV\kairos-tv\app_movil\build\video_player_android\intermediates\cxx\RelWithDebInfo\4m3o3a48\obj\x86_64
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=D:\Desktop\migracion\KAIROS SOFTWARE SISTEMAS\KAIROS TV\kairos-tv\app_movil\build\video_player_android\intermediates\cxx\RelWithDebInfo\4m3o3a48\obj\x86_64
+-DCMAKE_BUILD_TYPE=RelWithDebInfo
+-BD:\Desktop\migracion\KAIROS SOFTWARE SISTEMAS\KAIROS TV\kairos-tv\app_movil\paquetes\video_player_android\android\.cxx\RelWithDebInfo\4m3o3a48\x86_64
+-GNinja
+                        Build command args: []
+                        Version: 2

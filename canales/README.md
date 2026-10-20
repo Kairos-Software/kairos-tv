@@ -530,6 +530,18 @@ mano.
   estaba caída queda "sin verificar" y se le da otra semana entera.
 - **Borrar esta señal** (ya estaba): para siempre.
 
+**Por qué no conecta** (`Fuente.problema_en_aparato` y `problema_en`): cada
+vez que la app no puede reproducir una señal, manda el detalle técnico (qué
+pasó, el error del reproductor, a los cuántos segundos de empezar a conectar,
+si llegó imagen, si venía andando: `ControlSenal.detalleDeLaFalla`, app
+1.2.31). El servidor lo guarda SIEMPRE (`servicios.anotar_problema`, también
+lo que encuentra el modo revisión) y no se borra cuando vuelve a andar: en
+Detalles cada señal muestra **"Último problema en un aparato (fecha): ..."**.
+Por ejemplo: "la transmisión terminó: el servidor de la señal la cortó · a
+los 1,2 s de empezar a conectar · llegó imagen 1920x1080" (el servidor corta;
+suele ser la regla de una conexión por cuenta) o "Response code: 403" (rechaza
+al aparato).
+
 En Organizar, **Mostrar → "Se ve, pero tiene señales que no andan"** lista
 esos canales, y su tarjeta dice "Se ve en la app · 2 de 4 señales". "Volver a
 mostrar" de un canal entero también devuelve sus señales retiradas.

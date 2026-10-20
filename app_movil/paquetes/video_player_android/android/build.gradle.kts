@@ -38,6 +38,16 @@ android {
     defaultConfig {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles("kairos-proguard.pro")
+    }
+
+    // Kairos TV: el decodificador de audio MP1 / MP2 (src/main/cpp/, ver KairosAudioMpeg.java)
+    ndkVersion = flutter.ndkVersion
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     lint {

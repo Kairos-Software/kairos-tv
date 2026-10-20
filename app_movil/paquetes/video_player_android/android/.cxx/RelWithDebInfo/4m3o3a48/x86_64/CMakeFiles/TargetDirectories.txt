@@ -1,0 +1,3 @@
+D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/.cxx/RelWithDebInfo/4m3o3a48/x86_64/CMakeFiles/kairos_audio.dir
+D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/.cxx/RelWithDebInfo/4m3o3a48/x86_64/CMakeFiles/edit_cache.dir
+D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/.cxx/RelWithDebInfo/4m3o3a48/x86_64/CMakeFiles/rebuild_cache.dir

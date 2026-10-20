@@ -42,7 +42,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show AppLifecycleListener;
+import 'package:flutter/widgets.dart' show AppLifecycleListener, Size;
 import 'package:video_player/video_player.dart';
 
 import '../api/cliente.dart';
@@ -128,6 +128,9 @@ class ControlSenal extends ChangeNotifier {
 
   /// La fuente actual anduvo bien un rato ([_esperaEstable]).
   bool _andaba = false;
+
+  /// Cuándo se empezó a conectar la fuente actual (para el diagnóstico: "a los 1,2 s").
+  DateTime? _empezoAConectar;
 
   /// Alguna fuente de este canal llegó a andar bien.
   bool _seVio = false;
@@ -278,6 +281,7 @@ class ControlSenal extends ChangeNotifier {
   /// arrancó (ver [_esperaVivoDirecto]).
   Future<void> _probar(int indice, {bool reintento = false}) async {
     final intento = ++_intento;
+    _empezoAConectar = DateTime.now();
     _detenido = false;
     _cancelarVigias();
     _medir(seVe: false);
@@ -592,9 +596,32 @@ class ControlSenal extends ChangeNotifier {
     _ultimaFalla = falla;
     // Si el problema es la conexión de este aparato, la señal no tiene la culpa
     if (falla.motivo == Falla.sinInternet.motivo) return;
+    final detalle = detalleDeLaFalla(
+      falla,
+      desde: _empezoAConectar,
+      imagen: video?.value.isInitialized == true ? video!.value.size : null,
+      andaba: _andaba,
+    );
     api
-        .post('canales/fuentes/${fuente.id}/falla/', {'motivo': falla.motivo, 'detalle': falla.detalle})
+        .post('canales/fuentes/${fuente.id}/falla/', {'motivo': falla.motivo, 'detalle': detalle})
         .catchError((Object _) => null);
+  }
+
+  /// Lo que se le cuenta al servidor de una falla, para diagnosticar desde el
+  /// panel por qué un canal no conecta (Organizar → Detalles → "Último problema
+  /// en un aparato"): qué pasó, el error del reproductor, a los cuántos
+  /// segundos de empezar a conectar, si llegó a verse imagen y si venía andando.
+  /// Lo usa también el modo revisión (lib/revision/).
+  static String detalleDeLaFalla(Falla falla, {DateTime? desde, Size? imagen, bool andaba = false, DateTime? ahora}) {
+    final partes = <String>[
+      if (falla.detalle.isNotEmpty) falla.detalle,
+      if (desde != null)
+        'a los ${((ahora ?? DateTime.now()).difference(desde).inMilliseconds / 1000).toStringAsFixed(1).replaceAll('.', ',')} s de empezar a conectar',
+      if (imagen != null && !imagen.isEmpty) 'llegó imagen ${imagen.width.round()}x${imagen.height.round()}',
+      if (andaba) 'venía andando bien',
+    ];
+    final texto = partes.join(' · ');
+    return texto.length > 250 ? texto.substring(0, 250) : texto;
   }
 
   void alternarPausa() {
@@ -716,9 +743,17 @@ class Falla {
   final bool delAparato;
 
   static const formato = Falla('formato', 'Este aparato no puede reproducir el formato de este video.', '', true);
-  static const tiempo = Falla('tiempo', 'La señal tardó demasiado en arrancar. Probá de nuevo en un rato.');
-  static const trabada = Falla('tiempo', 'La señal se quedó trabada cargando.');
-  static const cortada = Falla('conexion', 'La señal se cortó.');
+  static const tiempo = Falla(
+    'tiempo',
+    'La señal tardó demasiado en arrancar. Probá de nuevo en un rato.',
+    'no arrancó a tiempo (el servidor de la señal no mandó video)',
+  );
+  static const trabada = Falla('tiempo', 'La señal se quedó trabada cargando.', 'se quedó cargando: dejó de llegar video');
+  static const cortada = Falla(
+    'conexion',
+    'La señal se cortó.',
+    'la transmisión terminó: el servidor de la señal la cortó',
+  );
   static const sinImagen = Falla(
     'formato',
     'Este aparato no puede mostrar la imagen de esta señal (sale solo el sonido).',

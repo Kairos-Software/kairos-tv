@@ -58,7 +58,10 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
         asset.getMediaItem(),
         options,
         () -> {
-          ExoPlayer.Builder builder = new ExoPlayer.Builder(context);
+          // Kairos TV: con el audio MP2 (el de los canales de cable y satélite) que
+          // Android no trae: sin esto se veía pero sin sonido. Ver KairosRenderersFactory.
+          ExoPlayer.Builder builder =
+              new ExoPlayer.Builder(context, new io.flutter.plugins.videoplayer.KairosRenderersFactory(context));
           // Kairos TV: junta 5 segundos de video antes de arrancar (y antes de
           // seguir después de un corte), en vez de los 2,5 s de fábrica. Así un
           // microcorte de la señal no se nota. Con una tele conectada, más
