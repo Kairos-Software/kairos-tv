@@ -18,13 +18,24 @@ void main() {
     expect(Falla.de(exo('Source error')).motivo, 'conexion');
   });
 
+  test('el error del reproductor llega con su causa y cuántas veces se reconectó (KairosReconexion)', () {
+    PlatformException exo(String mensaje) => PlatformException(code: 'VideoError', message: mensaje);
+    final rechazo = Falla.de(exo('Video player had error ERROR_CODE_IO_BAD_HTTP_STATUS: Source error: '
+        'Response code: 404 · se reconectó sola 6 veces'));
+    expect(rechazo.motivo, 'rechazo');
+    expect(rechazo.detalle, 'ERROR_CODE_IO_BAD_HTTP_STATUS: Source error: Response code: 404 · se reconectó sola 6 veces');
+    final sinInternet = Falla.de(exo('Video player had error ERROR_CODE_IO_NETWORK_CONNECTION_FAILED: Source error: '
+        'Unable to resolve host "x": No address associated with hostname'));
+    expect(sinInternet.motivo, 'sin_internet');
+  });
+
   test('el detalle que llega al panel dice qué pasó y cuándo (para diagnosticar)', () {
     final desde = DateTime(2026, 10, 19, 21, 42, 0);
     final ahora = desde.add(const Duration(milliseconds: 1240));
     // La transmisión empezó (llegó un cuadro) y el servidor la cortó
     expect(
       ControlSenal.detalleDeLaFalla(Falla.cortada, desde: desde, ahora: ahora, imagen: const Size(1920, 1080)),
-      'la transmisión terminó: el servidor de la señal la cortó · a los 1,2 s de empezar a conectar · '
+      'la transmisión se cortó (la cortó el servidor de la señal o se cortó internet) · a los 1,2 s de empezar a conectar · '
       'llegó imagen 1920x1080',
     );
     // El error del reproductor, tal cual, y que venía andando

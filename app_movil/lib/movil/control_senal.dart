@@ -752,7 +752,7 @@ class Falla {
   static const cortada = Falla(
     'conexion',
     'La señal se cortó.',
-    'la transmisión terminó: el servidor de la señal la cortó',
+    'la transmisión se cortó (la cortó el servidor de la señal o se cortó internet)',
   );
   static const sinImagen = Falla(
     'formato',
@@ -769,8 +769,9 @@ class Falla {
   factory Falla.de(Object error) {
     if (error is TimeoutException) return tiempo;
     final texto = error is PlatformException ? '${error.message} ${error.details ?? ''}' : '$error';
-    final detalle = texto.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final corto = detalle.length > 120 ? detalle.substring(0, 120) : detalle;
+    // Sin el "Video player had error" del reproductor (no dice nada y ocupa lugar)
+    final detalle = texto.replaceAll(RegExp(r'\s+'), ' ').trim().replaceFirst(RegExp(r'^Video player had error '), '');
+    final corto = detalle.length > 200 ? detalle.substring(0, 200) : detalle;
     if (RegExp(
       r'UnknownHost|Unable to resolve host|ENETUNREACH|Network is unreachable',
       caseSensitive: false,

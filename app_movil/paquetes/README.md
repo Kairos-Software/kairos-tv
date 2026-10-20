@@ -6,9 +6,9 @@ en lugar de las originales (sección `dependency_overrides`).
 ## video_player_android/ (2.12.2)
 
 El reproductor de video de Android (ExoPlayer) que usa `video_player`. Es el
-paquete oficial **con seis cambios**: el buffer, el margen en vivo, el idioma
-del audio, lo de la tele conectada, la espera de los canales Xtream y el audio
-MP2 (que Android no trae).
+paquete oficial **con siete cambios**: el buffer, el margen en vivo, el idioma
+del audio, lo de la tele conectada, la espera de los canales Xtream, el audio
+MP2 (que Android no trae) y la reconexión sola de los canales que se cortan.
 
 ### 1. El buffer
 
@@ -126,9 +126,33 @@ compu: `gcc -O2 -I ../../main/cpp kairos_audio_prueba.c ../../main/cpp/kairos_au
 sale igual que ffmpeg) y `android/src/test/.../KairosAudioRendererTest.java`
 (que se use solo para MP1/MP2 y después del de Android).
 
+### 7. Canales en vivo que se cortan: se reconectan solos (desde la app 1.2.32)
+
+- Con internet satelital (Starlink) o un WiFi flojo hay **microcortes**, y
+  muchos servidores de canales (Astra, Xtream) **cortan al aparato que se
+  atrasa** un momento: la transmisión "terminaba" o daba error a los pocos
+  segundos. VLC reconecta y sigue; ExoPlayer se rendía y la app pasaba a otra
+  señal (o decía que no anda).
+- Ahora `ExoPlayerEventListener` (buscar "Kairos TV"), con las reglas de
+  `KairosReconexion.java`: si un canal **en vivo** que **ya se estaba viendo**
+  termina o da un error de conexión, se reconecta por dentro (la app solo ve
+  "cargando"), esperando 0, 1, 2, 3 s... **hasta 6 veces por minuto**. Si se
+  corta más seguido, avisa el error y la app sigue como siempre (reconecta o
+  pasa a otra señal). Una señal que **nunca arrancó** no se reconecta (pasa a
+  la siguiente enseguida), y los errores del aparato (decodificador, formato)
+  tampoco.
+- El error ahora dice **su causa** (antes era solo "Source error"): por
+  ejemplo `ERROR_CODE_IO_BAD_HTTP_STATUS: Source error: Response code: 404 ·
+  se reconectó sola 6 veces`. La app lo manda al panel ("Último problema en un
+  aparato").
+- Un video directo sin duración conocida se toma como en vivo. Una película
+  (con duración) termina normal.
+
+Tests: `android/src/test/.../KairosReconexionTest.java`.
+
 **Si algún día se actualiza `video_player`** y pide una versión más nueva de
 este paquete: copiar la nueva de `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\video_player_android-X.Y.Z`
 (carpetas `lib/` y `android/`, `pubspec.yaml`, `LICENSE`), volver a aplicar los
-seis cambios (con los archivos nuevos `Kairos*.java`, `src/main/cpp/` y lo de
+siete cambios (con los archivos nuevos `Kairos*.java`, `src/main/cpp/` y lo de
 `build.gradle.kts`: `externalNativeBuild`, `ndkVersion` y `consumerProguardFiles`)
 y sacar `dev_dependencies` de su `pubspec.yaml`.

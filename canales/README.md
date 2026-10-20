@@ -537,10 +537,13 @@ si llegó imagen, si venía andando: `ControlSenal.detalleDeLaFalla`, app
 1.2.31). El servidor lo guarda SIEMPRE (`servicios.anotar_problema`, también
 lo que encuentra el modo revisión) y no se borra cuando vuelve a andar: en
 Detalles cada señal muestra **"Último problema en un aparato (fecha): ..."**.
-Por ejemplo: "la transmisión terminó: el servidor de la señal la cortó · a
-los 1,2 s de empezar a conectar · llegó imagen 1920x1080" (el servidor corta;
-suele ser la regla de una conexión por cuenta) o "Response code: 403" (rechaza
-al aparato).
+Por ejemplo: "la transmisión se cortó (la cortó el servidor de la señal o se
+cortó internet) · a los 1,2 s de empezar a conectar · llegó imagen 1920x1080"
+o "ERROR_CODE_IO_BAD_HTTP_STATUS: Source error: Response code: 403" (rechaza al
+aparato). Desde la app 1.2.32 un canal en vivo que ya se veía y se corta se
+reconecta solo hasta 6 veces por minuto (app_movil/paquetes/README.md, punto
+7): si igual falla, el detalle termina en "· se reconectó sola N veces" (suele
+ser internet del aparato, como Starlink, o la regla de una conexión por cuenta).
 
 En Organizar, **Mostrar → "Se ve, pero tiene señales que no andan"** lista
 esos canales, y su tarjeta dice "Se ve en la app · 2 de 4 señales". "Volver a

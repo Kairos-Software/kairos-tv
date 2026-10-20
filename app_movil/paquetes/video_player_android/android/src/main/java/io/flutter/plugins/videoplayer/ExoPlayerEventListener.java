@@ -31,6 +31,21 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
   protected final ExoPlayer exoPlayer;
   protected final VideoPlayerCallbacks events;
 
+  // Kairos TV: reconectar solo un canal en vivo que se corta (ver KairosReconexion).
+  private final KairosReconexion kairosReconexion = new KairosReconexion();
+  /** No tiene fin (en vivo): se sabe al estar listo para reproducir. */
+  private boolean kairosSinFin = false;
+  /** Ya se vio imagen: si nunca arrancó, no se reconecta (la app pasa a otra señal). */
+  private boolean kairosSeVio = false;
+  /** Esperando para reconectar: la app lo ve como "cargando". */
+  private boolean kairosReconectando = false;
+  private final Runnable kairosReconectar = this::kairosVolverAConectar;
+
+  private void kairosVolverAConectar() {
+    exoPlayer.seekToDefaultPosition();
+    exoPlayer.prepare();
+  }
+
   protected enum RotationDegrees {
     ROTATE_0(0),
     ROTATE_90(90),
@@ -69,6 +84,40 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
   public void dispose() {
     isWaitingForValidDuration = false;
     mainHandler.removeCallbacks(initializationFallback);
+    mainHandler.removeCallbacks(kairosReconectar);
+  }
+
+  /**
+   * Kairos TV: si un canal en vivo que ya se veía se cortó, lo reconecta (después
+   * de la espera que diga {@link KairosReconexion}) y devuelve true. Si nunca se
+   * vio, no es en vivo o ya se reconectó demasiadas veces seguidas, false.
+   */
+  private boolean kairosReconectarSiSePuede() {
+    if (!kairosSinFin || !kairosSeVio) {
+      return false;
+    }
+    long espera = kairosReconexion.reconectar(android.os.SystemClock.elapsedRealtime());
+    if (espera < 0) {
+      return false;
+    }
+    kairosReconectando = true;
+    events.onPlaybackStateChanged(PlatformPlaybackState.BUFFERING);
+    mainHandler.removeCallbacks(kairosReconectar);
+    mainHandler.postDelayed(kairosReconectar, espera);
+    return true;
+  }
+
+  /** Lo que se le cuenta a la app (y al panel) cuando no se pudo seguir. */
+  private String kairosError(@NonNull String detalle) {
+    int veces = kairosReconexion.total();
+    return "Video player had error "
+        + detalle
+        + (veces > 0 ? " · se reconectó sola " + veces + (veces == 1 ? " vez" : " veces") : "");
+  }
+
+  @Override
+  public void onRenderedFirstFrame() {
+    kairosSeVio = true;
   }
 
   private boolean hasValidDuration() {
@@ -107,13 +156,28 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
         break;
       case Player.STATE_READY:
         platformState = PlatformPlaybackState.READY;
+        kairosReconectando = false;
+        if (exoPlayer.isCurrentMediaItemLive() || !hasValidDuration()) {
+          kairosSinFin = true;
+        }
         maybeSendInitialized();
         break;
       case Player.STATE_ENDED:
+        // Kairos TV: un canal en vivo no termina: si "terminó", el servidor lo
+        // cortó o se cortó internet. Se reconecta (si no, la app lo da por cortado).
+        if (kairosReconectarSiSePuede()) {
+          return;
+        }
+        if (kairosSinFin && kairosSeVio) {
+          events.onError(
+              "VideoError", kairosError("la transmisión se cortó demasiadas veces seguidas"), null);
+          return;
+        }
         platformState = PlatformPlaybackState.ENDED;
         break;
       case Player.STATE_IDLE:
-        platformState = PlatformPlaybackState.IDLE;
+        platformState =
+            kairosReconectando ? PlatformPlaybackState.BUFFERING : PlatformPlaybackState.IDLE;
         break;
     }
     events.onPlaybackStateChanged(platformState);
@@ -133,8 +197,10 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
       // https://exoplayer.dev/live-streaming.html#behindlivewindowexception-and-error_code_behind_live_window
       exoPlayer.seekToDefaultPosition();
       exoPlayer.prepare();
+    } else if (KairosReconexion.esPasajero(error.errorCode) && kairosReconectarSiSePuede()) {
+      // Kairos TV: un corte de conexión en un canal en vivo que se veía: reconecta solo
     } else {
-      events.onError("VideoError", "Video player had error " + error, null);
+      events.onError("VideoError", kairosError(KairosReconexion.describir(error)), null);
     }
   }
 
