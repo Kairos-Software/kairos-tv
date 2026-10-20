@@ -1,0 +1,29 @@
+{% comment %}
+    Demos (pruebas gratis) de un cliente que no tiene el servicio pago activo:
+    cada cliente tiene {{ demos_por_cliente }} de {{ horas_por_demo }} hora; se dan de a una o varias juntas
+    (seguidas) y usadas todas no hay más. No gastan créditos. Las reglas están
+    en reventa/servicios.dar_demo. Va en la ficha del cliente (cliente.html).
+{% endcomment %}
+<div class="reventa-demos mb-3 pb-3 border-bottom">
+    <h2 class="tarjeta-titulo">Demo (prueba gratis)</h2>
+    {% if cliente.en_demo %}
+    <p class="mb-2"><span class="chip chip-si">Probando</span> Puede ver hasta las <strong>{{ cliente.demo_hasta|date:"H:i" }}</strong> del {{ cliente.demo_hasta|date:"j/m" }}.</p>
+    {% endif %}
+    {% if demos_para_dar %}
+    <p class="texto-suave small">
+        Le quedan <strong>{{ demos_para_dar|length }} de {{ demos_por_cliente }}</strong> demos de {{ horas_por_demo }} hora. Podés darle una o varias juntas (van seguidas{% if cliente.en_demo %}, después de la que está usando{% endif %}). No gastan créditos.
+    </p>
+    <form method="post" action="{% url 'reventa:cliente_demo' cliente.pk %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-sm-7">
+            <label for="demo-cantidad" class="form-label">Cuántas</label>
+            <select id="demo-cantidad" name="cantidad" class="form-select">
+                {% for n in demos_para_dar %}<option value="{{ n }}">{{ n }} demo{{ n|pluralize }} ({{ n }} hora{{ n|pluralize }})</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-sm-5"><button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Dar demo</button></div>
+    </form>
+    {% else %}
+    <p class="texto-suave small mb-0">Ya usó sus {{ demos_por_cliente }} demos: no se le pueden dar más. Para que siga viendo, activalo.</p>
+    {% endif %}
+</div>

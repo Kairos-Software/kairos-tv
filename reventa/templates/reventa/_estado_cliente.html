@@ -1,5 +1,6 @@
 {% comment %} Chip con el estado de un cliente. Uso: include with c=cliente {% endcomment %}
 {% if c.suspendido %}<span class="chip chip-no">Suspendido</span>
+{% elif c.en_demo %}<span class="chip chip-si" title="Prueba gratis hasta el {{ c.demo_hasta|date:'j/m H:i' }}">En prueba hasta las {{ c.demo_hasta|date:"H:i" }}</span>
 {% elif c.vence is None %}<span class="chip">Sin activar</span>
 {% elif c.vigente %}<span class="chip chip-si">Vigente</span>
 {% else %}<span class="chip chip-no">Vencido</span>{% endif %}

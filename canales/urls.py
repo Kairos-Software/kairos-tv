@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_revisar
+from . import views, views_revisar, views_senales
 
 app_name = 'canales'
 
@@ -27,6 +27,7 @@ urlpatterns = [
     path('eliminados/', views.eliminados, name='eliminados'),
     path('series/detalle/', views.serie_detalle, name='serie_detalle'),
     path('series/ordenar/', views.serie_ordenar, name='serie_ordenar'),
+    path('series/capitulo/<int:pk>/titulo/', views.capitulo_titulo, name='capitulo_titulo'),
     path('series/editar/', views.serie_editar, name='serie_editar'),
     path('series/arbol/', views.series_arbol, name='series_arbol'),
     path('series/temporada/', views.serie_temporada, name='serie_temporada'),
@@ -50,4 +51,6 @@ urlpatterns = [
     path('revisar/decidir/', views_revisar.decidir, name='revisar_decidir'),
     path('revisar/lista/', views_revisar.lista, name='revisar_lista'),
     path('fuentes/<int:pk>/accion/', views_revisar.fuente_accion, name='fuente_accion'),
+    path('senales/', views_senales.lista, name='senales'),
+    path('senales/accion/', views_senales.accion, name='senales_accion'),
 ]

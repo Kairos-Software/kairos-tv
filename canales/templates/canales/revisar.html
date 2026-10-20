@@ -8,13 +8,14 @@
 
 {% block titulo %}Para revisar{% endblock %}
 {% block clase_body %}pagina-listado pagina-revisar{% endblock %}
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/revisar.css' %}">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}"><link rel="stylesheet" href="{% static 'css/revisar.css' %}">{% endblock %}
 
 {% block encabezado %}
-<div class="pagina-encabezado">
-    <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
-    <h1 class="pagina-titulo">Para revisar</h1>
-    <p class="pagina-bajada">Lo normal se arregla solo: lo que no anda en {{ dias_para_quitar }} días se quita solo y lo que vuelve a andar vuelve solo. Acá queda solo lo que necesita tu decisión, con lo más visto por tus clientes primero.</p>
+{% barra_contenido 'revisar' %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Para revisar
+        <button type="button" class="ayuda-boton" data-ayuda="Lo normal se arregla solo: lo que no anda en {{ dias_para_quitar }} días se quita solo y lo que vuelve a andar vuelve solo. Acá queda solo lo que necesita tu decisión, por CANAL, con lo más visto por tus clientes primero. Para ver cada señal que falla (aunque el canal se vea), andá a Señales." aria-label="Qué es esta pantalla">?</button>
+    </h1>
 </div>
 {% endblock %}
 
@@ -32,7 +33,7 @@
         {% endfor %}
         <div class="revisar-estado-quitados"><dt>Quitados por la limpieza</dt><dd class="dato fs-4">{{ quitados }}</dd></div>
     </dl>
-    <p class="texto-suave small mb-0 mt-3">{% if es_serie %}Cuenta capítulos.{% else %}Cuenta {{ nombre_seccion|lower }} cargados que no quitaste a mano.{% endif %} «Sin datos»: nadie los vio todavía y el servidor no puede probarlos (los paneles Xtream lo bloquean); los va a probar el modo revisión de la app.</p>
+    <p class="texto-suave small mb-0 mt-2">{% if es_serie %}Capítulos{% else %}{{ nombre_seccion }} cargados que no quitaste a mano{% endif %}, según cómo andan. <button type="button" class="ayuda-boton" data-ayuda="«Sin datos»: nadie los vio todavía y el servidor no puede probarlos (los paneles Xtream lo bloquean); los va a probar el modo revisión de la app." aria-label="Qué es Sin datos">?</button></p>
 </section>
 
 {% if not pendientes %}
@@ -46,8 +47,7 @@
 <section class="tarjeta mb-4 revisar-grupo revisar-grupo-{{ grupo.clave }}" id="grupo-{{ grupo.clave }}">
     <div class="revisar-grupo-encabezado">
         <div>
-            <h2 class="tarjeta-titulo mb-1">{{ grupo.titulo }} <span class="texto-suave fw-normal">· {{ grupo.cantidad }}</span></h2>
-            <p class="texto-suave small mb-0">{{ grupo.explicacion }}</p>
+            <h2 class="tarjeta-titulo mb-0">{{ grupo.titulo }} <span class="texto-suave fw-normal">· {{ grupo.cantidad }}</span> <button type="button" class="ayuda-boton" data-ayuda="{{ grupo.explicacion }}" aria-label="Qué quiere decir">?</button></h2>
         </div>
         {% if puede_decidir and grupo.cantidad > 1 %}
         <form method="post" action="{% url 'canales:revisar_decidir' %}" class="revisar-todos">
@@ -101,8 +101,7 @@
 
 {% if listas %}
 <section class="tarjeta p-0 mb-4" id="listas">
-    <h2 class="tarjeta-titulo px-4 pt-4 mb-1">Cómo está cada lista</h2>
-    <p class="texto-suave small px-4">Las fuentes de {{ nombre_seccion }} según la lista de donde vinieron, las más caídas primero. Si una lista está casi toda caída, podés apagar todas sus fuentes de una: los canales que tienen otra fuente buena siguen andando.</p>
+    <h2 class="tarjeta-titulo px-4 pt-4 pb-2">Cómo está cada lista <button type="button" class="ayuda-boton" data-ayuda="Las fuentes de {{ nombre_seccion }} según la lista de donde vinieron, las más caídas primero. Si una lista está casi toda caída, podés apagar todas sus fuentes de una: los canales que tienen otra fuente buena siguen andando." aria-label="Qué es">?</button></h2>
     <div class="table-responsive">
         <table class="table tabla mb-0 revisar-listas">
             <thead><tr>
@@ -149,12 +148,4 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}
-<script>
-    document.querySelectorAll('[data-confirmar]').forEach(function (boton) {
-        boton.addEventListener('click', function (evento) {
-            if (!window.confirm(boton.dataset.confirmar)) evento.preventDefault();
-        });
-    });
-</script>
-{% endblock %}
+{% block scripts %}<script src="{% static 'js/trabajo.js' %}"></script>{% endblock %}

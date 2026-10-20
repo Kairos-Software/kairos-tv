@@ -647,6 +647,24 @@ def renombrar_serie(nombre, nuevo, usuario=None):
 
 
 @transaction.atomic
+def titular_capitulo(capitulo, titulo, usuario=None):
+    """
+    Le cambia el TÍTULO a un capítulo ("Masha S01 E05 Sin amigos" -> "Masha S01 E05 La nieve"): la serie, la
+    temporada y el número quedan igual. NoSePuede si el título nuevo haría que la app lo lea como otro capítulo
+    (por ejemplo, si dice "S02 E03"). Devuelve el título como quedó.
+    """
+    serie, temporada, numero, _ = clasificar.episodio(capitulo.nombre)
+    if numero is None:
+        raise NoSePuede('Este capítulo no tiene número: cambiale el nombre desde «Editar».')
+    titulo = _limpio(titulo, 100).strip(' -:|.')
+    nombre = nombre_de_capitulo(serie, temporada, numero, titulo)
+    if clasificar.episodio(nombre)[:3] != (serie, temporada, numero):
+        raise NoSePuede('Ese título tiene algo que la app leería como otro número de capítulo (como "S2 E5" o '
+                        '"3x04"). Escribilo de otra forma.')
+    editar_canal(capitulo, usuario, nombre=nombre)
+    return clasificar.episodio(capitulo.nombre)[3]
+
+
 def ordenar_capitulos(nombre_serie, temporada, en_orden, usuario=None):
     """
     Ordena los capítulos de una temporada: `en_orden` son los pk de TODOS sus

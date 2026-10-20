@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load canales_extras %}
+{% load canales_extras static %}
 {% comment %}
     Lo más visto: canales en vivo, películas y series, ordenados por el tiempo
     que se miraron en el período (7, 30 o 90 días). Son totales de todos los
@@ -10,18 +10,21 @@
 {% block titulo %}Lo más visto{% endblock %}
 {% block clase_body %}pagina-listado{% endblock %}
 
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
+
 {% block encabezado %}
-<div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
-    <div>
-        {% if permisos.ver_canales %}<a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>{% endif %}
-        <h1 class="pagina-titulo">Lo más visto</h1>
-        <p class="pagina-bajada">Qué se mira más en la app, sumando todos los aparatos (no dice quién miró qué). Sirve para saber qué contenido conviene traer y qué sobra.</p>
+{% if permisos.ver_canales %}{% barra_contenido 'lo_mas_visto' %}{% endif %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Lo más visto
+        <button type="button" class="ayuda-boton" data-ayuda="Qué se mira más en la app, sumando todos los aparatos (no dice quién miró qué). Sirve para saber qué contenido conviene traer y qué sobra." aria-label="Qué es esta pantalla">?</button>
+    </h1>
+    <div class="contenido-acciones">
+        <nav class="pestanias" aria-label="Período">
+            {% for d in periodos %}
+            <a href="?tipo={{ tipo }}&dias={{ d }}" {% if d == dias %}class="activa" aria-current="page"{% endif %}>Últimos {{ d }} días</a>
+            {% endfor %}
+        </nav>
     </div>
-    <nav class="pestanias" aria-label="Período">
-        {% for d in periodos %}
-        <a href="?tipo={{ tipo }}&dias={{ d }}" {% if d == dias %}class="activa" aria-current="page"{% endif %}>Últimos {{ d }} días</a>
-        {% endfor %}
-    </nav>
 </div>
 {% endblock %}
 
@@ -88,3 +91,5 @@
     {% endif %}
 </section>
 {% endblock %}
+
+{% block scripts %}<script src="{% static 'js/trabajo.js' %}"></script>{% endblock %}

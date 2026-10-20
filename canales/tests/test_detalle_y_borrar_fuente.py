@@ -45,7 +45,7 @@ class DetalleYBorrarFuenteTests(TestCase):
         self.assertContains(respuesta, 'js/organizar_detalle.js')
         # Elegir tarjetas no abre el panel (molestaba al trabajar con varias): lo abre «Detalles»
         self.assertContains(respuesta, 'class="espejo-ver"')
-        self.assertContains(respuesta, '<strong>Detalles</strong> muestra al costado')
+        self.assertContains(respuesta, 'El ⓘ muestra al costado todo lo de una')   # en la ayuda "?" del título
         self.assertNotContains(respuesta, 'data-detalle-varios')
         datos = self.datos_de_la_tarjeta(respuesta)
         filas = dict(datos['datos'])

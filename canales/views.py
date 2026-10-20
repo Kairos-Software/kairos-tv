@@ -1095,6 +1095,18 @@ def _numero_en_el_titulo(titulo):
 
 @require_POST
 @requiere_permiso('importar_canales')
+def capitulo_titulo(request, pk):
+    """Cambiar el título de un capítulo ahí mismo, en la página de la serie (JSON: {"titulo"} o {"error"})."""
+    capitulo = get_object_or_404(Canal, pk=pk, contenido=Contenido.SERIE)
+    try:
+        titulo = organizar.titular_capitulo(capitulo, request.POST.get('titulo', ''), request.user)
+    except organizar.NoSePuede as error:
+        return JsonResponse({'error': str(error)}, status=400)
+    return JsonResponse({'titulo': titulo, 'nombre': capitulo.nombre})
+
+
+@require_POST
+@requiere_permiso('importar_canales')
 def serie_ordenar(request):
     """Guarda el orden de los capítulos de una temporada (los renumera 1, 2, 3...)."""
     nombre = request.POST.get('nombre', '').strip()

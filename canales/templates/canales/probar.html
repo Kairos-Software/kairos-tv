@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load canales_extras static %}
 {% comment %}
     Prueba una dirección como la app y permite crear un canal con el mismo
     resultado, aun cuando la fuente esté momentáneamente caída.
@@ -7,11 +8,14 @@
 {% block titulo %}Probar un link · Contenido{% endblock %}
 {% block clase_body %}pagina-herramienta-contenido pagina-probar-link{% endblock %}
 
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
+
 {% block encabezado %}
-<div class="pagina-encabezado">
-    <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
-    <h1 class="pagina-titulo">Probar un link</h1>
-    <p class="pagina-bajada">Comprobá una señal y, si te sirve, agregala como canal desde la misma pantalla.</p>
+{% barra_contenido 'probar' %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Probar un link
+        <button type="button" class="ayuda-boton" data-ayuda="Comprobá una señal como la prueba la app y, si te sirve, agregala como canal desde la misma pantalla (aunque esté caída en este momento)." aria-label="Qué es esta pantalla">?</button>
+    </h1>
 </div>
 {% endblock %}
 
@@ -131,6 +135,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'js/trabajo.js' %}"></script>
 <script>
 (function () {
     var formulario = document.getElementById('form-probar');

@@ -7,7 +7,8 @@ su estado y cerrar sesión. Ver reventa/sesiones.py para las reglas.
       -> 400 codigo_invalido · 403 servicio_vencido / suspendido · 409 cuenta_en_uso
       -> 429 login_bloqueado (demasiados códigos equivocados desde la misma conexión)
 
-    GET  /api/v1/cliente/          (con el token) -> {"nombre", "codigo", "vence", "pantallas", "vendedor", ...}
+    GET  /api/v1/cliente/          (con el token) -> {"nombre", "codigo", "vence", "demo", "pantallas", "vendedor", ...}
+      "demo": true si está en una prueba gratis (entonces "vence" es cuándo termina la prueba).
       "vendedor": {"nombre", "telefono"} de quien le vendió (también viene en el 403 servicio_vencido / suspendido).
       La app lo llama cada pocos minutos: es la "señal" que mantiene ocupada
       la pantalla. Si el servicio venció responde 403; si liberaron el
@@ -42,7 +43,9 @@ def datos_cliente(cliente):
     return {
         'nombre': cliente.nombre,
         'codigo': cliente.codigo_legible,   # su propio código: "Mi cuenta" lo muestra por si lo olvida
-        'vence': cliente.vence,
+        # En una prueba gratis, hasta cuándo dura la prueba (y "demo": true)
+        'vence': cliente.demo_hasta if cliente.en_demo else cliente.vence,
+        'demo': cliente.en_demo,
         'pantallas': cliente.pantallas_vigentes(),
         'conectados': cliente.dispositivos.count(),
         'horas_sin_senal': HORAS_SIN_SENAL,

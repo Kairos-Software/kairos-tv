@@ -559,6 +559,44 @@ responde a tiempo). Si sigue así hasta el 26/10, se da por muerta. Últimas
 pruebas: ✓✓✗✗." La salida del cron (`/var/log/kairostv-cron.log`) dice cuántos
 quitó, cuántos volvieron y cuántos canales hay en cada estado.
 
+### Señales (cada señal con problemas, una por una) — desde el 20/10/2026
+
+Para revisar mira por **canal**: un canal que anda con 2 de sus 4 señales "se
+ve", y las otras 2 no aparecían en ningún lado salvo abriendo su Detalle.
+**Contenido → Señales** (`/canales/senales/`, `senales.py` + `views_senales.py`)
+lista TODAS las fuentes con algún problema, aunque su canal se vea:
+
+- Arriba, cuántas hay de cada problema (`senales.PROBLEMAS`): Fallan,
+  Rechazadas, Fallan en los aparatos (ocultas), Inestables, Formato, Muertas,
+  Retiradas (por la limpieza), Quitadas a mano y Sin datos. Tocar uno filtra.
+  "Con problemas" (lo que se ve al entrar) es todo menos "Sin datos". El
+  problema sale de la misma salud de siempre (`salud.de_fuente`) más lo que la
+  saca de la app (apagada, retirada, oculta).
+- Primero las de canales que **no se ven** (lo urgente). Cada fila dice si el
+  canal se ve con otras, su número de señal ("2 de 4"), de qué lista vino, qué
+  le pasa y desde cuándo, y el último problema en un aparato.
+- Acciones ahí mismo (copiar link, probar ahora, quitar o volver a mostrar,
+  borrar) o tildando varias (Shift = un rango) con la barra de abajo. "Probar"
+  de a muchas prueba hasta 40 por vez; las retiradas que andan vuelven solas.
+- Se llega también desde: el número rojo de **Señales** en la barra de
+  Contenido (`senales.contar`, guardado 2 minutos), el "2 de 4 señales" / "No
+  se ve" de cada tarjeta de Organizar, "En Señales" en su panel de Detalles, y
+  los números de señales de **Importar y estado**.
+
+### Las pantallas de trabajo (desde el 20/10/2026)
+
+Todas las de Contenido tienen arriba la misma barra (`{% barra_contenido %}`,
+`templatetags/canales_extras.py`): Organizar · Señales · Para revisar ·
+Importar y estado · YouTube · Probar un link · Lo más visto · Eliminados. Las
+explicaciones largas pasaron a botones **"?"** (burbuja flotante). Organizar
+tiene **Tarjetas / Lista** (una fila por canal: mucho más por pantalla) y, al
+editar, **Guardar y seguir** (abre la tarjeta siguiente), **Buscar imagen**
+(Google Imágenes con el nombre) y **pegar una imagen con Ctrl+V**; al guardar
+vuelve a la misma tarjeta. En la página de una serie cada capítulo ocupa una
+línea y su **título se cambia ahí mismo** (tocarlo, Enter:
+`organizar.titular_capitulo`, `/canales/series/capitulo/<id>/titulo/`). Lo
+común está en `static/js/trabajo.js` y `static/css/trabajo.css`.
+
 ### Para revisar (la bandeja del panel)
 
 `/canales/revisar/` (Contenido → Tu catálogo → **Para revisar**; `bandeja.py`):

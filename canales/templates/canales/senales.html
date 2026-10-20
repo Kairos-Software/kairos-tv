@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load static canales_extras %}
+{% comment %}
+    Señales: TODAS las fuentes con problemas, una por una, aunque su canal se siga viendo con otras (lo arma
+    canales/senales.py). Arriba, cuántas hay de cada problema (elegir uno filtra); cada fila con su acción ahí
+    mismo y, tildando varias, la barra de abajo. Acciones: views_senales.accion. Comportamiento: static/js/trabajo.js.
+{% endcomment %}
+
+{% block titulo %}Señales{% endblock %}
+{% block clase_body %}pagina-trabajo pagina-senales{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
+
+{% block encabezado %}
+{% barra_contenido 'senales' %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Señales
+        <button type="button" class="ayuda-boton" data-ayuda="Cada señal que no anda bien, una por una, aunque su canal se siga viendo con otras. Primero las de canales que NO se ven (lo urgente). Lo normal se arregla solo: lo que no anda una semana se retira solo y lo que vuelve a andar vuelve solo. Acá podés adelantarte: probarlas, quitarlas, devolverlas o borrarlas, de a una o tildando varias." aria-label="Qué es esta pantalla">?</button>
+    </h1>
+    {% if canal %}
+    <a href="?{{ sin_problema }}&amp;canal=" class="chip chip-filtro" title="Ver las de todos los canales">Solo «{{ canal.nombre }}» <i class="bi bi-x" aria-hidden="true"></i></a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block contenido %}
+<nav class="problemas" aria-label="Qué problema ver">
+    <a href="?{{ sin_problema }}&amp;problema=todas" class="problema problema-todas{% if filtros.problema == 'todas' %} activo{% endif %}">Con problemas <span>{{ cuentas.todas }}</span></a>
+    {% for clave, nombre, ayuda, cantidad in problemas %}
+    <a href="?{{ sin_problema }}&amp;problema={{ clave }}" class="problema problema-{{ clave }}{% if filtros.problema == clave %} activo{% endif %}{% if not cantidad %} sin-nada{% endif %}" title="{{ ayuda }}">{{ nombre }} <span>{{ cantidad }}</span></a>
+    {% endfor %}
+    <a href="?{{ sin_problema }}&amp;problema=cualquiera" class="problema problema-cualquiera{% if filtros.problema == 'cualquiera' %} activo{% endif %}" title="También las que andan bien">Todas</a>
+</nav>
+
+<form method="get" class="filtros-compactos" role="search">
+    <input type="hidden" name="problema" value="{{ filtros.problema }}">
+    {% if filtros.canal %}<input type="hidden" name="canal" value="{{ filtros.canal }}">{% endif %}
+    <div class="filtros-buscar">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <label for="q" class="visually-hidden">Buscar</label>
+        <input type="search" id="q" name="q" value="{{ filtros.texto }}" class="form-control form-control-sm" placeholder="Canal o parte del link" data-atajo="/">
+    </div>
+    <label for="contenido" class="visually-hidden">Sección</label>
+    <select id="contenido" name="contenido" class="form-select form-select-sm" data-enviar-al-cambiar>
+        <option value="">Todas las secciones</option>
+        {% for clave, nombre in secciones %}<option value="{{ clave }}" {% if filtros.contenido == clave %}selected{% endif %}>{{ nombre }}</option>{% endfor %}
+    </select>
+    <label for="origen" class="visually-hidden">Lista de origen</label>
+    <select id="origen" name="origen" class="form-select form-select-sm" data-enviar-al-cambiar>
+        <option value="">De cualquier lista</option>
+        {% for o in origenes %}<option value="{{ o }}" {% if filtros.origen == o %}selected{% endif %}>{{ o|truncatechars:50 }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search" aria-hidden="true"></i> Buscar</button>
+    {% if hay_filtros %}<a href="?problema={{ filtros.problema }}" class="btn btn-sm btn-link">Limpiar</a>{% endif %}
+    <span class="filtros-total">{{ pagina.paginator.count }} señal{{ pagina.paginator.count|pluralize:"es" }}</span>
+</form>
+
+{% if not pagina.object_list %}
+<section class="tarjeta vacio-compacto">
+    <i class="bi bi-check2-circle" aria-hidden="true"></i>
+    <span>{% if filtros.problema == 'todas' %}No hay señales con problemas{% if hay_filtros %} con esos filtros{% endif %}.{% else %}Nada por acá con esos filtros.{% endif %}</span>
+</section>
+{% else %}
+<form method="post" action="{% url 'canales:senales_accion' %}" id="form-senales" data-seleccion>
+    {% csrf_token %}
+    <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+    <div class="tarjeta p-0">
+        <div class="table-responsive">
+            <table class="table tabla tabla-compacta mb-0">
+                <thead>
+                    <tr>
+                        {% if puede_editar %}<th scope="col" class="col-elegir"><input type="checkbox" class="form-check-input" data-elegir-todas aria-label="Elegir todas las de esta página"></th>{% endif %}
+                        <th scope="col">Canal</th>
+                        <th scope="col">Señal</th>
+                        <th scope="col">Problema</th>
+                        <th scope="col" class="d-none d-xxl-table-cell" title="Las últimas pruebas, de la más vieja a la más nueva (✓ anduvo, ✗ falló, ? no se pudo probar, ▣ un aparato no pudo leerla)">Pruebas</th>
+                        {% if puede_editar %}<th scope="col" class="text-end"><span class="visually-hidden">Acciones</span></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for s in pagina %}
+                {% with f=s.fuente c=s.fuente.canal %}
+                <tr class="fila-{{ s.problema }}">
+                    {% if puede_editar %}<td class="col-elegir"><input type="checkbox" class="form-check-input" name="fuente" value="{{ f.pk }}" data-elegir aria-label="Elegir la señal {{ s.numero }} de {{ c.nombre }}"></td>{% endif %}
+                    {% ifchanged c.pk %}
+                    <td class="col-canal"><div class="col-canal-caja">
+                        <span class="logo-mini" data-iniciales="{{ c.nombre|iniciales }}">{% if c.logo %}<img src="{{ c.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ c.nombre|iniciales }}{% endif %}</span>
+                        <span class="col-canal-texto">
+                            <a href="{% url 'canales:canal_editar' c.pk %}?volver={{ request.get_full_path|urlencode }}" class="col-canal-nombre" title="Abrir el canal (todas sus señales)">{{ c.nombre }}</a>
+                            <small>{% if not c.activo %}<span class="estado-mal">canal quitado</span>{% elif s.canal_se_ve %}<span class="estado-bien">se ve{% if s.otras_que_andan %} con {{ s.otras_que_andan }} otra{{ s.otras_que_andan|pluralize }}{% endif %}</span>{% else %}<span class="estado-mal">el canal no se ve</span>{% endif %}{% if c.categoria %} · {{ c.categoria.nombre }}{% endif %}</small>
+                        </span>
+                    </div></td>
+                    {% else %}
+                    <td class="col-canal col-canal-mismo"><span class="visually-hidden">{{ c.nombre }}</span><i class="bi bi-arrow-return-right" aria-hidden="true"></i> <small>otra señal del mismo canal</small></td>
+                    {% endifchanged %}
+                    <td class="col-senal">
+                        <a href="?problema=cualquiera&amp;canal={{ c.pk }}" title="Ver todas las señales de este canal">{{ s.numero }} de {{ s.de }}</a>
+                        <small title="{{ f.get_tipo_display }} · {{ f.url }}">{{ f.origen|default:"sin lista"|truncatechars:22 }}</small>
+                    </td>
+                    <td class="col-problema">
+                        <span class="chip-problema chip-{{ s.problema }}" title="Últimas pruebas: {{ s.pruebas|default:'ninguna' }}">{% if s.problema == 'anda' %}Anda{% else %}{{ s.nombre_problema }}{% endif %}</span>
+                        <span class="col-problema-texto">{{ s.detalle }}</span>
+                        {% if f.problema_en_aparato %}<small class="col-problema-aparato" title="{{ f.problema_en_aparato }}">En un aparato ({{ f.problema_en|date:"j/m H:i" }}): {{ f.problema_en_aparato|truncatechars:90 }}</small>{% endif %}
+                    </td>
+                    <td class="col-pruebas d-none d-xxl-table-cell">{{ s.pruebas|default:"—" }}</td>
+                    {% if puede_editar %}
+                    <td class="col-acciones">
+                        <button type="button" class="btn-icono" data-copiar="{{ f.url }}" title="Copiar el link" aria-label="Copiar el link"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
+                        <button type="submit" class="btn-icono" name="una" value="probar:{{ f.pk }}" title="Probar ahora desde el servidor" aria-label="Probar ahora"><i class="bi bi-arrow-repeat" aria-hidden="true"></i></button>
+                        {% if s.problema == 'apagadas' or s.problema == 'retiradas' or s.problema == 'ocultas' %}
+                        <button type="submit" class="btn-icono btn-icono-bien" name="una" value="mostrar:{{ f.pk }}" title="Volver a mostrar: la app la vuelve a usar" aria-label="Volver a mostrar"><i class="bi bi-eye" aria-hidden="true"></i></button>
+                        {% else %}
+                        <button type="submit" class="btn-icono" name="una" value="quitar:{{ f.pk }}" title="Quitar: la app deja de usarla (no se borra)" aria-label="Quitar"><i class="bi bi-eye-slash" aria-hidden="true"></i></button>
+                        {% endif %}
+                        <button type="submit" class="btn-icono btn-icono-peligro" name="una" value="borrar:{{ f.pk }}" data-confirmar="¿Borrar para siempre la señal {{ s.numero }} de «{{ c.nombre }}»?{% if s.de == 1 %} Es la ÚNICA: el canal deja de verse.{% endif %}" title="Borrar para siempre" aria-label="Borrar"><i class="bi bi-trash3" aria-hidden="true"></i></button>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endwith %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% include "parciales/_paginacion.html" with pagina=pagina parametros=parametros %}
+
+    {% if puede_editar %}
+    <div class="barra-lote" data-barra-lote hidden>
+        <strong data-cuantas aria-live="polite"></strong>
+        <button type="submit" name="accion" value="probar" class="btn btn-sm btn-outline-secondary" title="El servidor las prueba ahora (hasta 40 por vez)"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Probar</button>
+        <button type="submit" name="accion" value="quitar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye-slash" aria-hidden="true"></i> Quitar</button>
+        <button type="submit" name="accion" value="mostrar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye" aria-hidden="true"></i> Volver a mostrar</button>
+        <button type="submit" name="accion" value="borrar" class="btn btn-sm btn-outline-danger" data-confirmar="¿Borrar para siempre las señales elegidas? Las direcciones quedan anotadas en la Actividad. Los canales que se queden sin señales dejan de verse."><i class="bi bi-trash3" aria-hidden="true"></i> Borrar</button>
+        <button type="button" class="btn btn-sm btn-link" data-limpiar-seleccion>Cancelar</button>
+    </div>
+    {% endif %}
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'js/trabajo.js' %}"></script>{% endblock %}

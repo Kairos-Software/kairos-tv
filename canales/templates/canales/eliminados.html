@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load canales_extras static %}
 {% comment %}
     Eliminados recientemente: cada vez que se eliminó contenido (de a uno, una
     categoría con todo, lo elegido en Organizar), con cuántos, de qué
@@ -7,11 +8,14 @@
 
 {% block titulo %}Eliminados · Contenido{% endblock %}
 
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
+
 {% block encabezado %}
-<div class="pagina-encabezado">
-    <a href="{% url 'canales:organizar' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Organizar contenido</a>
-    <h1 class="pagina-titulo">Eliminados recientemente</h1>
-    <p class="pagina-bajada">Lo que se eliminó en los últimos 30 días, de a una vez por cada vez que se eliminó. Si fue un error, «Restaurar» lo devuelve con su categoría y sus señales.</p>
+{% barra_contenido 'eliminados' %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Eliminados
+        <button type="button" class="ayuda-boton" data-ayuda="Lo que se eliminó en los últimos 30 días, de a una vez por cada vez que se eliminó. Si fue un error, «Restaurar» lo devuelve con su categoría y sus señales." aria-label="Qué es esta pantalla">?</button>
+    </h1>
 </div>
 {% endblock %}
 
@@ -52,12 +56,4 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}
-<script>
-    document.querySelectorAll('[data-confirmar]').forEach(function (boton) {
-        boton.form.addEventListener('submit', function (evento) {
-            if (!window.confirm(boton.dataset.confirmar)) evento.preventDefault();
-        });
-    });
-</script>
-{% endblock %}
+{% block scripts %}<script src="{% static 'js/trabajo.js' %}"></script>{% endblock %}

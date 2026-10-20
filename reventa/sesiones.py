@@ -6,7 +6,7 @@ Cómo funciona:
   1. El cliente pone un código de 8 números en la app: el SUYO (entra a
      cualquier pantalla libre que no tenga código propio) o el PROPIO de una
      pantalla (entra solo a esa).
-  2. Si está vigente y hay pantalla libre (y no cortada), se crea un
+  2. Si está vigente (o en una prueba gratis: demo) y hay pantalla libre (y no cortada), se crea un
      Dispositivo en ella y se le entrega un token (empieza con "c_" para
      distinguirlo de los tokens de los usuarios del panel).
   3. La app manda el token en cada pedido y, mientras está abierta, da una
@@ -100,9 +100,15 @@ def chequear_vigente(cliente):
     if cliente.suspendido:
         raise AccesoDenegado('Tu servicio está suspendido. Comunicate con quien te lo vendió.', 'suspendido',
                              {'vendedor': contacto_del_vendedor(cliente)})
-    if not cliente.vigente:
-        raise AccesoDenegado('Tu servicio venció. Comunicate con quien te lo vendió para renovarlo.',
-                             'servicio_vencido', {'vence': cliente.vence, 'vendedor': contacto_del_vendedor(cliente)})
+    if cliente.puede_ver:   # con el servicio pago o con una prueba gratis (demo)
+        return
+    if cliente.demo_hasta and (cliente.vence is None or cliente.demo_hasta > cliente.vence):
+        # Lo último que tuvo fue una prueba: no "venció" un servicio que nunca pagó
+        raise AccesoDenegado('Tu prueba gratis terminó. Comunicate con quien te la dio para contratar el servicio.',
+                             'servicio_vencido', {'vence': cliente.demo_hasta,
+                                                  'vendedor': contacto_del_vendedor(cliente)})
+    raise AccesoDenegado('Tu servicio venció. Comunicate con quien te lo vendió para renovarlo.',
+                         'servicio_vencido', {'vence': cliente.vence, 'vendedor': contacto_del_vendedor(cliente)})
 
 
 def _del_codigo(codigo):

@@ -30,7 +30,7 @@ from usuarios.permisos import chequear_permiso
 from . import consultas, estadisticas, servicios
 from .forms import (ActivarForm, CargarMesesForm, ClienteForm, CobroForm, CreditosForm, ElegirPaqueteForm,
                     PantallaForm, PaqueteForm, PasarClienteForm, PrecioForm, RevendedorNuevoForm)
-from .models import HORAS_SIN_SENAL, Compra, Paquete, Revendedor
+from .models import DEMOS_POR_CLIENTE, HORAS_POR_DEMO, HORAS_SIN_SENAL, Compra, Paquete, Revendedor
 from .servicios import ReventaError
 
 POR_PAGINA = 25
@@ -251,6 +251,10 @@ def cliente(request, pk):
         'sin_conectar': cliente.dispositivos.filter(pantalla__isnull=True),
         'numeros': estadisticas.numeros_cliente(cliente),
         'horas_sin_senal': HORAS_SIN_SENAL,
+        # Demos (pruebas gratis): cuántas se le pueden dar ahora (1, 2... hasta las que le quedan)
+        'demos_para_dar': list(range(1, cliente.demos_disponibles + 1)),
+        'demos_por_cliente': DEMOS_POR_CLIENTE,
+        'horas_por_demo': HORAS_POR_DEMO,
     })
 
 
@@ -297,6 +301,22 @@ def cliente_activar(request, pk):
                                   f'hasta el {localtime(renovacion.hasta):%d/%m/%Y}'
                                   + (f' y le quedan {meses - 1} mes(es) más pagos, que se descuentan solos.'
                                      if meses > 1 else '.'))
+    return redirect('reventa:cliente', pk=pk)
+
+
+@require_POST
+@requiere_reventa
+def cliente_demo(request, pk):
+    """Darle demos (pruebas gratis de 1 hora): una o varias juntas, hasta las 3 que tiene cada cliente."""
+    cliente = get_object_or_404(_clientes_visibles(request), pk=pk)
+    cantidad = request.POST.get('cantidad', '')
+    demo = _ejecutar(request, servicios.dar_demo, cliente, int(cantidad) if cantidad.isdigit() else 0)
+    if demo:
+        quedan = DEMOS_POR_CLIENTE - cliente.demos_usadas
+        messages.success(request, f'Listo: {cliente} puede probar la app hasta las {localtime(demo.hasta):%H:%M} '
+                                  f'del {localtime(demo.hasta):%d/%m}. '
+                                  + (f'Le queda{"n" if quedan > 1 else ""} {quedan} demo{"s" if quedan > 1 else ""}.'
+                                     if quedan else 'Ya usó todas sus demos.'))
     return redirect('reventa:cliente', pk=pk)
 
 

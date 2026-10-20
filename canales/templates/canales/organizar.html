@@ -17,33 +17,26 @@
 {% block titulo %}Organizar contenido{% endblock %}
 {% block clase_body %}pagina-organizar{% endblock %}
 
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}"><link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
 
 {% block encabezado %}
-<div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
-    <div>
-        <a href="{% url 'canales:inicio' %}" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Contenido</a>
-        <h1 class="pagina-titulo">Organizar contenido</h1>
-        <p class="pagina-bajada">Buscá, editá o mové contenido desde un solo lugar.</p>
-    </div>
+{% barra_contenido 'organizar' %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Organizar
+        <button type="button" class="ayuda-boton" data-ayuda="Todo lo cargado, sección por sección y categoría por categoría. Tocá las tarjetas para elegirlas (una o varias; con Shift, un rango) y abajo elegí qué hacer con ellas: mover, pasar a otra sección, unir en una serie, quitar, eliminar. El ⓘ muestra al costado todo lo de una (de dónde salió, cada señal y cómo anda) y el lápiz la edita. Atajo: la tecla / va a la búsqueda." aria-label="Cómo se usa">?</button>
+    </h1>
     {% if puede_editar %}
-    <div class="acciones-pagina organizar-acciones">
-        <a href="{% url 'canales:youtube' %}" class="btn btn-outline-secondary"><i class="bi bi-youtube" aria-hidden="true"></i> Traer de YouTube</a>
-        <a href="{% url 'canales:inicio' %}#importar-lista" class="btn btn-acento"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
-        <details class="filtros-mas">
-            <summary class="btn btn-outline-secondary"><i class="bi bi-three-dots" aria-hidden="true"></i> Más</summary>
-            <div class="filtros-mas-panel organizar-menu-panel">
-                <button type="button" class="btn btn-outline-secondary" data-abrir-exportar><i class="bi bi-download" aria-hidden="true"></i> Exportar contenido</button>
-                <a href="{% url 'canales:eliminados' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Ver eliminados</a>
-            </div>
-        </details>
+    <div class="contenido-acciones">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-abrir-exportar><i class="bi bi-download" aria-hidden="true"></i> Exportar</button>
     </div>
     {% endif %}
 </div>
 {% endblock %}
 
 {% block contenido %}
-<nav class="pestanias contenido-pestanias mb-4" aria-label="Sección de la app">
+{# Tarjetas o lista (lo elige cada uno: queda guardado en el navegador). Antes de dibujar, para que no salte #}
+<script>try { if (localStorage.getItem('kairos.vista') === 'lista') document.documentElement.classList.add('vista-lista'); } catch (e) {}</script>
+<nav class="pestanias contenido-pestanias mb-3" aria-label="Sección de la app">
     <a href="?contenido=vivo" {% if contenido == 'vivo' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-broadcast" aria-hidden="true"></i> En vivo</a>
     <a href="?contenido=pelicula" {% if contenido == 'pelicula' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-film" aria-hidden="true"></i> Películas</a>
     <a href="?contenido=serie" {% if contenido == 'serie' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-collection-play" aria-hidden="true"></i> Series</a>
@@ -124,8 +117,7 @@
 <div class="espejo">
     {# ── Las categorías de la sección ── #}
     <aside class="espejo-categorias" aria-label="Categorías de {{ seccion }}">
-        <h2 class="espejo-lado-titulo">Categorías de {{ seccion }}</h2>
-        <p class="espejo-ayuda">Son las que ve el cliente en {{ seccion }}. El número es cuántos{% if contenido == 'serie' %} series{% endif %} tiene cada una.</p>
+        <h2 class="espejo-lado-titulo">Categorías de {{ seccion }} <button type="button" class="ayuda-boton" data-ayuda="Son las que ve el cliente en {{ seccion }}. El número es cuántos{% if contenido == 'serie' %} series{% endif %} tiene cada una. Tildá dos o más para juntarlas en una." aria-label="Qué son">?</button></h2>
 
         {% if puede_editar and parecidas %}
         <details class="espejo-parecidas">
@@ -269,11 +261,17 @@
                 {% if datos.elegida == 'todas' %}Todas las categorías{% elif nodo.categoria %}{{ nodo.categoria.nombre }}{% else %}Sin categoría{% endif %}
                 <span>{% if nodo %}{{ nodo.total }}{% else %}{{ datos.pagina.paginator.count }}{% endif %}</span>
             </h2>
-            {% if puede_editar and datos.pagina.object_list %}
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="elegir-pagina">
-                <i class="bi bi-check2-square" aria-hidden="true"></i> Seleccionar esta página
-            </button>
-            {% endif %}
+            <div class="espejo-titulo-acciones">
+                {% if puede_editar and datos.pagina.object_list %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="elegir-pagina">
+                    <i class="bi bi-check2-square" aria-hidden="true"></i> Seleccionar esta página
+                </button>
+                {% endif %}
+                <div class="vista-botones" role="group" aria-label="Cómo ver">
+                    <button type="button" data-vista="tarjetas" aria-pressed="true" title="Tarjetas"><i class="bi bi-grid-3x2-gap" aria-hidden="true"></i><span class="visually-hidden">Tarjetas</span></button>
+                    <button type="button" data-vista="lista" aria-pressed="false" title="Lista (más por pantalla)"><i class="bi bi-list-ul" aria-hidden="true"></i><span class="visually-hidden">Lista</span></button>
+                </div>
+            </div>
         </div>
 
         {% if puede_editar and nodo.categoria %}
@@ -357,7 +355,6 @@
                     <input type="hidden" name="idioma" value="{{ filtros.idioma }}">
                     <input type="hidden" name="origen" value="{{ filtros.origen }}">
                     <input type="hidden" name="sin_logo" value="{% if filtros.sin_logo %}1{% endif %}">
-            {% if puede_editar %}<p class="espejo-ayuda mx-0"><i class="bi bi-hand-index" aria-hidden="true"></i> Tocá las tarjetas para elegirlas (una o varias) y abajo elegí qué hacer con ellas. <strong>Detalles</strong> muestra al costado todo lo de una (de dónde salió, cada señal y cómo anda).</p>{% endif %}
             {% for categoria, items in datos.grupos %}
             {% if datos.elegida == 'todas' %}
             <h3 class="espejo-seccion">{% if categoria %}{{ categoria.nombre }}{% else %}Sin categoría (en la app: «Otros»){% endif %}</h3>
@@ -377,15 +374,15 @@
                     <span class="espejo-nombre" title="{{ item.nombre }}">{% if item.destacado %}<span title="Destacado en la TV" aria-label="Destacado en la TV">★</span> {% endif %}{{ item.nombre }}</span>
                     <span class="espejo-detalle">
                         {% if contenido == 'serie' %}
-                        <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% endif %}
+                        <a href="{% url 'canales:serie_detalle' %}?nombre={{ item.nombre|urlencode }}" class="espejo-capitulos" title="Ver sus capítulos y ordenarlos">{{ item.cantidad }} capítulo{{ item.cantidad|pluralize }}</a>{% if not item.activo %} · <span class="estado-mal">quitada</span>{% elif not item.completa %} · <span class="estado-mal" title="{{ item.por_que_no_se_ve }}">no se ve</span>{% elif item.fuera %} · <span class="estado-mal" title="Capítulos que la app no muestra (caídos o quitados)">{{ item.fuera }} no se ve{{ item.fuera|pluralize:"n" }}</span>{% endif %}
                         {% else %}
-                        {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<span class="estado-mal" title="{{ item.no_se_ve }}">No se ve</span>{% else %}Se ve en la app{% if item.fuentes_fuera %} · <span class="estado-mal" title="Las otras están caídas, ocultas, quitadas o retiradas: mirá Detalles">{{ item.senales_en_app }} de {{ item.fuentes_total }} señales</span>{% endif %}{% endif %}
+                        {% if not item.activo %}<span class="estado-mal">Quitado</span>{% elif item.no_se_ve %}<a href="{% url 'canales:senales' %}?problema=cualquiera&amp;canal={{ item.pk }}" class="estado-mal espejo-senales" title="{{ item.no_se_ve }} · Ver sus señales">No se ve</a>{% else %}Se ve en la app{% if item.fuentes_fuera %} · <a href="{% url 'canales:senales' %}?problema=cualquiera&amp;canal={{ item.pk }}" class="estado-mal espejo-senales" title="Las otras están caídas, ocultas, quitadas o retiradas: ver cada una">{{ item.senales_en_app }} de {{ item.fuentes_total }} señales</a>{% endif %}{% endif %}
                         {% endif %}
                     </span>
                     {% if puede_editar %}</label>{% else %}</div>{% endif %}
                     <div class="espejo-botones">
-                        <button type="button" class="espejo-ver" aria-label="Detalles de {{ item.nombre }}" title="Ver todo lo suyo al costado"><i class="bi bi-info-circle" aria-hidden="true"></i> Detalles</button>
-                        <button type="button" class="espejo-editar" data-datos="{{ item.datos }}">{% if puede_editar %}Editar{% else %}Ver{% endif %}</button>
+                        <button type="button" class="espejo-ver" aria-label="Detalles de {{ item.nombre }}" title="Detalles: de dónde salió, cada señal y cómo anda"><i class="bi bi-info-circle" aria-hidden="true"></i><span class="espejo-boton-texto"> Detalles</span></button>
+                        <button type="button" class="espejo-editar" data-datos="{{ item.datos }}" aria-label="{% if puede_editar %}Editar{% else %}Ver{% endif %} {{ item.nombre }}" title="{% if puede_editar %}Editar: nombre, imagen, categoría…{% else %}Ver{% endif %}"><i class="bi bi-{% if puede_editar %}pencil{% else %}eye{% endif %}" aria-hidden="true"></i><span class="espejo-boton-texto"> {% if puede_editar %}Editar{% else %}Ver{% endif %}</span></button>
                     </div>
                 </article>
                 {% endfor %}
@@ -545,14 +542,17 @@
                         <input type="text" name="numero" id="editar-numero" class="form-control" maxlength="10">
                     </div>
                     <div class="col-md-7">
-                        <label for="editar-logo" class="form-label" id="editar-logo-titulo">Imagen (logo o póster)</label>
+                        <div class="editar-imagen-titulo">
+                            <label for="editar-logo" class="form-label mb-0" id="editar-logo-titulo">Imagen (logo o póster)</label>
+                            <a href="#" class="small" id="editar-buscar" target="_blank" rel="noopener" title="Abre Google Imágenes con el nombre: copiá la imagen y pegala acá con Ctrl+V"><i class="bi bi-search" aria-hidden="true"></i> Buscar imagen</a>
+                        </div>
                         <input type="url" name="logo" id="editar-logo" class="form-control" maxlength="500" placeholder="https://.../imagen.jpg">
                     </div>
                     <div class="col-md-5">
                         <label for="editar-subir" class="form-label">O subila desde la compu</label>
                         <input type="file" name="imagen" id="editar-subir" class="form-control" accept="image/jpeg,image/png,image/webp">
                     </div>
-                    <div class="col-12 espejo-ayuda mt-1" id="editar-logo-ayuda"></div>
+                    <div class="col-12 espejo-ayuda mt-1"><span id="editar-logo-ayuda"></span> <strong>Atajo:</strong> copiá una imagen (o su link) y pegala acá con <kbd>Ctrl</kbd>+<kbd>V</kbd>.</div>
                     <div class="col-md-6">
                         <label for="editar-categoria" class="form-label">Categoría</label>
                         <select name="categoria" id="editar-categoria" class="form-select">
@@ -584,8 +584,8 @@
                         <div class="form-check mb-0">
                             <input class="form-check-input" type="checkbox" name="destacado" id="editar-destacado">
                             <label class="form-check-label" for="editar-destacado">★ Destacado en la TV</label>
+                            <button type="button" class="ayuda-boton ms-1" data-ayuda="Cuando nadie usa la TV, la app muestra una vidriera con películas, series y canales. Lo destacado sale ahí más seguido que lo demás (no todo el tiempo)." aria-label="Qué es destacado">?</button>
                         </div>
-                        <div class="espejo-ayuda">Cuando nadie usa la TV, la app muestra una vidriera con películas, series y canales. Lo destacado sale ahí más seguido que lo demás (no todo el tiempo).</div>
                     </div>
                 </div>
             </div>
@@ -593,7 +593,8 @@
         <h3 class="h6 mt-4">Señales (la app las prueba en este orden)</h3>
         <ul class="lista-senales" id="editar-origenes"></ul>
         <div class="dialogo-acciones d-flex flex-wrap align-items-center gap-2 mt-3">
-            {% if puede_editar %}<button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>{% endif %}
+            {% if puede_editar %}<button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>
+            <button type="submit" class="btn btn-outline-secondary" data-guardar-siguiente title="Guarda y abre la tarjeta que sigue (para ir de una en una sin buscar)"><i class="bi bi-chevron-double-right" aria-hidden="true"></i> Guardar y seguir</button>{% endif %}
             <button type="button" class="btn btn-link" data-cerrar>Cerrar</button>
             <a href="#" class="btn btn-link" id="editar-mas">Más opciones (señales, idioma…)</a>
             {% if puede_editar %}<button type="button" class="btn btn-outline-secondary text-danger ms-auto" id="editar-eliminar"><i class="bi bi-trash" aria-hidden="true"></i> Eliminar</button>{% endif %}
@@ -623,6 +624,7 @@
     </div>
     <div class="detalle-lateral-pie">
         <button type="button" class="btn btn-sm btn-primary" data-detalle-editar>{% if puede_editar %}Editar{% else %}Ver todo{% endif %}</button>
+        <a href="#" class="btn btn-sm btn-link" data-detalle-senales-link data-base="{% url 'canales:senales' %}"><i class="bi bi-activity" aria-hidden="true"></i> En Señales</a>
         <a href="#" class="btn btn-sm btn-link" data-detalle-mas>Más opciones</a>
     </div>
 </aside>
@@ -738,17 +740,12 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'js/trabajo.js' %}"></script>
 <script src="{% static 'js/organizar_detalle.js' %}"></script>
 {% if puede_editar %}<script src="{% static 'js/destino_serie.js' %}"></script>{% endif %}
 <script>
 (function () {
-    // Confirmar lo que no se puede deshacer (en cualquier formulario de la página)
-    document.querySelectorAll('form').forEach(function (f) {
-        f.addEventListener('submit', function (evento) {
-            var boton = evento.submitter;
-            if (boton && boton.dataset.confirmar && !window.confirm(boton.dataset.confirmar)) evento.preventDefault();
-        });
-    });
+    // (Confirmar lo que no se puede deshacer: static/js/trabajo.js)
 
     // ── Juntar categorías: aparece al elegir dos o más ──
     var juntar = document.getElementById('form-juntar');
@@ -911,7 +908,7 @@
         document.getElementById('editar-logo-ayuda').textContent = esSerie
             ? (datos.portada ? 'Es la portada propia de la serie. Si la borrás, vuelve a usar la imagen del primer capítulo.'
                              : 'Ahora usa la imagen del primer capítulo. Lo que pongas acá queda como portada de la serie; cada capítulo conserva la suya.')
-            : 'Pegá el link de una imagen o subí una (JPG, PNG o WEBP; se achica sola y, si trae el fondo de cuadritos pintado, se lo saca). Si la subís, gana sobre el link.';
+            : 'Link o archivo (JPG, PNG o WEBP: se achica sola y le saca el fondo de cuadritos). El archivo gana sobre el link.';
         editar.categoria.value = String(datos.categoria);
         editar.nueva_categoria.value = '';
         editar.nueva_categoria.dispatchEvent(new Event('input', {bubbles: true}));   // la lista vuelve a valer (sistema.js)
@@ -928,6 +925,9 @@
         document.getElementById('editar-mas').textContent = esSerie ? 'Ver y ordenar capítulos' : 'Más opciones (señales, idioma…)';
         // Las señales, con su link, datos y "Borrar esta señal" (static/js/organizar_detalle.js)
         window.KairosSenales.pintar(document.getElementById('editar-origenes'), datos);
+        var buscar = document.getElementById('editar-buscar');
+        buscar.href = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(datos.nombre + (esSerie || '{{ forma }}' !== 'vivo' ? ' póster' : ' logo png'));
+        if (guardarSeguir) guardarSeguir.hidden = !siguienteDe(datos);
         pintarImagen();
         dialogo.showModal();
     }
@@ -939,6 +939,67 @@
     });
     logo.addEventListener('input', pintarImagen);
     subir.addEventListener('change', pintarImagen);
+
+    // ── Volver a la misma tarjeta después de guardar, y "Guardar y seguir" (abre la que sigue) ──
+    function claveDe(datos) { return datos.tipo === 'serie' ? 's:' + datos.nombre : 'c' + datos.pk; }
+    function botonesEditar() { return Array.prototype.slice.call(document.querySelectorAll('.espejo-editar')); }
+    function siguienteDe(datos) {
+        var botones = botonesEditar();
+        var clave = claveDe(datos);
+        var i = botones.findIndex(function (b) { return claveDe(JSON.parse(b.dataset.datos)) === clave; });
+        return i >= 0 ? botones[i + 1] : null;
+    }
+    function aca(parametro, clave) {
+        var url = new URL(location.href);
+        url.searchParams.delete('ir');
+        url.searchParams.delete('abrir');
+        url.searchParams.set(parametro, clave);
+        return url.pathname + url.search;
+    }
+    var guardarSeguir = editar.querySelector('[data-guardar-siguiente]');
+    editar.addEventListener('submit', function (evento) {
+        if (!actual) return;
+        var proxima = evento.submitter === guardarSeguir ? siguienteDe(actual) : null;
+        editar.elements.volver.value = proxima ? aca('abrir', claveDe(JSON.parse(proxima.dataset.datos))) : aca('ir', claveDe(actual));
+    });
+    (function () {
+        var parametros = new URLSearchParams(location.search);
+        var clave = parametros.get('abrir') || parametros.get('ir');
+        if (!clave) return;
+        var boton = botonesEditar().find(function (b) { return claveDe(JSON.parse(b.dataset.datos)) === clave; });
+        if (boton) {
+            var tarjeta = boton.closest('.espejo-tarjeta');
+            tarjeta.scrollIntoView({block: 'center'});
+            tarjeta.classList.add('recien-editada');
+            if (parametros.get('abrir')) abrir(JSON.parse(boton.dataset.datos));
+        }
+        var limpia = new URL(location.href);
+        limpia.searchParams.delete('ir');
+        limpia.searchParams.delete('abrir');
+        history.replaceState(null, '', limpia);
+    })();
+
+    // ── Pegar una imagen (o el link de una) con Ctrl+V en el cuadro de edición ──
+    dialogo.addEventListener('paste', function (evento) {
+        var portapapeles = evento.clipboardData;
+        if (!portapapeles) return;
+        var imagen = Array.prototype.find.call(portapapeles.files || [], function (f) { return /^image\/(jpeg|png|webp)$/.test(f.type); });
+        if (imagen) {
+            evento.preventDefault();
+            var archivos = new DataTransfer();
+            archivos.items.add(imagen);
+            subir.files = archivos.files;
+            pintarImagen();
+            return;
+        }
+        var texto = (portapapeles.getData('text') || '').trim();
+        var escribiendo = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+        if (!escribiendo && /^https?:\/\/\S+$/.test(texto)) {
+            evento.preventDefault();
+            logo.value = texto;
+            pintarImagen();
+        }
+    });
     dialogo.querySelectorAll('[data-cerrar]').forEach(function (b) { b.addEventListener('click', function () { dialogo.close(); }); });
     dialogo.addEventListener('click', function (evento) { if (evento.target === dialogo) dialogo.close(); });
     var eliminar = document.getElementById('editar-eliminar');

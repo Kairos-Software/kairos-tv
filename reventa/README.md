@@ -60,6 +60,24 @@ Revendedor 1 ──< Cliente 1 ──< Pantalla 1 ──< Dispositivo  (el apara
   sin señales durante 2 horas (`HORAS_SIN_SENAL`) se libera solo; también se
   puede liberar a mano desde la ficha del cliente.
 
+## Demos (pruebas gratis)
+
+- Cada cliente tiene **3 demos de 1 hora** (`DEMOS_POR_CLIENTE`,
+  `HORAS_POR_DEMO` en `models.py`). En la ficha de un cliente que no tiene el
+  servicio pago activo, **"Dar demo"** deja elegir cuántas: 1, 2 o las 3
+  juntas (3 horas seguidas). Si todavía está en una prueba, la nueva va
+  después. Usadas las 3, **no hay más** (la ficha lo dice).
+- **No gastan créditos** (ni del revendedor ni del cliente). Si no tiene
+  pantallas, se le crea una (un aparato).
+- Una prueba **no es un mes pagado**: va en `Cliente.demo_hasta`, aparte de
+  `vence`; no renueva ni cuenta como "Vigente" en las estadísticas.
+  `Cliente.puede_ver` (pago o prueba) es lo que mira la app para dejar
+  entrar; al terminar, la app muestra "Tu prueba gratis terminó".
+- La lista de clientes tiene el estado **"En prueba (demo)"** y el chip "En
+  prueba hasta las HH:MM". Cada demo dada queda en `Demo` (quién, cuándo,
+  cuántas) y en la actividad. Reglas en `servicios.dar_demo`; tests en
+  `tests/test_demos.py`. Migración `0008_demos`.
+
 ## El saldo es una libreta
 
 El saldo **no** es un número que se pisa: es la suma de los `Movimiento`

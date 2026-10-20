@@ -29,7 +29,7 @@
             <h2 class="tarjeta-titulo">Acceso a la app</h2>
             <dl class="ficha-datos">
                 <div><dt>Código del cliente</dt><dd class="dato fs-3">{{ cliente.codigo_legible }}</dd></div>
-                <div><dt>Pantallas</dt><dd class="dato">{% if cliente.vigente %}{{ cliente.pantallas_vigentes }}{% else %}—{% endif %}</dd></div>
+                <div><dt>Pantallas</dt><dd class="dato">{% if cliente.puede_ver %}{{ cliente.pantallas_vigentes }}{% else %}—{% endif %}</dd></div>
                 <div><dt>Este mes vence</dt><dd>{{ cliente.vence|date:"j/m/Y H:i"|default:"Nunca se activó" }}</dd></div>
                 <div><dt>Meses pagos después</dt><dd class="dato">{{ meses_pagos }} <span class="texto-suave small">({{ cliente.saldo }} crédito{{ cliente.saldo|pluralize }})</span></dd></div>
             </dl>
@@ -86,6 +86,7 @@
                 </div>
             </details>
             {% else %}
+            {% include "reventa/_demos.html" %}
             <h2 class="tarjeta-titulo">Activar</h2>
             <p class="texto-suave small">
                 Cada pantalla es un aparato a la vez y usa 1 crédito por mes. Se cargan pantallas × meses créditos y se descuentan solos, uno por mes.

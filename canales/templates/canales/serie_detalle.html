@@ -2,8 +2,11 @@
 {% load static canales_extras %}
 
 {% block titulo %}{{ serie.nombre }}{% endblock %}
+{% block clase_body %}pagina-trabajo pagina-serie{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}">{% endblock %}
 
 {% block encabezado %}
+{% barra_contenido 'organizar' %}
 <div class="pagina-encabezado">
     <a href="{% url 'canales:organizar' %}?contenido=serie" class="volver"><i class="bi bi-arrow-left" aria-hidden="true"></i> Series</a>
     <div class="serie-hero">
@@ -55,8 +58,10 @@
     </div>
     <div class="ds-paso">
         <p class="ds-paso-titulo"><span>3</span> Temporadas</p>
-        <a href="{% url 'canales:serie_por_titulos' %}?nombre={{ serie.nombre|urlencode }}" class="btn btn-sm btn-outline-secondary align-self-start"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i> Ordenar todo según los títulos</a>
-        <small class="texto-suave">Si los títulos dicen «Temporada 3 Capítulo 33», reparte todos de una vez (primero ves cómo quedaría). A mano: en cada temporada, tildá capítulos y «pasarlos a» otra.</small>
+        <span class="d-flex align-items-center gap-2">
+            <a href="{% url 'canales:serie_por_titulos' %}?nombre={{ serie.nombre|urlencode }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i> Ordenar todo según los títulos</a>
+            <button type="button" class="ayuda-boton" data-ayuda="Si los títulos dicen «Temporada 3 Capítulo 33», reparte todos de una vez (primero ves cómo quedaría). A mano: en cada temporada, tildá capítulos y «pasarlos a» otra." aria-label="Qué hace">?</button>
+        </span>
         <a href="{{ agregar_de_youtube }}&amp;temporada={{ temporada_nueva }}" class="small"><i class="bi bi-youtube" aria-hidden="true"></i> Traer la temporada {{ temporada_nueva }} desde YouTube</a>
     </div>
     <div class="serie-datos-acciones">
@@ -64,15 +69,17 @@
     </div>
 </form>
 {# Separar lo que vino mezclado (GX y 5D's dentro de "Yu-Gi-Oh"): views.serie_separar muestra cuáles antes de pasarlos #}
-<form method="get" action="{% url 'canales:serie_separar' %}" class="tarjeta serie-separar">
+<details class="tarjeta serie-separar-plegable">
+<summary class="serie-separar-titulo"><i class="bi bi-scissors" aria-hidden="true"></i> ¿Tiene otras series mezcladas? <span class="texto-suave small fw-normal">Separarlas</span></summary>
+<form method="get" action="{% url 'canales:serie_separar' %}" class="serie-separar">
     <input type="hidden" name="nombre" value="{{ serie.nombre }}">
-    <p class="serie-separar-titulo"><i class="bi bi-scissors" aria-hidden="true"></i> ¿Tiene otras series mezcladas?</p>
     <small class="texto-suave">Ej: «Yu-Gi-Oh» con los de GX y 5D's, o «Dragon Ball» con Z y GT. Escribí lo que dicen sus títulos: vas a ver cuáles son (podés destildar) y pasan a una serie aparte.</small>
     <div class="separar-fila">
         <input type="search" name="dice" class="form-control" maxlength="40" placeholder="Los títulos dicen… (ej: GX)" aria-label="Lo que dicen los títulos" required>
         <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search" aria-hidden="true"></i> Ver cuáles</button>
     </div>
 </form>
+</details>
 <datalist id="otras-series">{% for otra in otras_series %}<option value="{{ otra }}">{% endfor %}</datalist>
 {% endif %}
 <div class="temporadas-lista">
@@ -101,9 +108,9 @@
             </div>
             {% endif %}
             <p class="orden-ayuda">
-                {% if capitulos|length > 1 %}<i class="bi bi-grip-vertical" aria-hidden="true"></i> Para cambiar el orden, <strong>arrastrá</strong> un capítulo de los puntitos o usá las <strong>flechas</strong>. Después tocá <strong>Guardar orden</strong>.{% endif %}
-                Para pasar capítulos a otra temporada, a otra serie o eliminarlos, <strong>tildalos</strong> (con Shift elegís varios seguidos).
-                <a href="{{ agregar_de_youtube }}&amp;temporada={{ numero }}" class="temporada-agregar"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar capítulos a la temporada {{ numero }} desde YouTube</a>
+                <button type="button" class="ayuda-boton" data-ayuda="{% if capitulos|length > 1 %}Para cambiar el orden, arrastrá un capítulo de los puntitos o usá las flechas, y después «Guardar orden». {% endif %}Para pasar capítulos a otra temporada, a otra serie o eliminarlos, tildalos (con Shift elegís varios seguidos)." aria-label="Cómo ordenar y mover capítulos">?</button>
+                Arrastrá para ordenar · tildá para mover o eliminar.
+                <a href="{{ agregar_de_youtube }}&amp;temporada={{ numero }}" class="temporada-agregar"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar capítulos desde YouTube</a>
             </p>
             <div class="temporada-mover" data-mover-barra hidden>
                 <strong data-mover-cuenta aria-live="polite"></strong>
@@ -135,7 +142,7 @@
                 <span class="cap-numero">{{ forloop.counter }}</span>
                 <span class="cap-imagen">{% if capitulo.canal.logo %}<img src="{{ capitulo.canal.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<i class="bi bi-film" aria-hidden="true"></i>{% endif %}</span>
                 <span class="cap-texto">
-                    <strong>{{ capitulo.titulo|default:capitulo.canal.nombre }}</strong>
+                    {% if puede_editar and capitulo.numero %}<strong class="titulo-editable" data-titulo-url="{% url 'canales:capitulo_titulo' capitulo.canal.pk %}" data-titulo="{{ capitulo.titulo }}" tabindex="0" role="button" title="Tocá para cambiarle el título (Enter guarda, Esc cancela)">{{ capitulo.titulo|default:capitulo.canal.nombre }}</strong>{% else %}<strong>{{ capitulo.titulo|default:capitulo.canal.nombre }}</strong>{% endif %}
                     {% if capitulo.no_se_ve %}<span class="estado-mal">No se ve: {{ capitulo.no_se_ve }}</span>{% else %}<span class="texto-suave">Se ve en la app</span>{% endif %}
                 </span>
                 {% if puede_editar %}
@@ -227,15 +234,10 @@ document.querySelectorAll('form[data-orden]').forEach(function (form) {
     });
 });
 
-// "Borrar" una señal de un capítulo: se pregunta antes (no se deshace)
-document.querySelectorAll('form[data-orden]').forEach(function (form) {
-    form.addEventListener('submit', function (evento) {
-        var boton = evento.submitter;
-        if (boton && boton.dataset.confirmar && !window.confirm(boton.dataset.confirmar)) evento.preventDefault();
-    });
-});
+// ("Borrar" una señal o eliminar capítulos: se pregunta antes, static/js/trabajo.js)
 </script>
 {% endif %}
+<script src="{% static 'js/trabajo.js' %}"></script>
 <link rel="stylesheet" href="{% static 'css/ordenar_capitulos.css' %}">
 <link rel="stylesheet" href="{% static 'css/destino_serie.css' %}">
 <link rel="stylesheet" href="{% static 'css/separar_serie.css' %}">

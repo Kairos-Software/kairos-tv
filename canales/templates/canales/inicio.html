@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load canales_extras static %}
 {% comment %}
     Contenido (canales en vivo, películas y series): resumen, volver a verificar todas las fuentes (de a tandas, con
     barra de avance), subir una lista y las importaciones anteriores.
@@ -10,31 +10,20 @@
 {% block titulo %}Contenido{% endblock %}
 {% block clase_body %}pagina-contenido{% endblock %}
 
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/mantenimiento.css' %}">
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}"><link rel="stylesheet" href="{% static 'css/mantenimiento.css' %}">
 <link rel="stylesheet" href="{% static 'css/importar_varias.css' %}">{% endblock %}
 
 {% block encabezado %}
-<div class="pagina-encabezado d-flex flex-wrap justify-content-between align-items-end gap-3">
-    <div>
-        <h1 class="pagina-titulo">Contenido</h1>
-        <p class="pagina-bajada">Administrá lo que ven tus clientes, sin perder de vista el estado de las señales.</p>
+{% barra_contenido 'inicio' %}
+<div class="contenido-encabezado">
+    <h1 class="contenido-titulo">Importar y estado
+        <button type="button" class="ayuda-boton" data-ayuda="Cómo está todo lo cargado, sección por sección (tocá un número para ver cuáles), subir listas nuevas y el mantenimiento del catálogo (verificar todas las señales, limpiar nombres)." aria-label="Qué es esta pantalla">?</button>
+    </h1>
+    {% if puede_importar %}
+    <div class="contenido-acciones">
+        <a href="#importar-lista" class="btn btn-sm btn-primary" data-abrir-detalle="importar-lista"><i class="bi bi-upload" aria-hidden="true"></i> Importar lista</a>
     </div>
-    <div class="contenido-acciones-principales">
-        <a href="{% url 'canales:organizar' %}" class="btn btn-acento">
-            <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> Organizar contenido
-        </a>
-        {% if puede_importar %}
-        <a href="#importar-lista" class="btn btn-primary" data-abrir-detalle="importar-lista">
-            <i class="bi bi-upload" aria-hidden="true"></i> Importar lista
-        </a>
-        <a href="{% url 'canales:probar' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-plug" aria-hidden="true"></i> Probar un link
-        </a>
-        <a href="{% url 'canales:youtube' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-youtube" aria-hidden="true"></i> Traer de YouTube
-        </a>
-        {% endif %}
-    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -44,16 +33,6 @@
         <div>
             <span class="seccion-sobrelinea">Estado actual</span>
             <h2 id="resumen-titulo">Tu catálogo</h2>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'canales:revisar' %}" class="btn btn-sm btn-outline-secondary" title="Solo lo que necesita tu decisión: lo demás se arregla solo">
-                <i class="bi bi-clipboard-check" aria-hidden="true"></i> Para revisar
-            </a>
-            {% if permisos.ver_estadisticas %}
-            <a href="{% url 'canales:lo_mas_visto' %}" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Ver consumo
-            </a>
-            {% endif %}
         </div>
     </div>
     <div class="resumen-contenidos">
@@ -72,9 +51,9 @@
                 <div><dt><a href="{% url 'canales:organizar' %}?contenido={{ bloque.contenido }}&amp;mostrar=app" class="resumen-enlace">Los ve la app</a></dt><dd class="dato">{{ bloque.en_la_app }}</dd></div>
                 <div><dt>{% if bloque.no_se_ven %}<a href="{% url 'canales:organizar' %}?contenido={{ bloque.contenido }}&amp;mostrar=fuera" class="resumen-enlace" title="Caídos o quitados: ver cuáles y por qué">No se ven</a>{% else %}No se ven{% endif %}</dt><dd class="dato{% if bloque.no_se_ven %} estado-mal{% endif %}">{{ bloque.no_se_ven }}</dd></div>
                 <div><dt>Fuentes funcionan</dt><dd class="dato estado-bien">{{ bloque.funcionan }}</dd></div>
-                <div><dt>Fuentes caídas</dt><dd class="dato estado-mal">{{ bloque.caidas }}</dd></div>
-                <div><dt>Sin verificar</dt><dd class="dato">{{ bloque.sin_verificar }}</dd></div>
-                <div><dt>Ocultas en aparatos</dt><dd class="dato">{{ bloque.ocultas }}</dd></div>
+                <div><dt>{% if bloque.caidas %}<a href="{% url 'canales:senales' %}?contenido={{ bloque.contenido }}&amp;problema=todas" class="resumen-enlace" title="Ver cada señal con problemas">Fuentes caídas</a>{% else %}Fuentes caídas{% endif %}</dt><dd class="dato estado-mal">{{ bloque.caidas }}</dd></div>
+                <div><dt>{% if bloque.sin_verificar %}<a href="{% url 'canales:senales' %}?contenido={{ bloque.contenido }}&amp;problema=sin_datos" class="resumen-enlace" title="Ver cuáles">Sin verificar</a>{% else %}Sin verificar{% endif %}</dt><dd class="dato">{{ bloque.sin_verificar }}</dd></div>
+                <div><dt>{% if bloque.ocultas %}<a href="{% url 'canales:senales' %}?contenido={{ bloque.contenido }}&amp;problema=ocultas" class="resumen-enlace" title="Ver cuáles">Ocultas en aparatos</a>{% else %}Ocultas en aparatos{% endif %}</dt><dd class="dato">{{ bloque.ocultas }}</dd></div>
             </dl>
         </article>
         {% endfor %}
@@ -259,6 +238,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'js/trabajo.js' %}"></script>
 <script src="{% static 'js/tandas.js' %}"></script>
 <script>
 (function () {

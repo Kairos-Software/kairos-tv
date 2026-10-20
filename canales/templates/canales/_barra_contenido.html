@@ -1,0 +1,18 @@
+{% comment %}
+    La barra de arriba de todas las pantallas de Contenido: de una a otra en un clic. La pone
+    {% barra_contenido 'clave' %} (canales/templatetags/canales_extras.py). Estilos en static/css/trabajo.css.
+{% endcomment %}
+<nav class="barra-contenido" aria-label="Pantallas de Contenido">
+    <a href="{% url 'canales:organizar' %}" {% if activa == 'organizar' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> Organizar</a>
+    <a href="{% url 'canales:senales' %}" {% if activa == 'senales' %}class="activa" aria-current="page"{% endif %} title="Cada señal que no anda, una por una (aunque su canal se vea)"><i class="bi bi-activity" aria-hidden="true"></i> Señales{% if senales_con_problemas %} <span class="barra-contenido-numero" aria-label="{{ senales_con_problemas }} con problemas">{{ senales_con_problemas }}</span>{% endif %}</a>
+    <a href="{% url 'canales:revisar' %}" {% if activa == 'revisar' %}class="activa" aria-current="page"{% endif %} title="Canales que necesitan tu decisión"><i class="bi bi-clipboard-check" aria-hidden="true"></i> Para revisar</a>
+    <a href="{% url 'canales:inicio' %}" {% if activa == 'inicio' %}class="activa" aria-current="page"{% endif %} title="Subir listas, el estado del catálogo y el mantenimiento"><i class="bi bi-upload" aria-hidden="true"></i> Importar y estado</a>
+    {% if puede_importar %}
+    <a href="{% url 'canales:youtube' %}" {% if activa == 'youtube' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-youtube" aria-hidden="true"></i> YouTube</a>
+    <a href="{% url 'canales:probar' %}" {% if activa == 'probar' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-plug" aria-hidden="true"></i> Probar un link</a>
+    {% endif %}
+    {% if ver_estadisticas %}
+    <a href="{% url 'canales:lo_mas_visto' %}" {% if activa == 'lo_mas_visto' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Lo más visto</a>
+    {% endif %}
+    <a href="{% url 'canales:eliminados' %}" class="barra-contenido-chica{% if activa == 'eliminados' %} activa{% endif %}" {% if activa == 'eliminados' %}aria-current="page"{% endif %} title="Lo que se eliminó (se puede recuperar)"><i class="bi bi-trash3" aria-hidden="true"></i> Eliminados</a>
+</nav>

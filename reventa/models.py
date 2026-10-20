@@ -3,7 +3,8 @@ El negocio de reventa.
 
     Revendedor 1 ──< Cliente 1 ──< Pantalla 1 ──< Dispositivo  (el aparato conectado)
          │              ├──< CreditoCliente   (su saldo: cargas + y meses −)
-         │              └──< Renovacion       (cada mes de servicio)
+         │              ├──< Renovacion       (cada mes de servicio)
+         │              └──< Demo             (cada prueba gratis que se le dio)
          ├──< Movimiento      (la libreta de créditos del revendedor: + y −)
          └──< Compra >── Paquete
 
@@ -21,6 +22,10 @@ Reglas (definidas por el dueño del negocio):
     el resto; desde el mes siguiente se renueva con las demás).
   - Un cliente SIN revendedor es un "cliente directo" de la empresa: lo
     maneja el administrador y sus créditos los pone la empresa.
+  - DEMOS: cada cliente tiene DEMOS_POR_CLIENTE pruebas gratis de
+    HORAS_POR_DEMO hora. Se le pueden dar de a una o varias juntas (3 de una
+    vez = 3 horas seguidas); usadas todas, no hay más. No gastan créditos y
+    son para quien todavía no paga (o ya venció).
 
 Los saldos NO son números que se pisan: son la suma de los movimientos. Así
 cada crédito tiene historia (quién lo dio, cuándo, para qué) y las
@@ -43,6 +48,9 @@ HORAS_SIN_SENAL = 2
 # El mes siguiente se descuenta del saldo del cliente un poco antes de que
 # termine el actual (la tarea diaria lo hace a tiempo; ver servicios.renovar_los_que_tocan).
 ANTICIPO_RENOVACION = timedelta(days=2)
+# Las pruebas gratis de cada cliente (ver servicios.dar_demo)
+DEMOS_POR_CLIENTE = 3
+HORAS_POR_DEMO = 1
 
 
 class Revendedor(ModeloBase):
@@ -94,6 +102,9 @@ class Cliente(ModeloBase):
     # con su usuario del panel; se activan a sí mismos con sus créditos, como a
     # cualquier cliente (ver servicios.pantalla_propia).
     propio = models.BooleanField('pantalla propia del revendedor', default=False)
+    # Hasta cuándo dura la prueba gratis que se le dio (ver Demo). Aparte de
+    # `vence`: una prueba no es un mes pagado (no renueva, no cuenta como vigente).
+    demo_hasta = models.DateTimeField('prueba hasta', null=True, blank=True, editable=False)
 
     class Meta:
         verbose_name = 'cliente'
@@ -121,9 +132,28 @@ class Cliente(ModeloBase):
         """Créditos que le quedan para los meses que vienen (la suma de su libreta)."""
         return self.creditos.aggregate(total=models.Sum('cantidad'))['total'] or 0
 
+    @property
+    def en_demo(self):
+        """¿Está usando una prueba gratis ahora? (y no tiene el servicio pago activo)"""
+        return (not self.suspendido and not self.vigente and self.demo_hasta is not None
+                and self.demo_hasta > timezone.now())
+
+    @property
+    def puede_ver(self):
+        """¿Puede entrar a la app ahora? Con el servicio pago o con una prueba."""
+        return self.vigente or self.en_demo
+
+    @property
+    def demos_usadas(self):
+        return self.demos.aggregate(total=models.Sum('cantidad'))['total'] or 0
+
+    @property
+    def demos_disponibles(self):
+        return max(DEMOS_POR_CLIENTE - self.demos_usadas, 0)
+
     def pantallas_vigentes(self):
-        """Cuántos aparatos pueden ver HOY: sus pantallas no cortadas (0 si no está vigente)."""
-        if not self.vigente:
+        """Cuántos aparatos pueden ver HOY: sus pantallas no cortadas (0 si no puede ver)."""
+        if not self.puede_ver:
             return 0
         return self.pantallas.filter(cortada=False).count()
 
@@ -218,6 +248,30 @@ class Renovacion(models.Model):
 
     def __str__(self):
         return f'{self.cliente} · {self.pantallas} dispositivo(s) · {self.desde:%d/%m/%Y} a {self.hasta:%d/%m/%Y}'
+
+
+class Demo(models.Model):
+    """
+    Una prueba gratis que se le dio a un cliente: `cantidad` demos de
+    HORAS_POR_DEMO hora cada una, seguidas (de `desde` a `hasta`). No gasta
+    créditos. Entre todas no pasan de DEMOS_POR_CLIENTE.
+    """
+
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='demos')
+    cantidad = models.PositiveSmallIntegerField('demos')
+    desde = models.DateTimeField()
+    hasta = models.DateTimeField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    hecha_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='+')
+
+    class Meta:
+        verbose_name = 'demo'
+        verbose_name_plural = 'demos'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f'{self.cliente} · {self.cantidad} demo(s) · hasta {timezone.localtime(self.hasta):%d/%m/%Y %H:%M}'
 
 
 class Paquete(ModeloBase):

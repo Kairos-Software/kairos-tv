@@ -31,8 +31,10 @@ def clientes_de(revendedor=None):
 
 
 def filtrar_clientes(clientes, estado=''):
-    """estado: 'vigentes', 'por_vencer', 'vencidos', 'sin_activar', 'suspendidos' o '' (todos)."""
+    """estado: 'vigentes', 'por_vencer', 'vencidos', 'sin_activar', 'suspendidos', 'en_prueba' o '' (todos)."""
     ahora = timezone.now()
+    if estado == 'en_prueba':   # usando una demo ahora (sin el servicio pago activo)
+        return clientes.filter(suspendido=False, demo_hasta__gt=ahora).exclude(vence__gt=ahora)
     if estado == 'vigentes':
         return clientes.filter(suspendido=False, vence__gt=ahora)
     if estado == 'por_vencer':

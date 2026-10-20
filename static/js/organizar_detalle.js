@@ -200,6 +200,12 @@
         var mas = panel.querySelector('[data-detalle-mas]');
         mas.href = datos.mas;
         mas.textContent = esSerie ? 'Ver y ordenar capítulos' : 'Más opciones';
+        // Kairos: sus señales una por una, en la pantalla Señales (con su acción ahí mismo)
+        var enSenales = panel.querySelector('[data-detalle-senales-link]');
+        if (enSenales) {
+            enSenales.hidden = esSerie;
+            if (!esSerie) enSenales.href = enSenales.dataset.base + '?problema=cualquiera&canal=' + datos.pk;
+        }
         panel.hidden = false;
         panel.querySelector('.detalle-lateral-cuerpo').scrollTop = 0;
     }

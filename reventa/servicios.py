@@ -24,8 +24,8 @@ from notificaciones.models import Nivel
 from notificaciones.servicios import notificar, notificar_a_quienes_puedan
 from usuarios.models import Rol, Usuario
 
-from .models import (ANTICIPO_RENOVACION, DIAS_POR_CREDITO, Cliente, Compra, CreditoCliente, Dispositivo, Movimiento,
-                     Pantalla, Renovacion, Revendedor, _codigo_nuevo)
+from .models import (ANTICIPO_RENOVACION, DEMOS_POR_CLIENTE, DIAS_POR_CREDITO, HORAS_POR_DEMO, Cliente, Compra,
+                     CreditoCliente, Demo, Dispositivo, Movimiento, Pantalla, Renovacion, Revendedor, _codigo_nuevo)
 
 
 NOMBRE_ROL = 'Revendedor'   # el mismo de usuarios/catalogo_permisos.py (ROLES_INICIALES)
@@ -165,6 +165,10 @@ def _local(momento):
     return f'{timezone.localtime(momento):%d/%m/%Y}'
 
 
+def _local_hora(momento):
+    return f'{timezone.localtime(momento):%d/%m/%Y %H:%M}'
+
+
 def crear_cliente(revendedor, nombre, telefono='', notas='', por=None):
     """
     Lo crea SIN activar: no gasta créditos. Cuántas pantallas tiene y por
@@ -291,6 +295,41 @@ def activar(cliente, dispositivos=1, meses=1, monto_cobrado=None, cortesia=False
     registrar(por, Accion.EDITAR, f'Activó a {cliente} con {dispositivos} pantalla(s) hasta el '
                                   f'{_local(renovacion.hasta)}', objeto=cliente, modulo='reventa')
     return renovacion
+
+
+@transaction.atomic
+def dar_demo(cliente, cantidad=1, por=None):
+    """
+    Una prueba gratis: `cantidad` demos de HORAS_POR_DEMO hora, seguidas.
+    Cada cliente tiene DEMOS_POR_CLIENTE en total: se le pueden dar de a una
+    o juntas, y usadas todas no hay más. No gasta créditos. Si todavía está
+    en una prueba, la nueva empieza cuando termina esa. Solo para quien no
+    tiene el servicio pago activo. Si no tiene pantallas, se le crea una
+    (un aparato). Devuelve la Demo.
+    """
+    cliente = _bloquear_cliente(cliente)
+    disponibles = cliente.demos_disponibles
+    if not disponibles:
+        raise ReventaError(f'{cliente} ya usó sus {DEMOS_POR_CLIENTE} demos: no se le pueden dar más.')
+    if not 1 <= cantidad <= disponibles:
+        raise ReventaError(f'A {cliente} le queda{"n" if disponibles > 1 else ""} {disponibles} '
+                           f'demo{"s" if disponibles > 1 else ""}: podés darle entre 1 y {disponibles}.')
+    if cliente.suspendido:
+        raise ReventaError(f'{cliente} está suspendido: primero sacale la suspensión (Editar).')
+    if cliente.vigente:
+        raise ReventaError(f'{cliente} ya tiene el servicio activo hasta el {_local(cliente.vence)}: '
+                           'no necesita una demo.')
+    ahora = timezone.now()
+    desde = cliente.demo_hasta if cliente.en_demo else ahora
+    hasta = desde + timedelta(hours=HORAS_POR_DEMO * cantidad)
+    if not cliente.pantallas.exists():
+        Pantalla.objects.create(cliente=cliente, numero=_numero_libre(cliente))
+    demo = Demo.objects.create(cliente=cliente, cantidad=cantidad, desde=desde, hasta=hasta, hecha_por=_usuario(por))
+    cliente.demo_hasta = hasta
+    cliente.save(update_fields=['demo_hasta'])
+    registrar(por, Accion.EDITAR, f'Le dio {cantidad} demo(s) a {cliente}, hasta el {_local_hora(hasta)}', objeto=cliente,
+              modulo='reventa')
+    return demo
 
 
 @transaction.atomic

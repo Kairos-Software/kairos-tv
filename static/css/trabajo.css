@@ -1,0 +1,365 @@
+/*
+ * Kairos TV · las pantallas de TRABAJO de Contenido (Organizar, Señales, Para revisar, Importar...).
+ * Lo que comparten: la barra de arriba (canales/_barra_contenido.html), los botones "?" de ayuda flotante,
+ * los filtros en una fila, las tablas compactas, la barra de lo elegido y la vista en lista de Organizar.
+ * Aparte de kairos.css (que se edita en paralelo): solo usa sus colores (var(--...)).
+ * El comportamiento está en static/js/trabajo.js.
+ */
+
+/* ── La barra de Contenido ─────────────────────────────────────── */
+.barra-contenido {
+    display: flex;
+    gap: .25rem;
+    align-items: center;
+    margin: 0 0 1rem;
+    padding: .3rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    background: var(--capa-baja);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+}
+.barra-contenido a {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .38rem .7rem;
+    border-radius: var(--radio-chico);
+    color: var(--texto-suave);
+    font-size: .85rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .14s, color .14s;
+}
+.barra-contenido a:hover { color: var(--texto); background: var(--capa-alta); }
+.barra-contenido a.activa { color: var(--celeste-claro); background: var(--celeste-fondo); }
+.barra-contenido a.activa i { color: var(--celeste); }
+.barra-contenido .barra-contenido-chica { margin-left: auto; font-weight: 500; color: var(--texto-apagado); }
+.barra-contenido-numero {
+    min-width: 1.4rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    background: var(--rubi-fondo);
+    border: 1px solid var(--rubi-borde);
+    color: var(--rubi-claro);
+    font-size: .72rem;
+    line-height: 1.3rem;
+    text-align: center;
+}
+
+/* ── Encabezado compacto (título + ayuda en una línea) ─────────── */
+.contenido-encabezado { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin-bottom: .9rem; }
+.contenido-titulo {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: 0;
+    font-family: var(--fuente-titulos);
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+}
+.contenido-encabezado .contenido-acciones { margin-left: auto; display: flex; flex-wrap: wrap; gap: .5rem; }
+.chip-filtro { text-decoration: none; display: inline-flex; align-items: center; gap: .25rem; }
+
+/* ── Ayuda flotante: el botón "?" y la burbuja (una sola, la mueve trabajo.js) ── */
+.ayuda-boton {
+    display: inline-grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: none;
+    padding: 0;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 50%;
+    background: var(--capa-alta);
+    color: var(--texto-suave);
+    font: 700 .75rem/1 var(--fuente-texto);
+    letter-spacing: 0;
+    vertical-align: middle;
+    cursor: help;
+}
+.ayuda-boton:hover, .ayuda-boton[aria-expanded="true"] { color: var(--celeste-tinta); background: var(--celeste); border-color: var(--celeste); }
+.ayuda-flotante {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    max-width: min(22rem, calc(100vw - 1.5rem));
+    padding: .7rem .85rem;
+    border: 1px solid var(--celeste-borde);
+    border-radius: var(--radio);
+    background: var(--capa-maxima);
+    color: var(--texto);
+    box-shadow: var(--sombra);
+    font: 400 .84rem/1.45 var(--fuente-texto);
+    text-align: left;
+    letter-spacing: 0;
+    white-space: normal;
+}
+/* Sin la API de popover (navegadores viejos) la burbuja se muestra con esta clase */
+.ayuda-flotante:not(:is(:popover-open, .abierta)) { display: none; }
+
+/* ── Filtros en una fila ───────────────────────────────────────── */
+.filtros-compactos { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .9rem; }
+.filtros-compactos .filtros-buscar { flex: 1 1 15rem; max-width: 26rem; position: relative; }
+.filtros-compactos .filtros-buscar i { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--texto-apagado); }
+.filtros-compactos .filtros-buscar input { padding-left: 2rem; }
+.filtros-compactos select { width: auto; max-width: 16rem; }
+.filtros-total { margin-left: auto; color: var(--texto-apagado); font-size: .82rem; }
+
+/* ── Los problemas (Señales): un filtro por chip ───────────────── */
+.problemas { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+.problema {
+    display: inline-flex;
+    white-space: nowrap;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .65rem;
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    color: var(--texto-suave);
+    font-size: .8rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.problema span { color: var(--texto); font-variant-numeric: tabular-nums; }
+.problema:hover { border-color: var(--borde-fuerte); color: var(--texto); }
+.problema.sin-nada { opacity: .5; }
+.problema.activo { background: var(--celeste-fondo); border-color: var(--celeste-borde); color: var(--celeste-claro); }
+.problema-fallan span, .problema-rechazan span, .problema-muertas span { color: var(--rubi-claro); }
+.problema-ocultas span, .problema-inestables span, .problema-formato span { color: var(--dorado-claro); }
+
+/* ── Tabla compacta (una línea por fila) ───────────────────────── */
+.tabla-compacta td { padding: .45rem .7rem; vertical-align: middle; }
+.tabla-compacta thead th { padding: .55rem .7rem; }
+.tabla-compacta .col-elegir { width: 2.2rem; padding-right: 0; }
+.tabla-compacta small { display: block; color: var(--texto-apagado); font-size: .76rem; line-height: 1.3; }
+.tabla-compacta tr:has([data-elegir]:checked) td { background: var(--celeste-fondo); }
+.col-canal { min-width: 12rem; }
+.col-canal-caja { display: flex; align-items: center; gap: .6rem; }
+.col-canal-mismo { padding-left: 1.6rem !important; color: var(--texto-apagado); font-size: .8rem; }
+.col-canal-mismo small { display: inline !important; }
+.col-canal-caja .logo-mini { flex: none; }
+.col-canal-texto { min-width: 0; }
+.col-canal-nombre { color: var(--texto); }
+.col-senal { white-space: nowrap; }
+.col-senal a { font-variant-numeric: tabular-nums; }
+.col-problema { min-width: 14rem; }
+.col-problema-texto { color: var(--texto-suave); font-size: .82rem; margin-left: .35rem; }
+.col-problema-aparato { max-width: 26rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-pruebas { font-family: ui-monospace, monospace; font-size: .8rem; letter-spacing: .08em; color: var(--texto-suave); white-space: nowrap; }
+.col-acciones { text-align: right; white-space: nowrap; }
+
+.chip-problema {
+    display: inline-block;
+    padding: .1rem .5rem;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 999px;
+    background: var(--capa-alta);
+    color: var(--texto-suave);
+    font-size: .72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.chip-fallan, .chip-rechazan, .chip-muertas { background: var(--rubi-fondo); border-color: var(--rubi-borde); color: var(--rubi-claro); }
+.chip-ocultas, .chip-inestables, .chip-formato { background: var(--dorado-fondo); border-color: rgba(255, 186, 32, .32); color: var(--dorado-claro); }
+.chip-anda { background: var(--verde-fondo); border-color: rgba(69, 224, 183, .3); color: var(--verde-claro); }
+
+/* Botones de una sola acción, solo ícono */
+.btn-icono {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radio-chico);
+    background: transparent;
+    color: var(--texto-suave);
+    cursor: pointer;
+    transition: background .14s, color .14s, border-color .14s;
+}
+.btn-icono:hover, .btn-icono:focus-visible { background: var(--capa-alta); border-color: var(--borde-fuerte); color: var(--texto); }
+.btn-icono-bien:hover { color: var(--verde); }
+.btn-icono-peligro:hover { color: var(--rubi-claro); border-color: var(--rubi-borde); }
+.btn-icono.copiado { color: var(--verde); }
+
+/* ── La barra de lo elegido: aparece abajo al tildar algo ──────── */
+.barra-lote {
+    position: sticky;
+    bottom: .75rem;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin-top: .8rem;
+    padding: .6rem .8rem;
+    border: 1px solid var(--celeste-borde);
+    border-radius: var(--radio);
+    background: var(--vidrio);
+    backdrop-filter: blur(10px);
+    box-shadow: var(--sombra);
+}
+.barra-lote[hidden] { display: none; }
+.barra-lote strong { margin-right: .4rem; font-size: .88rem; }
+
+.vacio-compacto { display: flex; align-items: center; gap: .7rem; padding: 1rem 1.2rem; color: var(--texto-suave); }
+.vacio-compacto i { color: var(--verde); font-size: 1.4rem; }
+
+@media (max-width: 767.98px) {
+    .barra-contenido .barra-contenido-chica { margin-left: 0; }
+    .filtros-compactos select { flex: 1 1 45%; max-width: none; }
+    .filtros-total { width: 100%; margin-left: 0; }
+    .col-problema { min-width: 12rem; }
+    .col-canal { min-width: 11rem; }
+}
+
+/* ── Organizar: tarjetas más livianas ──────────────────────────── */
+.pagina-organizar .espejo-botones { gap: .3rem; }
+.pagina-organizar .espejo-botones .espejo-boton-texto { display: none; }
+.pagina-organizar .espejo-ver, .pagina-organizar .espejo-editar {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 1.7rem;
+    padding: 0;
+    font-size: .85rem;
+}
+.espejo-senales { text-decoration: underline dotted; text-underline-offset: 2px; }
+.espejo-senales:hover { text-decoration-style: solid; }
+
+/* Cambiar entre tarjetas y lista */
+.vista-botones { display: inline-flex; padding: 2px; border: 1px solid var(--borde); border-radius: var(--radio-chico); background: var(--capa-baja); }
+.vista-botones button {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 1.75rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--texto-apagado);
+}
+.vista-botones button[aria-pressed="true"] { background: var(--celeste-fondo); color: var(--celeste-claro); }
+.espejo-titulo-acciones { display: flex; align-items: center; gap: .5rem; }
+
+/* ── Organizar en LISTA: las mismas tarjetas, como filas de una línea ── */
+html.vista-lista .pagina-organizar .espejo-grilla,
+html.vista-lista .pagina-organizar .espejo-grilla.con-poster {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    background: var(--capa-baja);
+}
+html.vista-lista .pagina-organizar .espejo-tarjeta {
+    flex-direction: row;
+    align-items: center;
+    gap: .75rem;
+    padding: .3rem .6rem .3rem 2.4rem;
+    border-bottom: 1px solid rgba(59, 73, 75, .35);
+}
+html.vista-lista .pagina-organizar .espejo-tarjeta:last-child { border-bottom: 0; }
+html.vista-lista .pagina-organizar .espejo-tarjeta:hover { background: rgba(255, 255, 255, .025); }
+html.vista-lista .pagina-organizar .espejo-tarjeta:has(.canal-elegir:checked) { background: var(--celeste-fondo); }
+html.vista-lista .pagina-organizar .espejo-tarjeta .canal-elegir { top: 50%; left: .75rem; right: auto; transform: translateY(-50%); box-shadow: none; }
+html.vista-lista .pagina-organizar .espejo-seleccionar { flex: 1; flex-direction: row; align-items: center; gap: .75rem; }
+html.vista-lista .pagina-organizar .espejo-imagen {
+    width: 60px;
+    flex: none;
+    border-width: 1px;
+    border-radius: 7px;
+    font-size: .75rem;
+}
+html.vista-lista .pagina-organizar .espejo-imagen img { padding: 3px; }
+html.vista-lista .pagina-organizar .con-poster .espejo-imagen { width: 28px; }
+html.vista-lista .pagina-organizar .con-poster .espejo-imagen img { padding: 0; }
+html.vista-lista .pagina-organizar .espejo-tarjeta:has(.canal-elegir:checked) .espejo-imagen { box-shadow: none; }
+html.vista-lista .pagina-organizar .espejo-nombre { flex: 0 1 24rem; min-width: 8rem; -webkit-line-clamp: 1; font-size: .9rem; }
+html.vista-lista .pagina-organizar .espejo-detalle { flex: 1; margin: 0; font-size: .78rem; }
+html.vista-lista .pagina-organizar .espejo-seccion { margin: 1rem 0 .4rem; font-size: .9rem; }
+
+@media (max-width: 767.98px) {
+    html.vista-lista .pagina-organizar .espejo-seleccionar { flex-wrap: wrap; row-gap: .1rem; }
+    html.vista-lista .pagina-organizar .espejo-nombre { flex: 1 1 60%; }
+    html.vista-lista .pagina-organizar .espejo-detalle { flex-basis: 100%; padding-left: calc(60px + .75rem); }
+}
+
+/* Cuadro de edición: "Buscar imagen" al lado del título, y la tarjeta que se acaba de guardar */
+.editar-imagen-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; margin-bottom: .5rem; }
+.espejo-tarjeta.recien-editada .espejo-imagen { animation: recien-editada 1.6s ease-out 1; }
+@keyframes recien-editada {
+    0%, 40% { border-color: var(--verde); box-shadow: 0 0 0 3px rgba(69, 224, 183, .25); }
+    100% { border-color: transparent; box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .espejo-tarjeta.recien-editada .espejo-imagen { animation: none; border-color: var(--verde); }
+}
+kbd { padding: .05rem .3rem; border-radius: 4px; background: var(--capa-maxima); color: var(--texto); font-size: .75em; }
+
+/* ── Una serie: cada capítulo en una línea ─────────────────────── */
+.pagina-serie .cap-lista { gap: .3rem; padding-top: .5rem; }
+.pagina-serie .cap { gap: .6rem; padding: .3rem .6rem; border-radius: 10px; }
+.pagina-serie .cap-agarre { height: 2rem; font-size: 1.1rem; }
+.pagina-serie .cap-numero { min-width: 2rem; font-size: 1.05rem; }
+.pagina-serie .cap-imagen { width: 56px; height: 32px; border-radius: 6px; }
+.pagina-serie .cap-texto { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: .6rem; }
+.pagina-serie .cap-acciones { order: 2; }
+.pagina-serie .cap-acciones .btn { padding: .2rem .45rem; }
+.pagina-serie .cap-fuentes:not([open]) { order: 1; flex-basis: auto; }
+.pagina-serie .cap-fuentes[open] { order: 3; }
+.pagina-serie .orden-ayuda { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .6rem; }
+.serie-separar-plegable { padding: .7rem 1rem; }
+.serie-separar-plegable > summary { cursor: pointer; display: flex; align-items: center; gap: .5rem; margin: 0; }
+.serie-separar-plegable[open] > summary { margin-bottom: .6rem; }
+
+/* Un texto que se cambia ahí mismo (el título de un capítulo) */
+.titulo-editable { cursor: text; border-bottom: 1px dashed transparent; }
+.titulo-editable:hover, .titulo-editable:focus-visible { border-bottom-color: var(--celeste-borde); outline: none; }
+.titulo-editable.recien-guardado { color: var(--verde); }
+.titulo-editando { display: inline-block; width: min(28rem, 100%); }
+.pagina-serie .serie-hero { margin-top: 0; gap: 1rem; align-items: center; }
+.pagina-serie .serie-hero-portada { width: 84px; }
+.pagina-serie .serie-hero-portada span { font-size: 1.6rem; }
+.pagina-serie .serie-hero .pagina-titulo { font-size: 1.8rem; }
+.pagina-serie .serie-datos .btn { white-space: nowrap; }
+
+/* ── Para revisar: los números en una tira, no en cuadros grandes ── */
+.pagina-revisar .revisar-estados { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0; }
+.pagina-revisar .revisar-estados > div {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .45rem;
+    padding: .3rem .7rem;
+    min-width: 0;
+    border-radius: 999px;
+}
+.pagina-revisar .revisar-estados dt { margin: 0; font-size: .72rem; }
+.pagina-revisar .revisar-estados dd { margin: 0; font-size: 1rem !important; }
+
+/* ── En el celular: las tablas de trabajo como tarjetas apiladas ── */
+@media (max-width: 767.98px) {
+    .problemas { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; scrollbar-width: thin; }
+    .tabla-compacta, .tabla-compacta tbody { display: block; }
+    .tabla-compacta thead { display: none; }
+    .tabla-compacta tr {
+        display: grid;
+        grid-template-columns: 2rem minmax(0, 1fr);
+        column-gap: .4rem;
+        padding: .55rem .7rem;
+        border-bottom: 1px solid rgba(59, 73, 75, .35);
+    }
+    .tabla-compacta tbody tr:last-child { border-bottom: 0; }
+    .tabla-compacta td { display: block; padding: .12rem 0; border: 0; grid-column: 2; min-width: 0 !important; }
+    .tabla-compacta td.col-elegir { grid-column: 1; grid-row: 1 / span 4; padding-top: .35rem; }
+    .tabla-compacta .col-senal { display: flex; align-items: baseline; gap: .5rem; }
+    .tabla-compacta .col-senal small { display: inline; }
+    .tabla-compacta .col-acciones { text-align: left; margin-left: -.4rem; }
+    .col-canal-mismo { padding-left: 0 !important; }
+    .col-problema-texto { display: block; margin: .15rem 0 0; }
+    .col-problema-aparato { max-width: none; white-space: normal; }
+}
