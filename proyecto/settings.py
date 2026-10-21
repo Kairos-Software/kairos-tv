@@ -112,6 +112,8 @@ NOMBRE_EMPRESA = os.environ.get('NOMBRE_EMPRESA', 'Kairos Software')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Páginas del panel y respuestas de la API comprimidas (no las descargas): core/compresion.py
+    'core.compresion.ComprimirMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -183,6 +185,9 @@ if 'test' in sys.argv[1:2]:
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
     # Modelos de prueba de herramientas (no existen en el sistema real)
     INSTALLED_APPS += ['herramientas.tests.app_pruebas']
+    # El catálogo de la app no se guarda armado (api/v1/catalogo.py): cada
+    # test cambia algo y lo vuelve a pedir enseguida
+    CATALOGO_APP_SEGUNDOS = 0
 
 
 # Internationalization

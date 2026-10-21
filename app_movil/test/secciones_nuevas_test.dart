@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'servidor_de_prueba.dart';
+
 Map<String, dynamic> _canal(int id, String nombre) => {
   'id': id,
   'nombre': nombre,
@@ -20,7 +22,7 @@ Map<String, dynamic> _canal(int id, String nombre) => {
 };
 
 /// Un servidor de mentira con Música (a demanda), Radio (en vivo) y Deportes (vacía).
-class _Servidor extends ApiCliente {
+class _Servidor extends ApiCliente with CrudoDesdeGet {
   _Servidor({this.viejo = false}) : super(urlBase: 'http://prueba/api/v1/');
 
   /// Un servidor de antes de las secciones nuevas: no tiene /secciones/.

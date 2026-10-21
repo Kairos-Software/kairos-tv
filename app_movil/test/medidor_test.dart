@@ -4,8 +4,10 @@ import 'package:app_movil/movil/datos.dart';
 import 'package:app_movil/movil/medidor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'servidor_de_prueba.dart';
+
 /// Un servidor de mentira: guarda lo que le mandan (o falla, si se pide).
-class _Servidor extends ApiCliente {
+class _Servidor extends ApiCliente with CrudoDesdeGet {
   _Servidor() : super(urlBase: 'http://prueba/api/v1/');
 
   final avisos = <Map<String, dynamic>>[];

@@ -5,11 +5,13 @@ import 'package:app_movil/movil/control_senal.dart';
 import 'package:app_movil/movil/datos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'servidor_de_prueba.dart';
+
 Canal _capitulo(int id, String nombre) =>
     Canal({'id': id, 'nombre': nombre, 'fuentes': <dynamic>[]}, categoria: 'SERIES | HBO', contenido: 'serie');
 
 /// Un servidor de mentira con una sola serie (Pocoyó), con o sin su portada.
-class _ServidorDeSeries extends ApiCliente {
+class _ServidorDeSeries extends ApiCliente with CrudoDesdeGet {
   _ServidorDeSeries({required this.conPortadas}) : super(urlBase: 'http://prueba/api/v1/');
 
   final bool conPortadas;

@@ -69,36 +69,22 @@ from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from canales import clasificar, estadisticas, imagenes, paginas, secciones
-from canales.consultas import agrupar_por_categoria, canales_disponibles, fuentes_usables, tipos_pedidos
+from canales import estadisticas, paginas, secciones
+from canales.consultas import fuentes_usables, tipos_pedidos
 from canales.models import Contenido, Fuente
 from canales.servicios import (CAMPOS_DEL_PROBLEMA, anotar_problema, registrar_estabilidad,
                                registrar_falla_en_aparato, reverificar_por_aviso)
 from canales.verificacion import verificar_url
 
-from .serializers import CanalSerializer
+from . import catalogo
 
 
 @api_view(['GET'])
 def lista(request):
+    """Armado rápido, comprimido y con huella (304 si la app ya lo tiene): ver catalogo.py."""
     contenido = request.query_params.get('contenido')
-    canales = list(canales_disponibles(tipos_pedidos(request.query_params.get('formatos')),
-                                       contenido if secciones.es_valida(contenido or '') else Contenido.VIVO))
-    contexto = {'request': request, 'logos': imagenes.logos_parejos(c.logo for c in canales)}
-    respuesta = {
-        'cantidad': len(canales),
-        'categorias': [
-            {
-                'id': categoria.pk if categoria else None,
-                'nombre': categoria.nombre if categoria else 'Otros',
-                'canales': CanalSerializer(del_grupo, many=True, context=contexto).data,
-            }
-            for categoria, del_grupo in agrupar_por_categoria(canales)
-        ],
-    }
-    if contenido == Contenido.SERIE:
-        respuesta['portadas'] = imagenes.portadas_de({clasificar.episodio(c.nombre)[0] for c in canales})
-    return Response(respuesta)
+    return catalogo.respuesta(request, tipos_pedidos(request.query_params.get('formatos')),
+                              contenido if secciones.es_valida(contenido or '') else Contenido.VIVO)
 
 
 @api_view(['GET'])

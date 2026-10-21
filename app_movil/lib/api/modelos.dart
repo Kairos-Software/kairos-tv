@@ -229,6 +229,9 @@ class CategoriaCanales {
           Canal(c as Map<String, dynamic>, categoria: '${json['nombre'] ?? ''}', contenido: contenido),
       ];
 
+  /// Con algunos de sus canales (lo que se ve en este aparato: Catalogo).
+  CategoriaCanales.con(this.nombre, this.canales);
+
   final String nombre;
   final List<Canal> canales;
 }

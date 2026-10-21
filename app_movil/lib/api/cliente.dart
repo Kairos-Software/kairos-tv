@@ -105,33 +105,38 @@ class ApiCliente {
     return filtrados.isEmpty ? uri : uri.replace(queryParameters: {...uri.queryParameters, ...filtrados});
   }
 
+  /// Un GET que devuelve la respuesta TAL CUAL llega (sin leer el JSON) y su
+  /// huella (el ETag del servidor). Es para el catálogo: se guarda así en el
+  /// aparato y se lee en otro hilo (movil/copia_catalogo.dart).
+  ///
+  /// Con [huella] (la del que ya se tiene) el servidor contesta 304 si no
+  /// cambió: entonces `bytes` es null y no se bajó nada.
+  Future<({List<int>? bytes, String huella})> getCrudo(
+    String ruta, {
+    Map<String, String>? parametros,
+    String huella = '',
+  }) async {
+    final respuesta = await _enviar(
+      'GET',
+      ruta,
+      parametros: parametros,
+      cabeceras: {if (huella.isNotEmpty) 'If-None-Match': huella},
+      // Un catálogo grande con internet lenta tarda más que una pantalla común
+      tiempoMaximo: const Duration(seconds: 40),
+    );
+    final nueva = respuesta.headers['etag'] ?? '';
+    if (respuesta.statusCode == 304) return (bytes: null, huella: nueva.isEmpty ? huella : nueva);
+    if (respuesta.statusCode >= 400) await _fallar(respuesta);
+    return (bytes: respuesta.bodyBytes, huella: nueva);
+  }
+
   Future<dynamic> _pedir(
     String metodo,
     String ruta, {
     Map<String, dynamic>? cuerpo,
     Map<String, String>? parametros,
   }) async {
-    final pedido = http.Request(metodo, direccion(ruta, parametros));
-    pedido.headers['Accept'] = 'application/json';
-    if (token != null) {
-      pedido.headers['Authorization'] = 'Bearer $token';
-    }
-    if (cuerpo != null) {
-      pedido.headers['Content-Type'] = 'application/json; charset=utf-8';
-      pedido.body = jsonEncode(cuerpo);
-    }
-
-    final http.Response respuesta;
-    try {
-      respuesta = await http.Response.fromStream(await _http.send(pedido).timeout(_tiempoMaximo));
-    } on TimeoutException {
-      throw _errorConexion('El servidor tardó demasiado en responder.');
-    } on SocketException {
-      throw _errorConexion('No se pudo conectar con el servidor.');
-    } on http.ClientException {
-      throw _errorConexion('No se pudo conectar con el servidor.');
-    }
-
+    final respuesta = await _enviar(metodo, ruta, cuerpo: cuerpo, parametros: parametros);
     if (respuesta.statusCode == 204) {
       return null;
     }
@@ -144,15 +149,62 @@ class ApiCliente {
     }
 
     if (respuesta.statusCode >= 400 || (datos == null && bytes.isNotEmpty)) {
-      final error = ApiError.desdeRespuesta(respuesta.statusCode, datos);
-      if (error.sesionVencida && token != null) {
-        alPerderSesion?.call();
-      } else if (error.sinServicio) {
-        alPerderServicio?.call(error);
-      }
-      throw error;
+      _avisarYFallar(respuesta.statusCode, datos);
     }
     return datos;
+  }
+
+  /// Arma el pedido (con el token) y lo manda. Los problemas de conexión salen como [ApiError].
+  Future<http.Response> _enviar(
+    String metodo,
+    String ruta, {
+    Map<String, dynamic>? cuerpo,
+    Map<String, String>? parametros,
+    Map<String, String> cabeceras = const {},
+    Duration tiempoMaximo = _tiempoMaximo,
+  }) async {
+    final pedido = http.Request(metodo, direccion(ruta, parametros));
+    pedido.headers['Accept'] = 'application/json';
+    pedido.headers.addAll(cabeceras);
+    if (token != null) {
+      pedido.headers['Authorization'] = 'Bearer $token';
+    }
+    if (cuerpo != null) {
+      pedido.headers['Content-Type'] = 'application/json; charset=utf-8';
+      pedido.body = jsonEncode(cuerpo);
+    }
+
+    try {
+      return await http.Response.fromStream(await _http.send(pedido).timeout(tiempoMaximo));
+    } on TimeoutException {
+      throw _errorConexion('El servidor tardó demasiado en responder.');
+    } on SocketException {
+      throw _errorConexion('No se pudo conectar con el servidor.');
+    } on http.ClientException {
+      throw _errorConexion('No se pudo conectar con el servidor.');
+    }
+  }
+
+  /// Una respuesta de error (4xx, 5xx): lee el detalle y lo tira como [ApiError].
+  Future<Never> _fallar(http.Response respuesta) async {
+    Object? datos;
+    try {
+      datos = await _leerJson(respuesta.bodyBytes);
+    } on FormatException {
+      datos = null;
+    }
+    _avisarYFallar(respuesta.statusCode, datos);
+  }
+
+  /// Avisa si se perdió la sesión o el servicio, y tira el error.
+  Never _avisarYFallar(int status, Object? datos) {
+    final error = ApiError.desdeRespuesta(status, datos);
+    if (error.sesionVencida && token != null) {
+      alPerderSesion?.call();
+    } else if (error.sinServicio) {
+      alPerderServicio?.call(error);
+    }
+    throw error;
   }
 
   /// Las respuestas más grandes que esto (el catálogo: miles de películas y

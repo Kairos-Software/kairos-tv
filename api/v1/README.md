@@ -14,6 +14,7 @@ rompería las apps ya instaladas, se crea `v2/` al lado y las dos conviven.
 | `usuarios.py` | Gestión de usuarios. |
 | `notificaciones.py` | Mis notificaciones. |
 | `canales.py` | Los canales de TV para la app. |
+| `catalogo.py` | El catálogo de `GET /api/v1/canales/` **armado rápido**: pide a la base solo las columnas que van a la app (sin el serializador: con 5.000 películas tardaba 2 s por pedido), lo guarda armado y comprimido 1 minuto (`CATALOGO_APP_SEGUNDOS`; en los tests, 0) para que los aparatos que lo piden juntos no lo armen de nuevo, lo manda comprimido (gzip: entre 5 y 20 veces menos datos) y con su huella (`ETag`): si la app ya lo tiene (`If-None-Match`), contesta 304 sin mandar nada. Manda EXACTAMENTE lo mismo que el serializador de antes (lo prueba `api/tests/test_catalogo_rapido.py`): las apps viejas lo leen igual. |
 | `app.py` | La última versión publicada de la app Android (para el aviso "Hay una versión nueva"). |
 | `cliente.py` | La app de los **clientes** (los que miran la TV): entrar con su código, su estado ("señal") y cerrar sesión. |
 

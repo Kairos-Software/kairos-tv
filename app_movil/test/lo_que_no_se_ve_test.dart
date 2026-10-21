@@ -8,8 +8,10 @@ import 'package:app_movil/movil/datos.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'servidor_de_prueba.dart';
+
 /// Un servidor de mentira: Next viene en H.265 de 10 bits, Canal 26 en H.264.
-class _Servidor extends ApiCliente {
+class _Servidor extends ApiCliente with CrudoDesdeGet {
   _Servidor() : super(urlBase: 'http://prueba/api/v1/');
 
   @override

@@ -10,8 +10,10 @@ import 'package:app_movil/aparato.dart';
 import 'package:app_movil/movil/datos.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'servidor_de_prueba.dart';
+
 /// Un servidor de prueba que hace lo mismo que biblioteca/servicios.py: suma los cambios.
-class _Servidor extends ApiCliente {
+class _Servidor extends ApiCliente with CrudoDesdeGet {
   _Servidor() : super(urlBase: 'http://prueba/api/v1/');
 
   final Set<String> favoritos = {};

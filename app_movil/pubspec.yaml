@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.36+39
+version: 1.2.37+40
 
 environment:
   sdk: ^3.13.5
@@ -47,6 +47,9 @@ dependencies:
   webview_flutter_android: ^4.14.1
   flutter_local_notifications: ^22.3.2
   timezone: ^0.11.2
+  # La carpeta de la app donde se guardan el catálogo y las imágenes (movil/copia_catalogo.dart,
+  # widgets/imagen_guardada.dart). Ya venía adentro (lo usan otros paquetes): no suma peso.
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

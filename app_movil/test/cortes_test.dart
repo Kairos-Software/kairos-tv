@@ -13,6 +13,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
+import 'servidor_de_prueba.dart';
+
 class _VideoDeMentira extends VideoPlayerPlatform {
   var _proximo = 0;
   final _eventos = <int, StreamController<VideoEvent>>{};
@@ -92,7 +94,7 @@ class _VideoDeMentira extends VideoPlayerPlatform {
 }
 
 /// No habla con ningún servidor: anota lo que se le avisaría.
-class _ApiDePrueba extends ApiCliente {
+class _ApiDePrueba extends ApiCliente with CrudoDesdeGet {
   _ApiDePrueba() : super(urlBase: 'http://prueba/api/v1/');
 
   final avisos = <String>[];

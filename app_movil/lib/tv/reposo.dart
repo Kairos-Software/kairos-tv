@@ -50,6 +50,7 @@ import '../api/modelos.dart';
 import '../marca.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
+import '../widgets/imagen_guardada.dart';
 import 'escenario.dart';
 
 const _cadaCuanto = Duration(seconds: 12);
@@ -264,7 +265,8 @@ class PantallaReposoTv extends StatefulWidget {
   final ImageProvider Function(String url) imagenDe;
 
   /// La imagen ya achicada a [_anchoDecodificado] (o menos, si es más chica).
-  static ImageProvider imagenDeInternet(String url) => ResizeImage(NetworkImage(url), width: _anchoDecodificado);
+  static ImageProvider imagenDeInternet(String url) =>
+      ResizeImage(ImagenGuardada(url), width: _anchoDecodificado); // guardada en el aparato
 
   @override
   State<PantallaReposoTv> createState() => _PantallaReposoTvState();

@@ -16,6 +16,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+
+import '../widgets/imagen_guardada.dart';
+
 /// El color de la placa: claro, sin llegar al blanco puro (encandila en la TV).
 const colorPlacaDeLogo = Color(0xFFE6EBEE);
 
@@ -113,8 +116,9 @@ class LogosOscuros {
   /// Baja la copia chiquita y la mide. null = no se pudo (sin internet): se reintenta la próxima vez.
   static Future<double?> _medirAhora(String url) async {
     final listo = Completer<ui.Image?>();
+    // La misma imagen guardada que se muestra (no se baja dos veces)
     final flujo = ResizeImage(
-      NetworkImage(url),
+      ImagenGuardada(url),
       width: 32,
       height: 32,
       policy: ResizeImagePolicy.fit,

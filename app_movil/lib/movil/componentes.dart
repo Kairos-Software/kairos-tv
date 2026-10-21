@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../api/modelos.dart';
 import '../tele/enlace.dart';
+import '../widgets/imagen_guardada.dart';
 import 'datos.dart';
 import 'estilo.dart';
 import 'logo_legible.dart';
@@ -48,13 +49,21 @@ class Imagen extends StatelessWidget {
         ),
       ),
     );
-    final imagen = Image.network(
-      url,
-      fit: ajuste,
-      width: double.infinity,
-      height: double.infinity,
-      errorBuilder: (_, _, _) => iniciales,
-      frameBuilder: (_, imagen, cuadro, sincronica) => sincronica || cuadro != null ? imagen : iniciales,
+    // Guardada en el aparato y armada del tamaño de su lugar (widgets/imagen_guardada.dart)
+    final imagen = LayoutBuilder(
+      builder: (context, lugar) => Image(
+        image: imagenAlTamanio(
+          url,
+          lugar: lugar.biggest,
+          pixeles: MediaQuery.devicePixelRatioOf(context),
+          cubrir: ajuste != BoxFit.contain,
+        ),
+        fit: ajuste,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, _, _) => iniciales,
+        frameBuilder: (_, imagen, cuadro, sincronica) => sincronica || cuadro != null ? imagen : iniciales,
+      ),
     );
     return ColoredBox(
       color: fondo,

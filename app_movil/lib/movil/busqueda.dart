@@ -26,15 +26,24 @@ enum QueBuscar {
 
 /// "Notícias Ñandú" -> "noticias nandu".
 String sinTildes(String texto) {
-  const conTilde = 'áàäâãéèëêíìïîóòöôõúùüûñç';
-  const sinTilde = 'aaaaaeeeeiiiiooooouuuunc';
-  final buffer = StringBuffer();
-  for (final letra in texto.toLowerCase().split('')) {
-    final i = conTilde.indexOf(letra);
-    buffer.write(i >= 0 ? sinTilde[i] : letra);
-  }
-  return buffer.toString();
+  final minusculas = texto.toLowerCase();
+  // Casi todos los nombres no tienen tildes: se devuelven tal cual (sin armar otro texto)
+  if (!minusculas.codeUnits.any(_sinTilde.containsKey)) return minusculas;
+  return String.fromCharCodes([for (final letra in minusculas.codeUnits) _sinTilde[letra] ?? letra]);
 }
+
+/// Cada letra con tilde -> la misma sin tilde.
+final Map<int, int> _sinTilde = {
+  for (final (i, letra) in 'áàäâãéèëêíìïîóòöôõúùüûñç'.codeUnits.indexed) letra: 'aaaaaeeeeiiiiooooouuuunc'.codeUnits[i],
+};
+
+/// El nombre de cada canal, película o serie ya pasado por [sinTildes] (con un
+/// espacio adelante, para buscar "empieza con"). Se calcula la primera vez que
+/// se busca y queda: antes se volvía a calcular con cada letra que se escribía,
+/// para miles de películas y capítulos (en la TV se notaba al escribir).
+final Expando<String> _simple = Expando('nombre simple');
+
+String _nombreSimple(Object elemento, String nombre) => _simple[elemento] ??= ' ${sinTildes(nombre)}';
 
 /// Lo que se encontró, por tipo (cada lista con [maximo] como mucho).
 class Encontrado {
@@ -75,7 +84,7 @@ Encontrado buscarEnCatalogo(Catalogo catalogo, String texto, {int maximo = 40, b
     final empiezan = <T>[];
     final contienen = <T>[];
     for (final elemento in lista) {
-      final simple = ' ${sinTildes(nombre(elemento))}';
+      final simple = _nombreSimple(elemento as Object, nombre(elemento));
       if (simple.contains(' $buscado') || (tambien?.call(elemento) ?? false)) {
         empiezan.add(elemento);
         if (empiezan.length >= maximo) break;
@@ -86,7 +95,11 @@ Encontrado buscarEnCatalogo(Catalogo catalogo, String texto, {int maximo = 40, b
     return [...empiezan, ...contienen].take(maximo).toList();
   }
 
-  bool deLaCategoria(Canal canal) => ' ${sinTildes(categoriaLegible(canal.categoria))}'.contains(' $buscado');
+  // Hay pocas categorías y muchos canales: cada una se pasa a "simple" una sola vez
+  final categorias = <String, String>{};
+  bool deLaCategoria(Canal canal) => categorias
+      .putIfAbsent(canal.categoria, () => ' ${sinTildes(categoriaLegible(canal.categoria))}')
+      .contains(' $buscado');
 
   return Encontrado(
     canales: filtrar(catalogo.canales, (c) => c.nombre, conNumeros ? (c) => catalogo.numeroDe(c) == buscado : null),

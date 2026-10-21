@@ -19,6 +19,7 @@ import '../api/modelos.dart';
 import '../aparato.dart';
 import 'calidad_youtube.dart';
 import 'control_senal.dart';
+import 'copia_catalogo.dart';
 import 'medidor.dart';
 
 // ── Series ─────────────────────────────────────────────────────────
@@ -71,6 +72,20 @@ class Serie {
 
   /// Para "Mi lista": las series se guardan por nombre (sus capítulos tienen cada uno su id).
   String get clave => 's:$nombre';
+
+  /// Una copia con solo los capítulos que cumplen [queda] (sin las temporadas
+  /// que quedan vacías). Esta no se toca: es la que mandó el servidor.
+  Serie soloCon(bool Function(Canal) queda) {
+    final copia = Serie(nombre: nombre, categoria: categoria, portada: portada)..numerada = numerada;
+    for (final MapEntry(key: numero, value: capitulos) in temporadas.entries) {
+      final quedan = [
+        for (final e in capitulos)
+          if (queda(e.canal)) e,
+      ];
+      if (quedan.isNotEmpty) copia.temporadas[numero] = quedan;
+    }
+    return copia;
+  }
 }
 
 // "Show S01 E02", "Show - S1E2 - Título", "Show 1x02"
@@ -179,12 +194,18 @@ class SeccionNueva {
 /// Solo trae lo que ESTE aparato puede ver ([_seVe]): saca lo que tiene un
 /// códec que el aparato no muestra, lo que ya falló acá ([NoAnda]) y las
 /// series a medias ([Serie.completa]).
+///
+/// Queda guardado en el aparato (movil/copia_catalogo.dart): al abrir la app
+/// se muestra enseguida lo guardado y por detrás se pregunta si cambió. Lo que
+/// mandó el servidor queda tal cual en [_partes] (sin filtrar): si no cambió,
+/// no se baja ni se lee nada.
 class Catalogo extends ChangeNotifier {
-  Catalogo(this.api) {
+  Catalogo(this.api) : _copia = CopiaCatalogo(api.urlBase) {
     NoAnda.cambios.addListener(_sacarLoQueNoAnda);
   }
 
   final ApiCliente api;
+  final CopiaCatalogo _copia;
 
   static bool _seVe(Canal canal) => canal.fuentesReproducibles.isNotEmpty && !NoAnda.oculto(canal.id);
 
@@ -219,12 +240,36 @@ class Catalogo extends ChangeNotifier {
     super.dispose();
   }
 
-  List<CategoriaCanales> categoriasEnVivo = [];
-  List<Canal> peliculas = [];
-  List<Serie> series = [];
+  // Lo que se muestra. Al cambiar una lista se olvidan los índices ([_indices]).
+  List<CategoriaCanales> _categoriasEnVivo = [];
+  List<Canal> _peliculas = [];
+  List<Serie> _series = [];
+  List<SeccionNueva> _seccionesNuevas = [];
+
+  List<CategoriaCanales> get categoriasEnVivo => _categoriasEnVivo;
+  set categoriasEnVivo(List<CategoriaCanales> valor) {
+    _categoriasEnVivo = valor;
+    _olvidarIndices();
+  }
+
+  List<Canal> get peliculas => _peliculas;
+  set peliculas(List<Canal> valor) {
+    _peliculas = valor;
+    _olvidarIndices();
+  }
+
+  List<Serie> get series => _series;
+  set series(List<Serie> valor) {
+    _series = valor;
+    _olvidarIndices();
+  }
 
   /// Las secciones creadas en el panel que tienen algo para ver acá, en el orden del menú.
-  List<SeccionNueva> seccionesNuevas = [];
+  List<SeccionNueva> get seccionesNuevas => _seccionesNuevas;
+  set seccionesNuevas(List<SeccionNueva> valor) {
+    _seccionesNuevas = valor;
+    _olvidarIndices();
+  }
 
   /// Lo de las secciones nuevas "en vivo" (radios...) y "a demanda" (música...), para favoritos y búsquedas.
   List<Canal> get _vivosNuevos => [for (final s in seccionesNuevas.where((s) => s.enVivo)) ...s.canales];
@@ -234,6 +279,13 @@ class Catalogo extends ChangeNotifier {
   bool cargando = false;
   bool cargado = false;
   Object? error;
+
+  /// Lo que mandó el servidor de cada parte ("vivo", "pelicula", "serie" y
+  /// `s:clave` de cada sección nueva), con su huella, sin filtrar.
+  final Map<String, ({String huella, ParteCatalogo parte})> _partes = {};
+
+  /// Las secciones nuevas como las mandó el servidor (sin sus canales).
+  List<SeccionNueva> _definiciones = [];
 
   /// Todo lo que mandó el servidor, antes de sacar lo que este aparato no ve.
   List<Canal> _recibidos = [];
@@ -259,7 +311,42 @@ class Catalogo extends ChangeNotifier {
     return 'No tiene una señal que la app pueda abrir.';
   }
 
-  List<Canal> get canales => [for (final c in categoriasEnVivo) ...c.canales];
+  /// Todos los canales en vivo, en el orden de la grilla.
+  List<Canal> get canales => _canales ??= [for (final c in categoriasEnVivo) ...c.canales];
+
+  // ── Índices: para no recorrer miles de películas y capítulos cada vez ──
+  List<Canal>? _canales;
+  Map<int, Canal>? _porId;
+  Map<int, Serie>? _serieDelCapitulo;
+  Map<String, Serie>? _seriePorNombre;
+
+  void _olvidarIndices() {
+    _canales = null;
+    _porId = null;
+    _serieDelCapitulo = null;
+    _seriePorNombre = null;
+  }
+
+  /// Se arman la primera vez que se buscan (y se olvidan cuando cambia una lista).
+  void _indices() {
+    // En el mismo orden en que se buscaba antes: en vivo, películas, secciones nuevas, capítulos
+    final porId = <int, Canal>{};
+    for (final canal in [...canales, ...peliculas, for (final s in seccionesNuevas) ...s.canales]) {
+      porId.putIfAbsent(canal.id, () => canal);
+    }
+    final serieDelCapitulo = <int, Serie>{};
+    final seriePorNombre = <String, Serie>{};
+    for (final serie in series) {
+      seriePorNombre.putIfAbsent(serie.nombre, () => serie);
+      for (final episodio in serie.episodios) {
+        porId.putIfAbsent(episodio.canal.id, () => episodio.canal);
+        serieDelCapitulo.putIfAbsent(episodio.canal.id, () => serie);
+      }
+    }
+    _porId = porId;
+    _serieDelCapitulo = serieDelCapitulo;
+    _seriePorNombre = seriePorNombre;
+  }
 
   /// El número de cada canal en vivo: el que trae la lista, o si no tiene, su
   /// lugar en la grilla (1, 2, 3...). Con él se cambia de canal escribiendo el
@@ -303,100 +390,46 @@ class Catalogo extends ChangeNotifier {
   List<Canal> peliculasFavoritas(Biblioteca biblioteca) => _deLaLista(biblioteca, [...peliculas, ..._aDemandaNuevos]);
 
   List<Serie> seriesFavoritas(Biblioteca biblioteca) {
-    final lista = biblioteca.miLista.toList();
-    return series.where((s) => lista.contains(s.clave)).toList()
-      ..sort((a, b) => lista.indexOf(a.clave).compareTo(lista.indexOf(b.clave)));
+    final lugar = _lugarEnLaLista(biblioteca);
+    return series.where((s) => lugar.containsKey(s.clave)).toList()
+      ..sort((a, b) => lugar[a.clave]!.compareTo(lugar[b.clave]!));
   }
 
   List<Canal> _deLaLista(Biblioteca biblioteca, List<Canal> todos) {
-    final lista = biblioteca.miLista.toList();
-    return todos.where((c) => lista.contains(Biblioteca.claveDe(c))).toList()
-      ..sort((a, b) => lista.indexOf(Biblioteca.claveDe(a)).compareTo(lista.indexOf(Biblioteca.claveDe(b))));
+    final lugar = _lugarEnLaLista(biblioteca);
+    return todos.where((c) => lugar.containsKey(Biblioteca.claveDe(c))).toList()
+      ..sort((a, b) => lugar[Biblioteca.claveDe(a)]!.compareTo(lugar[Biblioteca.claveDe(b)]!));
   }
 
+  /// {clave: lugar en Mi lista}: buscar en un Map es al instante (en la lista había que recorrerla).
+  static Map<String, int> _lugarEnLaLista(Biblioteca biblioteca) => {
+    for (final (lugar, clave) in biblioteca.miLista.indexed) clave: lugar,
+  };
+
   /// Los últimos canales en vivo vistos en este aparato (el más reciente primero).
-  List<Canal> canalesRecientes(Biblioteca biblioteca) => [
-    for (final id in biblioteca.recientes) ?canales.where((c) => c.id == id).firstOrNull,
-  ];
+  List<Canal> canalesRecientes(Biblioteca biblioteca) {
+    final enVivo = {for (final c in canales) c.id: c};
+    return [for (final id in biblioteca.recientes) ?enVivo[id]];
+  }
 
   Future<void> cargar() async {
     if (cargando) return;
     cargando = true;
     error = null;
     notifyListeners();
-    final formatos = FuenteCanal.formatosQueReproduce.join(',');
-    // Las portadas propias de las series (vienen con ?contenido=serie; un servidor viejo no las manda)
-    var portadas = <String, String>{};
-    Future<List<CategoriaCanales>> pedir(String contenido) async {
-      final datos =
-          await api.get('canales/', parametros: {'formatos': formatos, 'contenido': contenido}) as Map<String, dynamic>;
-      if (datos['portadas'] case final Map<String, dynamic> recibidas) {
-        portadas = {for (final p in recibidas.entries) p.key: '${p.value}'};
-      }
-      return [
-        for (final c in datos['categorias'] as List) CategoriaCanales(c as Map<String, dynamic>, contenido: contenido),
-      ];
-    }
-
-    // Las secciones nuevas: la lista y lo de cada una. Un servidor viejo no
-    // tiene /secciones/: entonces no hay ninguna (no es un error).
-    Future<List<SeccionNueva>> pedirSeccionesNuevas() async {
-      final List<SeccionNueva> nuevas;
-      try {
-        final datos = await api.get('canales/secciones/') as Map<String, dynamic>;
-        nuevas = [for (final s in datos['secciones'] as List) SeccionNueva.desdeJson(s as Map<String, dynamic>)];
-      } catch (_) {
-        return [];
-      }
-      await Future.wait([
-        for (final seccion in nuevas)
-          // Si una no llega, queda vacía (no se muestra) y el resto del catálogo sigue
-          api
-              .get('canales/', parametros: {'formatos': formatos, 'contenido': seccion.clave})
-              .then((datos) {
-                seccion.categorias = [
-                  for (final c in (datos as Map<String, dynamic>)['categorias'] as List)
-                    CategoriaCanales(c as Map<String, dynamic>, contenido: seccion.forma),
-                ];
-              })
-              .catchError((_) {}),
-      ]);
-      return nuevas;
-    }
-
     try {
-      final resultados = await Future.wait([
-        pedir('vivo'),
-        pedir('pelicula'),
-        pedir('serie'),
-        NoAnda.cargar(),
-        pedirSeccionesNuevas(),
-        FuentePreferida.cargar(),
-        CalidadYoutube.cargar(),
-      ]);
-      final vivo = resultados[0] as List<CategoriaCanales>;
-      _recibidos = [
-        for (final r in [vivo, resultados[1], resultados[2]])
-          for (final c in r as List<CategoriaCanales>) ...c.canales,
-        for (final seccion in resultados[4] as List<SeccionNueva>) ...seccion.canales,
-      ];
-      for (final categoria in vivo) {
-        categoria.canales.retainWhere(_seVe);
+      await Future.wait([NoAnda.cargar(), FuentePreferida.cargar(), CalidadYoutube.cargar()]);
+      // La primera vez: lo guardado en el aparato, para mostrar algo enseguida
+      if (!cargado && await _abrirLoGuardado()) {
+        _aplicar();
+        cargado = true;
+        notifyListeners();
       }
-      categoriasEnVivo = vivo.where((c) => c.canales.isNotEmpty).toList();
-      peliculas = [for (final c in resultados[1] as List<CategoriaCanales>) ...c.canales.where(_seVe)];
-      series = agruparSeries([
-        for (final c in resultados[2] as List<CategoriaCanales>) ...c.canales.where(_seVe),
-      ], portadas: portadas).where((s) => s.completa).toList();
-      final nuevas = resultados[4] as List<SeccionNueva>;
-      for (final seccion in nuevas) {
-        for (final categoria in seccion.categorias) {
-          categoria.canales.retainWhere(_seVe);
-        }
-        seccion.categorias = seccion.categorias.where((c) => c.canales.isNotEmpty).toList();
-      }
-      seccionesNuevas = nuevas.where((s) => s.canales.isNotEmpty).toList();
-      _numerar();
+      await _traerDelServidor();
+      // Siempre se vuelve a filtrar (es rápido): lo que se volvió a mostrar en
+      // Mi cuenta o "Probar igual lo que quizá no lea" aparecen aunque el
+      // servidor no haya cambiado nada
+      _aplicar();
       cargado = true;
     } catch (e) {
       error = e;
@@ -406,41 +439,168 @@ class Catalogo extends ChangeNotifier {
     }
   }
 
+  /// Lee lo guardado en el aparato (en otro hilo). False si no hay (o le falta una parte).
+  Future<bool> _abrirLoGuardado() async {
+    final guardadas = await Future.wait([
+      for (final p in ['vivo', 'pelicula', 'serie', 'secciones']) _copia.leer(p),
+    ]);
+    if (guardadas.any((g) => g == null)) return false;
+    try {
+      final definiciones = _leerSecciones(guardadas[3]!.bytes);
+      final deSecciones = await Future.wait([for (final s in definiciones) _copia.leer('s:${s.clave}')]);
+      final leidas = await Future.wait([
+        leerParteAparte(guardadas[0]!.bytes, 'vivo'),
+        leerParteAparte(guardadas[1]!.bytes, 'pelicula'),
+        leerParteAparte(guardadas[2]!.bytes, 'serie'),
+        for (final (i, s) in definiciones.indexed)
+          if (deSecciones[i] case final guardada?) leerParteAparte(guardada.bytes, s.forma),
+      ]);
+      for (final (i, clave) in ['vivo', 'pelicula', 'serie'].indexed) {
+        _partes[clave] = (huella: guardadas[i]!.huella, parte: leidas[i]);
+      }
+      var siguiente = 3;
+      for (final (i, s) in definiciones.indexed) {
+        if (deSecciones[i] case final guardada?) {
+          _partes['s:${s.clave}'] = (huella: guardada.huella, parte: leidas[siguiente++]);
+        }
+      }
+      _definiciones = definiciones;
+      return true;
+    } catch (_) {
+      // Una copia rota (o de otra versión): se baja de nuevo
+      _partes.clear();
+      return false;
+    }
+  }
+
+  static List<SeccionNueva> _leerSecciones(List<int> bytes) {
+    final datos = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+    return [for (final s in datos['secciones'] as List) SeccionNueva.desdeJson(s as Map<String, dynamic>)];
+  }
+
+  /// Le pregunta al servidor por cada parte (con su huella). True si algo cambió.
+  Future<bool> _traerDelServidor() async {
+    final formatos = FuenteCanal.formatosQueReproduce.join(',');
+
+    // Una parte: si no cambió (304) queda la que había; si cambió, se lee en otro hilo y se guarda
+    Future<bool> traer(String clave, String contenido, String forma) async {
+      final anterior = _partes[clave];
+      final llegado = await api.getCrudo(
+        'canales/',
+        parametros: {'formatos': formatos, 'contenido': contenido},
+        huella: anterior?.huella ?? '',
+      );
+      final bytes = llegado.bytes;
+      if (bytes == null) {
+        if (anterior != null) return false;
+        throw ApiError(status: 304, codigo: 'respuesta_invalida', detalle: 'El servidor respondió algo inesperado.');
+      }
+      _partes[clave] = (huella: llegado.huella, parte: await leerParteAparte(bytes, forma));
+      await _copia.guardar(clave, bytes, llegado.huella);
+      return true;
+    }
+
+    // Las secciones nuevas: la lista y lo de cada una. Un servidor viejo no
+    // tiene /secciones/: entonces no hay ninguna (no es un error).
+    Future<bool> traerSeccionesNuevas() async {
+      final List<SeccionNueva> nuevas;
+      final List<int> bytes;
+      try {
+        bytes = (await api.getCrudo('canales/secciones/')).bytes ?? const [];
+        nuevas = _leerSecciones(bytes);
+      } catch (_) {
+        final habia = _definiciones.isNotEmpty;
+        _definiciones = [];
+        _partes.removeWhere((clave, _) => clave.startsWith('s:'));
+        return habia;
+      }
+      String forma(List<SeccionNueva> secciones) => jsonEncode([
+        for (final s in secciones) [s.clave, s.nombre, s.forma, s.icono],
+      ]);
+      var cambio = forma(nuevas) != forma(_definiciones);
+      _definiciones = nuevas;
+      await _copia.guardar('secciones', bytes, '');
+      // Las que ya no están
+      final siguen = {for (final s in nuevas) 's:${s.clave}'};
+      for (final clave in _partes.keys.where((c) => c.startsWith('s:') && !siguen.contains(c)).toList()) {
+        _partes.remove(clave);
+        unawaited(_copia.borrar(clave));
+        cambio = true;
+      }
+      final cambiadas = await Future.wait([
+        for (final seccion in nuevas)
+          // Si una no llega, queda la que había (o vacía: no se muestra) y el resto del catálogo sigue
+          traer('s:${seccion.clave}', seccion.clave, seccion.forma).catchError((_) => false),
+      ]);
+      return cambio || cambiadas.contains(true);
+    }
+
+    final cambios = await Future.wait([
+      traer('vivo', 'vivo', 'vivo'),
+      traer('pelicula', 'pelicula', 'pelicula'),
+      traer('serie', 'serie', 'serie'),
+      traerSeccionesNuevas(),
+    ]);
+    return cambios.contains(true);
+  }
+
+  /// Arma lo que se muestra a partir de lo que mandó el servidor ([_partes]),
+  /// sacando lo que este aparato no ve. No toca [_partes]: arma listas nuevas.
+  void _aplicar() {
+    List<CategoriaCanales> filtrar(List<CategoriaCanales> categorias) => [
+      for (final categoria in categorias)
+        if (categoria.canales.where(_seVe).toList() case final quedan when quedan.isNotEmpty)
+          CategoriaCanales.con(categoria.nombre, quedan),
+    ];
+
+    final vivo = _partes['vivo']?.parte;
+    final pelicula = _partes['pelicula']?.parte;
+    final serie = _partes['serie']?.parte;
+    final secciones = [for (final s in _definiciones) (s, _partes['s:${s.clave}']?.parte)];
+    _recibidos = [
+      ...?vivo?.canales,
+      ...?pelicula?.canales,
+      ...?serie?.canales,
+      for (final (_, parte) in secciones) ...?parte?.canales,
+    ];
+    categoriasEnVivo = filtrar(vivo?.categorias ?? const []);
+    peliculas = [for (final c in pelicula?.categorias ?? const <CategoriaCanales>[]) ...c.canales.where(_seVe)];
+    series = [
+      for (final s in serie?.series ?? const <Serie>[])
+        if (s.soloCon(_seVe) case final quedan when quedan.completa) quedan,
+    ];
+    seccionesNuevas = [
+      for (final (definicion, parte) in secciones)
+        if (filtrar(parte?.categorias ?? const []) case final categorias when categorias.isNotEmpty)
+          SeccionNueva(
+            clave: definicion.clave,
+            nombre: definicion.nombre,
+            forma: definicion.forma,
+            icono: definicion.icono,
+          )..categorias = categorias,
+    ];
+    _numerar();
+  }
+
   Canal? canalPorId(int id) {
-    for (final canal in canales) {
-      if (canal.id == id) return canal;
-    }
-    for (final pelicula in peliculas) {
-      if (pelicula.id == id) return pelicula;
-    }
-    for (final seccion in seccionesNuevas) {
-      for (final canal in seccion.canales) {
-        if (canal.id == id) return canal;
-      }
-    }
-    for (final serie in series) {
-      for (final episodio in serie.episodios) {
-        if (episodio.canal.id == id) return episodio.canal;
-      }
-    }
-    return null;
+    if (_porId == null) _indices();
+    return _porId![id];
   }
 
   Serie? serieDe(Canal capitulo) {
-    for (final serie in series) {
-      if (serie.episodios.any((e) => e.canal.id == capitulo.id)) return serie;
-    }
-    return null;
+    if (_serieDelCapitulo == null) _indices();
+    return _serieDelCapitulo![capitulo.id];
   }
 
   SeccionNueva? seccionNueva(String clave) => seccionesNuevas.where((s) => s.clave == clave).firstOrNull;
 
   Serie? seriePorNombre(String nombre) {
-    for (final serie in series) {
-      if (serie.nombre == nombre) return serie;
-    }
-    return null;
+    if (_seriePorNombre == null) _indices();
+    return _seriePorNombre![nombre];
   }
+
+  /// Al cerrar sesión: que no quede el catálogo guardado en el aparato.
+  static Future<void> olvidarLoGuardado() => CopiaCatalogo.borrarTodo();
 }
 
 // ── Lo que no anda en este aparato ─────────────────────────────────

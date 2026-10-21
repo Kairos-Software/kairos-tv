@@ -19,6 +19,7 @@ import 'api/cliente.dart';
 import 'aparato.dart';
 import 'api/modelos.dart';
 import 'config.dart';
+import 'movil/copia_catalogo.dart';
 
 enum EstadoSesion { cargando, sinConexion, sinSesion, sinServicio, conSesion }
 
@@ -217,6 +218,8 @@ class Sesion extends ChangeNotifier {
     perfil = null;
     cliente = null;
     await _almacen.delete(key: _claveToken);
+    // El catálogo guardado tiene las direcciones de los videos: no queda en el aparato
+    unawaited(CopiaCatalogo.borrarTodo());
     _cambiar(EstadoSesion.sinSesion);
     alSalir?.call();
   }

@@ -17,8 +17,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'servidor_de_prueba.dart';
+
 /// Un servidor de mentira con dos canales en vivo.
-class _Servidor extends ApiCliente {
+class _Servidor extends ApiCliente with CrudoDesdeGet {
   _Servidor() : super(urlBase: 'http://prueba/api/v1/');
 
   @override
