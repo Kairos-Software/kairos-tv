@@ -55,9 +55,10 @@ import 'medidor.dart';
 class ControlSenal extends ChangeNotifier {
   ControlSenal(this.api);
 
-  /// Cuánto se espera a que arranque. Una película o capítulo es un archivo
-  /// grande y tarda más en empezar que un canal en vivo: hay servidores que
-  /// tardan cerca de un minuto en mandar lo primero (VLC también espera).
+  /// Cuánto se espera a que arranque. Una película o capítulo, más que un canal:
+  /// hay servidores saturados que no atienden algunos intentos de conexión
+  /// (medido: 3 de cada 7) y el reproductor reintenta solo, enseguida
+  /// (paquetes/video_player_android: KairosReintentoRapido); esto es el total.
   static const _esperaVivo = Duration(seconds: 15);
   static const _esperaArchivo = Duration(seconds: 90);
 
@@ -240,16 +241,16 @@ class ControlSenal extends ChangeNotifier {
   bool get cargando => error == null && (video == null || video!.value.isBuffering);
 
   /// Una película o capítulo que tarda en arrancar: el texto para mostrar debajo de la
-  /// ruedita (que no parezca colgada), con los segundos que van. Hay servidores que
-  /// tardan cerca de un minuto en preparar el archivo (VLC también espera). null si no
-  /// hace falta: en vivo, o si todavía no pasaron [_esperaParaAvisar].
+  /// ruedita (que no parezca colgada), con los segundos que van. Pasa con servidores
+  /// saturados que no atienden algunos intentos: el reproductor sigue intentando solo.
+  /// null si no hace falta: en vivo, o si todavía no pasaron [_esperaParaAvisar].
   String? avisoDeEspera([DateTime? ahora]) {
     final desde = _esperandoDesde;
     if (!cargando || _enVivo || canal == null || desde == null) return null;
     final van = (ahora ?? DateTime.now()).difference(desde);
     if (van < _esperaParaAvisar) return null;
-    return 'El servidor está preparando el video: hay películas que tardan hasta un minuto en '
-        'empezar. Van ${van.inSeconds} s.';
+    return 'El servidor de esta película está tardando en contestar. La app sigue intentando '
+        'sola. Van ${van.inSeconds} s.';
   }
 
   bool get silenciado => _volumen == 0;

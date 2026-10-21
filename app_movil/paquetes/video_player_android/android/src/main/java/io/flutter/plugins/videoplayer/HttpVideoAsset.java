@@ -25,22 +25,35 @@ final class HttpVideoAsset extends VideoAsset {
   static final long KAIROS_ATRAS_DEL_VIVO_MS = 30_000;
 
   /**
-   * Kairos TV: cuánto espera a que el servidor de la señal conteste (conectar) y
-   * a que mande el próximo pedazo (leer). De fábrica son 8 s: los servidores IPTV
-   * (Xtream) redirigen a otro y a veces tardan más de 12 s en mandar lo primero, y
-   * ExoPlayer se rendía con "Source error" aunque VLC (que espera más) lo viera.
+   * Kairos TV: cuánto espera a que el servidor de la señal ATIENDA la conexión. Un servidor que
+   * atiende conecta en menos de 2 s; uno saturado a veces no atiende nunca, y esperarlo 25 s
+   * (lo que había antes) costaba un minuto por película. Si no atendió, se reintenta enseguida
+   * con otra conexión (KairosReintentoRapido): medido con un proveedor Xtream, 3 de cada 7
+   * intentos no atendían y el siguiente sí.
    */
-  static final int KAIROS_ESPERA_CONEXION_MS = 25_000;
+  static final int KAIROS_ESPERA_CONEXION_MS = 5_000;
 
+  /**
+   * Kairos TV: cuánto espera a que mande el próximo pedazo (leer). De fábrica son 8 s: los
+   * servidores IPTV (Xtream) de canales en vivo redirigen a otro y a veces tardan más de 12 s
+   * en mandar lo primero, y ExoPlayer se rendía con "Source error" aunque VLC lo viera.
+   */
   static final int KAIROS_ESPERA_LECTURA_MS = 30_000;
 
   /**
-   * Kairos TV: una película o capítulo (un archivo: .mp4, .mkv, .avi...) espera más a
-   * que el servidor mande lo primero: hay servidores que tardan cerca de un minuto en
-   * empezar a mandar una película (VLC también tarda). Con 30 s ExoPlayer cortaba y
-   * volvía a pedirla desde cero, y no arrancaba nunca. En vivo (HLS o .ts) sigue en 30 s.
+   * Kairos TV: una película o capítulo (un archivo: .mp4, .mkv, .avi...). Ya conectado, el
+   * primer dato llega en 1 a 3,5 s (medido). Si deja de mandar más que esto, se reconecta
+   * (enseguida: KairosReintentoRapido) en vez de quedarse esperando: con 90 s (la app 1.2.34)
+   * una película se quedaba cargando un minuto entero.
    */
-  static final int KAIROS_ESPERA_LECTURA_ARCHIVO_MS = 90_000;
+  static final int KAIROS_ESPERA_LECTURA_ARCHIVO_MS = 20_000;
+
+  /**
+   * Kairos TV: cuánto de lo ya visto guarda una película o capítulo. De fábrica, nada: volver 10
+   * segundos era pedirlo otra vez al servidor (otra conexión, otra espera). Así, volver dentro de
+   * este rato es al instante. Son datos que ya se bajaron (unos 10 a 40 MB de memoria).
+   */
+  static final int KAIROS_LO_VISTO_MS = 90_000;
 
   @NonNull private final StreamingFormat streamingFormat;
   @NonNull private final Map<String, String> httpHeaders;
@@ -114,6 +127,11 @@ final class HttpVideoAsset extends VideoAsset {
     return kairosEsArchivo(url, formato) ? KAIROS_ESPERA_LECTURA_ARCHIVO_MS : KAIROS_ESPERA_LECTURA_MS;
   }
 
+  /** Kairos TV: si este video es una película o capítulo (ver {@link #kairosEsArchivo(String, StreamingFormat)}). */
+  boolean kairosEsArchivo() {
+    return kairosEsArchivo(assetUrl, streamingFormat);
+  }
+
   /**
    * Kairos TV: si es un archivo (película o capítulo: .mp4, .mkv, .avi...) y no un canal
    * en vivo (una lista HLS o un ".ts" que llega de corrido).
@@ -146,7 +164,10 @@ final class HttpVideoAsset extends VideoAsset {
   MediaSource.Factory getMediaSourceFactory(
       Context context, DefaultHttpDataSource.Factory initialFactory) {
     DataSource.Factory dataSourceFactory = kairosFabricaDeDatos(context, initialFactory);
-    return new DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory);
+    // Kairos TV: si el servidor no atiende, se reintenta enseguida (ver KairosReintentoRapido)
+    return new DefaultMediaSourceFactory(context)
+        .setDataSourceFactory(dataSourceFactory)
+        .setLoadErrorHandlingPolicy(new KairosReintentoRapido(kairosEsArchivo()));
   }
 
   /**

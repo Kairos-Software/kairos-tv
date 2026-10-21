@@ -1,5 +1,6 @@
 /// Debajo de la ruedita de "cargando": si una película tarda en arrancar, dice que es
-/// el servidor preparándola y cuántos segundos van (ver [ControlSenal.avisoDeEspera]).
+/// el servidor que tarda en contestar, que la app sigue intentando y cuántos segundos
+/// van (ver [ControlSenal.avisoDeEspera]).
 /// Sin esto, un minuto con la ruedita sola parece que la app se colgó.
 ///
 /// La usan el reproductor de películas del celular y el de la TV.

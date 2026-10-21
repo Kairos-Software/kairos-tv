@@ -507,7 +507,7 @@ class _Video extends StatelessWidget {
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 14),
-                    // Si tarda: que es el servidor preparando la película (no se colgó)
+                    // Si tarda: que es el servidor y que la app sigue intentando (no se colgó)
                     EsperaLarga(
                       control: control,
                       estilo: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),

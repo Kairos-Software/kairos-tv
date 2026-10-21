@@ -77,17 +77,32 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
   (`.../live/usuario/clave/123.ts`). El servidor primero **redirige** a otro
   (otra IP, puerto 8080, con un token) y a veces tarda **más de 12 segundos**
   en mandar lo primero.
-- De fábrica ExoPlayer espera **8 s** a conectar y 8 s a que lleguen datos: se
+- De fábrica ExoPlayer espera 8 s a que lleguen datos: con canales en vivo se
   rendía con "Source error" aunque VLC (que espera más) lo viera. Acá espera
-  **25 s** a conectar y **30 s** a leer (`KAIROS_ESPERA_CONEXION_MS`,
-  `KAIROS_ESPERA_LECTURA_MS`).
+  **30 s** a leer en vivo (`KAIROS_ESPERA_LECTURA_MS`).
+- **Conectar: 5 s y reintentar enseguida** (desde la app 1.2.36,
+  `KAIROS_ESPERA_CONEXION_MS`, `KairosReintentoRapido.java`). Medido el
+  21/10/2026 con curl contra un proveedor Xtream: **3 de cada 7 intentos de
+  conexión no los atendía** (al azar, no por pedir rápido; una sola IP) y,
+  cuando atendía, el primer dato llegaba en **1 a 3,5 s**. Cada intento que no
+  atendía costaba 25 s (lo que se esperaba antes para conectar) más la pausa de
+  fábrica: de ahí el minuto que tardaban las películas (y VLC). Ahora, si no
+  atiende en 5 s, se reintenta a los 250 ms con otra conexión; una película
+  reintenta hasta 8 veces seguidas (`REINTENTOS_ARCHIVO`), en vivo los de
+  fábrica (para pasar rápido a otra señal). También vale si se corta a mitad
+  de una película o al adelantar.
 - Una **película o capítulo** (un archivo: `.mp4`, `.mkv`, `.avi`...) espera
-  **90 s** a leer (`KAIROS_ESPERA_LECTURA_ARCHIVO_MS`, `kairosEsperaLectura`):
-  hay servidores que tardan cerca de un minuto en mandar lo primero de una
-  película (VLC también). Con 30 s ExoPlayer cortaba, la volvía a pedir desde
-  cero y no arrancaba nunca. Del lado de Dart una película espera 90 s a
-  arrancar, 60 s cargando antes de darse por trabada (volver a abrirla cuesta
-  otra vez toda la conexión) y los toques seguidos de adelantar/atrasar se
+  **20 s** a leer (`KAIROS_ESPERA_LECTURA_ARCHIVO_MS`, `kairosEsperaLectura`):
+  si el servidor deja de mandar, se reconecta. En la 1.2.34 eran 90 s, por la
+  idea (equivocada, ver la medición) de que el servidor tardaba un minuto en
+  mandar lo primero: una película se quedaba cargando un minuto entero.
+- Una película **guarda lo ya visto** (90 s, `KAIROS_LO_VISTO_MS`,
+  `VideoAsset.kairosAjustarBuffer`, que llaman los dos reproductores): de
+  fábrica no guarda nada y volver 10 segundos era pedirlo de nuevo al
+  servidor (otra conexión, otra espera). Ahora es al instante. Son datos ya
+  bajados: unos 10 a 40 MB de memoria.
+- Del lado de Dart una película espera 90 s en total a arrancar, 60 s cargando
+  antes de darse por trabada y los toques seguidos de adelantar/atrasar se
   juntan en un solo salto (`ControlSenal.saltar`, desde la app 1.2.34).
 - **Una película pasa UNA sola vez por el link** (desde la app 1.2.35,
   `KairosRedireccionFija.java`). ExoPlayer pide el archivo varias veces: un
@@ -105,7 +120,7 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
   capítulos (`kairosEsArchivo`); en vivo se sigue pidiendo el link (renueva el
   permiso). Lo arma `HttpVideoAsset.kairosFabricaDeDatos`.
 - Mientras una película tarda en arrancar, debajo de la ruedita dice que el
-  servidor la está preparando y cuántos segundos van
+  servidor tarda en contestar, que la app sigue intentando y cuántos segundos van
   (`ControlSenal.avisoDeEspera`, `lib/widgets/espera_larga.dart`): con la
   ruedita sola parecía colgada.
 - Una dirección que termina en `.ts` (sin pista de formato) se abre como
@@ -120,8 +135,9 @@ Está en los mismos dos archivos, justo después de crear el `DefaultTrackSelect
   la vez.
 
 Está en `.../videoplayer/HttpVideoAsset.java` (buscar "Kairos TV") y
-`KairosRedireccionFija.java`. Tests: `android/src/test/.../KairosHttpVideoAssetTest.java`,
-`KairosRedireccionFijaTest.java` y `KairosPeliculaQueArrancaTest.java` (se
+`KairosRedireccionFija.java` y `KairosReintentoRapido.java`. Tests:
+`android/src/test/.../KairosHttpVideoAssetTest.java`, `KairosRedireccionFijaTest.java`,
+`KairosReintentoRapidoTest.java` y `KairosPeliculaQueArrancaTest.java` (se
 corren con `gradlew :video_player_android:testDebugUnitTest` desde
 `app_movil/android`) y `app_movil/test/arranque_directo_test.dart`. Los de la
 redirección usan `ServidorXtreamDePrueba.java`, un servidor HTTP local que se

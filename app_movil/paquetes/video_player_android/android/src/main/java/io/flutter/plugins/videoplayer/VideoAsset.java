@@ -7,7 +7,10 @@ package io.flutter.plugins.videoplayer;
 import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.source.MediaSource;
 import java.util.HashMap;
 import java.util.Map;
@@ -63,6 +66,18 @@ public abstract class VideoAsset {
 
   protected VideoAsset(@Nullable String assetUrl) {
     this.assetUrl = assetUrl;
+  }
+
+  /**
+   * Kairos TV: lo que cambia en el buffer de los reproductores (TextureVideoPlayer y
+   * PlatformViewVideoPlayer) según el video: una película o capítulo guarda lo ya visto
+   * ({@link HttpVideoAsset#KAIROS_LO_VISTO_MS}). Se llama antes de armar el buffer.
+   */
+  @OptIn(markerClass = UnstableApi.class)
+  public static void kairosAjustarBuffer(@NonNull VideoAsset asset, @NonNull DefaultLoadControl.Builder buffer) {
+    if (asset instanceof HttpVideoAsset && ((HttpVideoAsset) asset).kairosEsArchivo()) {
+      buffer.setBackBuffer(HttpVideoAsset.KAIROS_LO_VISTO_MS, /* retainBackBufferFromKeyframe= */ true);
+    }
   }
 
   /**

@@ -67,6 +67,8 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
           // microcorte de la señal no se nota. Con una tele conectada, más
           // después de un corte (KairosTele). Ver ../../README.md.
           DefaultLoadControl.Builder kairosBuffer = KairosTele.buffer();
+          // Una película o capítulo guarda lo ya visto: volver unos segundos es al instante
+          VideoAsset.kairosAjustarBuffer(asset, kairosBuffer);
           builder.setLoadControl(kairosBuffer.build());
           if (options.backBufferDurationMs != null) {
             if (options.backBufferDurationMs < 0) {

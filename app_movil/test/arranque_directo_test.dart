@@ -258,7 +258,7 @@ void main() {
     expect(control.fuente, 1);
   });
 
-  _prueba('una película que tarda en arrancar avisa que es el servidor (y cuánto va)', (tester) async {
+  _prueba('una película que tarda en arrancar avisa que es el servidor y que sigue intentando (y cuánto va)', (tester) async {
     const pelicula = 'http://x/movie/u/c/26480.avi';
     final control = await _abrir(tester, _canal([(11, pelicula, 'directo')], contenido: 'pelicula'), {
       pelicula: ['cuelga'],
@@ -266,7 +266,7 @@ void main() {
     expect(control.cargando, isTrue);
     expect(control.avisoDeEspera(), isNull); // recién empieza: solo la ruedita
     final despues = DateTime.now().add(const Duration(seconds: 23));
-    expect(control.avisoDeEspera(despues), contains('preparando'));
+    expect(control.avisoDeEspera(despues), contains('sigue intentando'));
     expect(control.avisoDeEspera(despues), contains('Van 23 s'));
     await tester.pump(const Duration(seconds: 91)); // que se rinda (no queda nada pendiente)
     await _pasar(tester);

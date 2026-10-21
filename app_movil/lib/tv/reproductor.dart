@@ -1681,7 +1681,7 @@ class _EstadoSenal extends StatelessWidget {
             control.fuente > 0 ? 'Esta señal no responde. Probando otra señal…' : 'Conectando…',
             style: LetraTv.cuerpo.copyWith(color: Tono.texto),
           ),
-          // Si una película tarda: que es el servidor preparándola (no se colgó)
+          // Si una película tarda: que es el servidor y que la app sigue intentando (no se colgó)
           const SizedBox(height: 12),
           EsperaLarga(control: control, estilo: LetraTv.ayuda, ancho: 640),
         ],
