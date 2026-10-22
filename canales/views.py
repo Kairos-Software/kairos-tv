@@ -29,6 +29,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db.models import Prefetch, prefetch_related_objects
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -714,8 +715,12 @@ def organizar_contenido(request):
     if not secciones.es_valida(contenido):
         contenido = Contenido.VIVO
     filtros = _filtros_de_organizar(request.GET)
+    # En Series, armarlas (de los capítulos sueltos) es lo que más tarda: una sola vez, para la lista y los chips
+    armadas = (consultas.series(texto=filtros['texto'], origen=filtros['origen'], idioma=filtros['idioma'],
+                                ligero=True)
+               if contenido == Contenido.SERIE else None)
     datos = consultas.organizar_contenido(contenido, categoria=request.GET.get('categoria', ''),
-                                          pagina=request.GET.get('pagina'), **filtros)
+                                          pagina=request.GET.get('pagina'), series_armadas=armadas, **filtros)
     _preparar_para_editar(datos.pagina, contenido)
     nodo = next((n for n in datos.nodos if n['clave'] == datos.elegida), None)
     categorias = list(organizar.categorias_con_cantidades(contenido))
@@ -736,7 +741,8 @@ def organizar_contenido(request):
     else:
         alternar_sin_logo['sin_logo'] = '1'
     cuentas = consultas.cuentas_de_organizar(contenido, texto=filtros['texto'], origen=filtros['origen'],
-                                             idioma=filtros['idioma'], categoria=datos.elegida)
+                                             idioma=filtros['idioma'], categoria=datos.elegida,
+                                             series_armadas=armadas)
     chips = [(clave, nombre, cuentas.get(clave, 0)) for clave, nombre in CHIPS_DE_ORGANIZAR
              if clave != 'caidos' or filtros['mostrar'] == 'caidos']
     # "Siguiente" en el panel de edición sigue en la página que viene (y "Anterior", en la de antes)
@@ -985,6 +991,9 @@ def serie_detalle(request):
     if serie is None:
         raise Http404('No se encontró la serie.')
 
+    # Las fuentes de todos los capítulos en una sola consulta (por_que_no_se_ve las mira; antes, una por capítulo)
+    prefetch_related_objects([c.canal for c in serie.capitulos],
+                             Prefetch('fuentes', queryset=Fuente.objects.order_by('prioridad', 'pk')))
     serie.temporadas_ordenadas = []
     for numero in serie.numeros_de_temporada:
         capitulos = serie.temporadas[numero]
@@ -994,8 +1003,10 @@ def serie_detalle(request):
         serie.temporadas_ordenadas.append((numero, capitulos, _como_esta_el_orden(capitulos, numero)))
 
     numeros = serie.numeros_de_temporada
+    # Todas las series (nombre y categoría), una sola vez: para la de al lado y para "pasar a otra serie"
+    todas = consultas.nombres_de_series()
     # Para pasar a la serie de al lado (de la misma categoría) sin volver a la lista
-    anterior, siguiente = consultas.series_vecinas(serie.nombre)
+    anterior, siguiente = consultas.series_vecinas(serie.nombre, todas)
     return render(request, 'canales/serie_detalle.html', {
         'serie': serie,
         'serie_anterior': anterior,
@@ -1003,7 +1014,7 @@ def serie_detalle(request):
         'puede_editar': chequear_permiso(request.user, 'importar_canales'),
         'categorias_de_series': Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre'),
         'temporada_nueva': (max(numeros) + 1) if numeros else 1,
-        'otras_series': [n for n in _nombres_de_series() if n.casefold() != serie.nombre.casefold()],
+        'otras_series': sorted({n for n, _ in todas if n.casefold() != serie.nombre.casefold()}, key=str.casefold),
         'agregar_de_youtube': f"{reverse('canales:youtube')}?{urlencode({'serie': serie.nombre})}",
     })
 
@@ -1108,8 +1119,7 @@ def serie_temporada(request):
 
 def _nombres_de_series():
     """Todas las series (para elegir a cuál pasar capítulos: la lista que se despliega al escribir)."""
-    return sorted({serie['nombre'] for categoria in consultas.arbol_de_series()['categorias']
-                   for serie in categoria['series']}, key=str.casefold)
+    return sorted({nombre for nombre, _ in consultas.nombres_de_series()}, key=str.casefold)
 
 
 @requiere_permiso('importar_canales')

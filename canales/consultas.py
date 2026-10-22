@@ -4,6 +4,7 @@ Lo que el sistema BUSCA de los canales (capa Base).
 
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import cached_property
 
 from django.db.models import Case, Count, Exists, F, OuterRef, Prefetch, Q, Value, When
 from django.utils import timezone
@@ -196,8 +197,9 @@ class Serie:
     portada: str = ''   # la propia de la serie (imagenes.PortadaDeSerie)
     categoria_id: int | None = None
 
-    @property
+    @cached_property
     def capitulos(self):
+        """Se arma la primera vez que se pide (series() ya terminó de llenar las temporadas)."""
         return [c for lista in self.temporadas.values() for c in lista]
 
     @property
@@ -233,7 +235,7 @@ class Serie:
         return sorted(self.temporadas)
 
 
-def series(texto='', estado='', categoria='', idioma='', origen='', sin_logo=False):
+def series(texto='', estado='', categoria='', idioma='', origen='', sin_logo=False, ligero=False):
     """
     Las series armadas a partir de los capítulos sueltos ("Show S01 E02"),
     con la misma regla que la app (clasificar.episodio). Cada capítulo trae
@@ -241,14 +243,19 @@ def series(texto='', estado='', categoria='', idioma='', origen='', sin_logo=Fal
       estado: 'en_app' (la app la muestra: ver Serie.completa) | 'incompleta' (se ven
               capítulos, pero la app no la muestra) | 'fuera' (no se ve ninguno) | '' (todas)
       categoria, idioma, origen, sin_logo: como en el catálogo (se aplican a los capítulos)
+      ligero: cada capítulo trae SOLO lo que usan Organizar y la lista de series (CapituloLigero: si
+              está activo y la app lo ve, destacado, imagen, señales fuera), sin armar el Canal entero.
+              Con decenas de miles de capítulos, lo otro tardaba 15 segundos (ver _capitulos_ligeros).
     """
-    capitulos = catalogo(texto=texto, contenido=Contenido.SERIE, categoria=categoria, idioma=idioma,
-                         origen=origen, sin_logo=sin_logo).prefetch_related(None)
+    filtros = {'texto': texto, 'categoria': categoria, 'idioma': idioma, 'origen': origen, 'sin_logo': sin_logo}
+    capitulos = (_capitulos_ligeros(**filtros) if ligero
+                 else catalogo(contenido=Contenido.SERIE, **filtros).prefetch_related(None))
     por_nombre = {}
     for canal in capitulos:
         nombre, temporada, numero, titulo = clasificar.episodio(canal.nombre)
         serie = por_nombre.setdefault(nombre.lower(), Serie(
-            nombre=nombre, categoria=canal.categoria.nombre if canal.categoria else '',
+            nombre=nombre, categoria=canal.nombre_de_categoria if ligero else (
+                canal.categoria.nombre if canal.categoria else ''),
             categoria_id=canal.categoria_id))
         serie.logo = serie.logo or canal.logo
         serie.temporadas.setdefault(temporada, []).append(Capitulo(canal, temporada, numero, titulo))
@@ -270,6 +277,78 @@ def series(texto='', estado='', categoria='', idioma='', origen='', sin_logo=Fal
     elif estado == 'fuera':
         resultado = [s for s in resultado if not s.en_la_app]
     return resultado
+
+
+class CapituloLigero:
+    """
+    Lo que Organizar usa de un capítulo (en lugar del Canal entero): ver
+    series(ligero=True). Mismos nombres que en el Canal de catalogo().
+    """
+    __slots__ = ('pk', 'nombre', 'logo', 'activo', 'destacado', 'categoria_id', 'nombre_de_categoria',
+                 'tiene_usable', 'fuentes_fuera')
+
+    def __init__(self, fila, usables, fuera):
+        (self.pk, self.nombre, self.logo, self.activo, self.destacado, self.categoria_id,
+         self.nombre_de_categoria) = fila
+        self.nombre_de_categoria = self.nombre_de_categoria or ''
+        self.tiene_usable = usables > 0
+        self.fuentes_fuera = fuera
+
+    @property
+    def id(self):
+        return self.pk
+
+
+def _capitulos_ligeros(texto='', categoria='', idioma='', origen='', sin_logo=False):
+    """
+    Los capítulos (con los filtros de catalogo()) como CapituloLigero, en el
+    mismo orden. En vez de armar cada Canal con cinco conteos de sus fuentes
+    (una consulta que con 75.000 capítulos tardaba 4 segundos, y después
+    armar 75.000 objetos), dos consultas: los capítulos con solo sus columnas
+    y, aparte, de cada uno cuántas fuentes usa la app y cuántas quedan fuera,
+    agrupando las fuentes una sola vez.
+    """
+    capitulos = Canal.objects.filter(contenido=Contenido.SERIE)
+    if texto:
+        capitulos = capitulos.filter(_buscar(texto))
+    if categoria == 'ninguna':
+        capitulos = capitulos.filter(categoria__isnull=True)
+    elif categoria:
+        capitulos = capitulos.filter(categoria_id=categoria)
+    if idioma == 'sin_dato':
+        capitulos = capitulos.filter(idioma='')
+    elif idioma:
+        capitulos = capitulos.filter(idioma=idioma)
+    if sin_logo:
+        capitulos = capitulos.filter(logo='')
+    if origen:
+        capitulos = capitulos.filter(pk__in=Fuente.objects.filter(origen=origen).values('canal'))
+    ahora = timezone.now()
+    # Las mismas reglas que fuentes_usables() y que el conteo fuentes_fuera de catalogo()
+    usable = (Q(activa=True, tipo__in=TIPOS_QUE_REPRODUCE_LA_APP) & ~Q(estado=Fuente.Estado.CAIDA)
+              & ~Q(oculta_hasta__gt=ahora))
+    fuera = Q(activa=False) | Q(estado=Fuente.Estado.CAIDA) | Q(oculta_hasta__gt=ahora)
+    numeros = {
+        canal: (usables, fuera_)
+        for canal, usables, fuera_ in Fuente.objects.filter(canal__in=capitulos.values('pk')).order_by()
+        .values('canal_id').annotate(usables=Count('pk', filter=usable), fuera=Count('pk', filter=fuera))
+        .values_list('canal_id', 'usables', 'fuera')
+    }
+    filas = _por_categoria(capitulos.order_by().values_list('pk', 'nombre', 'logo', 'activo', 'destacado',
+                                                            'categoria_id', 'categoria__nombre'), lugar=5)
+    return [CapituloLigero(fila, *numeros.get(fila[0], (0, 0))) for fila in filas]
+
+
+def _por_categoria(filas, lugar):
+    """
+    Las filas en el orden de las categorías de la app (ORDEN_DE_CATEGORIAS; sin categoría, al final), con
+    la categoría en la posición `lugar`. Para armar series alcanza con eso (cada serie va en la categoría
+    de su primer capítulo; los capítulos se ordenan después). Ordenar en la base también por el nombre de
+    cada capítulo era lo que más tardaba: comparar 75.000 nombres con las reglas del idioma, 2 segundos.
+    """
+    orden = {pk: i for i, pk in enumerate(Categoria.objects.order_by('orden', 'nombre').values_list('pk', flat=True))}
+    ultima = len(orden)
+    return sorted(filas, key=lambda fila: orden.get(fila[lugar], ultima))
 
 
 def arbol_de_series():
@@ -407,18 +486,24 @@ def canales_filtrados(contenido='', mostrar='todo', texto='', origen='', sin_log
 
 
 def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', origen='', sin_logo=False, idioma='',
-                        categoria='', pagina=None, por_pagina=120):
+                        categoria='', pagina=None, por_pagina=120, series_armadas=None):
     """
     Todo lo cargado de una sección (en vivo, películas o series), por categoría:
       mostrar: una de MOSTRAR ('fuera' = 'caidos' + 'quitados')
       idioma: 'es' | 'otro' | 'sin_dato' | '' (todos)
       categoria: 'todas' | 'ninguna' | pk ('' = todas)
+      series_armadas: en Series, las de series(texto, origen, idioma, ligero=True) si ya se
+                      armaron (la vista las arma una vez para esto y para los chips de arriba)
     """
     from django.core.paginator import Paginator
 
     if contenido == Contenido.SERIE:
-        items = series(texto=texto, origen=origen, sin_logo=sin_logo, idioma=idioma,
-                       estado='en_app' if mostrar == 'app' else '')
+        if series_armadas is None or sin_logo:
+            items = series(texto=texto, origen=origen, sin_logo=sin_logo, idioma=idioma, ligero=True)
+        else:
+            items = list(series_armadas)
+        if mostrar == 'app':
+            items = [s for s in items if s.completa]
         def alguno_activo(serie):
             return any(c.canal.activo for c in serie.capitulos)
         if mostrar == 'fuera':
@@ -439,7 +524,10 @@ def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', orig
     cuantos = {}
     for _, categoria_id in pares:
         cuantos[categoria_id] = cuantos.get(categoria_id, 0) + 1
-    con_algo = set(Canal.objects.exclude(categoria=None).values_list('categoria_id', flat=True).distinct())
+    # Sin order_by(): con el orden de siempre (por nombre), el DISTINCT comparaba los nombres de todo el
+    # catálogo (con 77.000 canales, 1,2 segundos en cada página de Organizar)
+    con_algo = set(Canal.objects.exclude(categoria=None).order_by().values_list('categoria_id', flat=True)
+                   .distinct())
     nodos = [{'clave': str(c.pk), 'categoria': c, 'total': cuantos.get(c.pk, 0), 'vacia': c.pk not in con_algo}
              for c in categorias_de(contenido)]
     # Sin filtros se ven todas (también las vacías, para llenarlas); con filtros, solo las que tienen algo
@@ -473,14 +561,16 @@ def organizar_contenido(contenido=Contenido.VIVO, mostrar='todo', texto='', orig
                         total=len(pares))
 
 
-def cuentas_de_organizar(contenido=Contenido.VIVO, texto='', origen='', idioma='', categoria='todas'):
+def cuentas_de_organizar(contenido=Contenido.VIVO, texto='', origen='', idioma='', categoria='todas',
+                         series_armadas=None):
     """
     Cuántos hay de cada filtro de arriba de Organizar (los chips: lo que queda por hacer), con la búsqueda y la
     categoría que se están viendo. Cada número es lo que se ve al tocar ese chip:
       {'todo': 120, 'app': 100, 'fuera': 7, 'caidos': 4, 'quitados': 3, 'senales': 12, 'destacados': 4, 'sin_logo': 34}
     """
     if contenido == Contenido.SERIE:
-        todas = series(texto=texto, origen=origen, idioma=idioma)
+        todas = (list(series_armadas) if series_armadas is not None
+                 else series(texto=texto, origen=origen, idioma=idioma, ligero=True))
         if categoria == 'ninguna':
             todas = [s for s in todas if not s.categoria_id]
         elif str(categoria).isdigit():
@@ -512,17 +602,31 @@ def cuentas_de_organizar(contenido=Contenido.VIVO, texto='', origen='', idioma='
     return cuentas
 
 
-def series_vecinas(nombre):
+def nombres_de_series():
+    """
+    [(nombre, categoría), ...] de cada serie, por nombre (como Organizar), sin armar las series: solo el nombre
+    y la categoría de cada capítulo. La categoría es la de su primer capítulo, como en series().
+    """
+    vistas = {}
+    for nombre, categoria_id in _por_categoria(Canal.objects.filter(contenido=Contenido.SERIE).order_by()
+                                               .values_list('nombre', 'categoria_id'), lugar=1):
+        serie = clasificar.episodio(nombre)[0]
+        vistas.setdefault(serie.lower(), (serie, categoria_id))
+    return sorted(vistas.values(), key=lambda par: par[0].lower())
+
+
+def series_vecinas(nombre, nombres=None):
     """
     La serie anterior y la siguiente de la MISMA categoría, en el orden de Organizar (por nombre): para pasar de
     una a otra sin volver a la lista. (anterior, siguiente), cada una el nombre o ''.
+    `nombres`: los de nombres_de_series(), si ya se pidieron.
     """
-    todas = series()
-    actual = next((s for s in todas if s.nombre.lower() == (nombre or '').lower()), None)
+    todas = nombres_de_series() if nombres is None else nombres
+    actual = next(((n, c) for n, c in todas if n.lower() == (nombre or '').lower()), None)
     if actual is None:
         return '', ''
-    hermanas = [s.nombre for s in todas if s.categoria_id == actual.categoria_id]
-    posicion = hermanas.index(actual.nombre)
+    hermanas = [n for n, c in todas if c == actual[1]]
+    posicion = hermanas.index(actual[0])
     return (hermanas[posicion - 1] if posicion else '',
             hermanas[posicion + 1] if posicion + 1 < len(hermanas) else '')
 
