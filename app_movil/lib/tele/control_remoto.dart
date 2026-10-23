@@ -73,6 +73,9 @@ class _HojaTeleState extends State<_HojaTele> {
   /// null = todavía no se sabe (se pregunta al abrir y al volver de los ajustes de Android).
   bool? _fija;
   bool _sinAjustes = false;
+
+  /// Ya tocó "Dar el permiso" (mientras la app está abierta): si vuelve sin el permiso, Android no lo dejó.
+  static bool _loPidio = false;
   AppLifecycleListener? _ciclo;
 
   @override
@@ -91,6 +94,11 @@ class _HojaTeleState extends State<_HojaTele> {
   Future<void> _mirarPermiso() async {
     final fija = await Tele.instancia.puedeQuedarFija();
     if (mounted) setState(() => _fija = fija);
+  }
+
+  Future<void> _pedirPermiso() async {
+    _loPidio = true;
+    await Tele.instancia.pedirQuedarFija();
   }
 
   Future<void> _elegirTele() async {
@@ -136,7 +144,10 @@ class _HojaTeleState extends State<_HojaTele> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (sinPermiso) ...[const _Permiso(), const SizedBox(height: Espacio.lg)],
+                if (sinPermiso) ...[
+                  _Permiso(negado: _loPidio, alPedir: _pedirPermiso),
+                  const SizedBox(height: Espacio.lg),
+                ],
                 if (tele.conectada) ...[
                   const Text(
                     'Lo que elijas acá se ve en la tele, con su diseño de TV. Lo que reproduzcas también: '
@@ -197,33 +208,25 @@ class _HojaTeleState extends State<_HojaTele> {
 /// "Que la tele muestre solo la app": el permiso "Mostrar sobre otras apps",
 /// una sola vez. Sin él, Android vuelve a mostrar el celular en la tele
 /// mientras no se está en la app (al elegir la tele, al abrir WhatsApp).
+///
+/// [negado]: lo pidió y volvió sin él. Desde Android 13, a una app instalada
+/// con el APK Android no la deja ("Se ha denegado el acceso a la aplicación")
+/// hasta permitir la "configuración restringida" en los Ajustes de la app: se
+/// explica cómo y se abre esa pantalla.
 class _Permiso extends StatelessWidget {
-  const _Permiso();
+  const _Permiso({required this.negado, required this.alPedir});
+
+  final bool negado;
+  final VoidCallback alPedir;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Espacio.margen),
-      decoration: BoxDecoration(
-        color: Tono.capa,
-        borderRadius: BorderRadius.circular(Curva.tarjeta),
-        border: Border.all(color: Tono.celeste.withValues(alpha: .35)),
-      ),
-      child: Column(
+    if (negado) return _marco(_comoDestrabarlo());
+    return _marco(
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.lock_rounded, color: Tono.celeste, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Que la tele muestre solo la app',
-                  style: Letra.cuerpoGrande.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
+          _titulo('Que la tele muestre solo la app'),
           const SizedBox(height: 8),
           const Text(
             'Así la tele nunca muestra tu celular: ni mientras elegís la tele, ni si salís de la app (WhatsApp, '
@@ -232,9 +235,74 @@ class _Permiso extends StatelessWidget {
             style: Letra.cuerpo,
           ),
           const SizedBox(height: 14),
-          BotonPrincipal(texto: 'Dar el permiso', icono: Icons.lock_rounded, alTocar: Tele.instancia.pedirQuedarFija),
+          BotonPrincipal(texto: 'Dar el permiso', icono: Icons.lock_rounded, alTocar: alPedir),
         ],
       ),
+    );
+  }
+
+  Widget _comoDestrabarlo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _titulo('Android no dejó dar el permiso'),
+        const SizedBox(height: 8),
+        const Text(
+          'Si dijo "Se ha denegado el acceso a la aplicación", es una protección de Android para las apps que no '
+          'vienen de Play Store. Se destraba una sola vez:',
+          style: Letra.cuerpo,
+        ),
+        const SizedBox(height: 12),
+        const _Paso(numero: '1', texto: 'Tocá "Abrir los ajustes de Kairos TV".'),
+        const _Paso(
+          numero: '2',
+          texto:
+              'Arriba a la derecha, en el menú ⋮, tocá "Permitir configuración restringida" (te pide el PIN o la '
+              'huella).',
+        ),
+        const _Paso(numero: '3', texto: 'Volvé acá y tocá "Dar el permiso" otra vez.'),
+        const SizedBox(height: 4),
+        BotonPrincipal(
+          texto: 'Abrir los ajustes de Kairos TV',
+          icono: Icons.settings_rounded,
+          alTocar: Tele.instancia.abrirDatosDeLaApp,
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: alPedir,
+          icon: const Icon(Icons.lock_rounded),
+          label: const Text('Dar el permiso'),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Si en ese menú no aparece, igual podés ver en la tele: tocá "Elegir la tele sin el permiso".',
+          style: Letra.cuerpo,
+        ),
+      ],
+    );
+  }
+
+  static Widget _titulo(String texto) {
+    return Row(
+      children: [
+        const Icon(Icons.lock_rounded, color: Tono.celeste, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(texto, style: Letra.cuerpoGrande.copyWith(fontWeight: FontWeight.w700)),
+        ),
+      ],
+    );
+  }
+
+  static Widget _marco(Widget contenido) {
+    return Container(
+      padding: const EdgeInsets.all(Espacio.margen),
+      decoration: BoxDecoration(
+        color: Tono.capa,
+        borderRadius: BorderRadius.circular(Curva.tarjeta),
+        border: Border.all(color: Tono.celeste.withValues(alpha: .35)),
+      ),
+      child: contenido,
     );
   }
 }

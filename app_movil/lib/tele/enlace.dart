@@ -156,6 +156,18 @@ class Tele extends ChangeNotifier {
     }
   }
 
+  /// Abre la pantalla de Kairos TV en los Ajustes de Android: ahí, en el menú ⋮, "Permitir configuración
+  /// restringida", si Android no deja dar el permiso de arriba. false = este celular no la abre.
+  Future<bool> abrirDatosDeLaApp() async {
+    try {
+      return await _canal.invokeMethod<bool>('abrirDatosDeLaApp') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// Corta la conexión con la tele. Si el celular no la deja cortar desde una
   /// app (sigue conectada a los 3 segundos), abre la lista de Android para cortarla ahí.
   Future<void> desconectar() async {

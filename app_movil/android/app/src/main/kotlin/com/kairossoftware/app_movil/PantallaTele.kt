@@ -50,6 +50,8 @@ import io.flutter.plugins.webviewflutter.WebViewFlutterPlugin
  *   celular -> "desconectar": corta la conexión con la tele (cortarConexion)
  *   celular -> "puedeQuedarFija" / "pedirQuedarFija": el permiso para que la
  *              tele muestre solo la app, siempre (ver mostrarEn)
+ *   celular -> "abrirDatosDeLaApp": la pantalla de la app en los Ajustes, si
+ *              Android no deja dar ese permiso (ver abrirDatosDeLaApp)
  *   tele    -> "cerrada": la tele cerró sola algo que reproducía (terminó, Atrás)
  *   esta clase -> celular: "conectada" / "desconectada"
  * El video lo decodifica el celular y Android se lo manda a la tele.
@@ -116,6 +118,7 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
                 }
                 "puedeQuedarFija" -> resultado.success(puedeQuedarFija())
                 "pedirQuedarFija" -> resultado.success(pedirQuedarFija())
+                "abrirDatosDeLaApp" -> resultado.success(abrirDatosDeLaApp())
                 else -> resultado.notImplemented()
             }
         }
@@ -354,6 +357,22 @@ class PantallaTele(private val actividad: FlutterActivity, principal: FlutterEng
             false
         }
     }
+
+    /**
+     * La pantalla de esta app en los Ajustes de Android. Desde Android 13, a una
+     * app instalada con el APK (no desde Play Store) Android no la deja dar
+     * "Mostrar sobre otras apps" ("Se ha denegado el acceso a la aplicación")
+     * hasta que ahí, en el menú ⋮, se toca "Permitir configuración restringida".
+     */
+    private fun abrirDatosDeLaApp(): Boolean =
+        try {
+            actividad.startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${actividad.packageName}")),
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
 
     /**
      * Mientras hay tele: el video hasta 720p y más espera tras un corte

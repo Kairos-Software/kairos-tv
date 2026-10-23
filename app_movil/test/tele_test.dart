@@ -212,4 +212,29 @@ void main() {
       expect(_llamadas.lastWhere((l) => l.method == 'cerrada').arguments, {'clave': 'c9'});
     });
   });
+
+  group('el permiso para que la tele muestre solo la app', () {
+    testWidgets('si Android no lo deja dar, explica cómo destrabarlo y abre los ajustes de la app', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: BotonTele())));
+      await tester.tap(find.byType(BotonTele));
+      await tester.pumpAndSettle();
+      expect(find.text('Que la tele muestre solo la app'), findsOneWidget);
+
+      await tester.tap(find.text('Dar el permiso'));
+      await tester.pump();
+      expect(_llamadas.last.method, 'pedirQuedarFija');
+
+      // Vuelve de los ajustes de Android sin el permiso ("Se ha denegado el acceso a la aplicación")
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('Android no dejó dar el permiso'), findsOneWidget);
+      expect(find.textContaining('Permitir configuración restringida'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Abrir los ajustes de Kairos TV'));
+      await tester.tap(find.text('Abrir los ajustes de Kairos TV'));
+      await tester.pump();
+      expect(_llamadas.last.method, 'abrirDatosDeLaApp');
+    });
+  });
 }

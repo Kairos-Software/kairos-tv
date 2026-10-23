@@ -164,8 +164,9 @@ final class HttpVideoAsset extends VideoAsset {
   MediaSource.Factory getMediaSourceFactory(
       Context context, DefaultHttpDataSource.Factory initialFactory) {
     DataSource.Factory dataSourceFactory = kairosFabricaDeDatos(context, initialFactory);
-    // Kairos TV: si el servidor no atiende, se reintenta enseguida (ver KairosReintentoRapido)
-    return new DefaultMediaSourceFactory(context)
+    // Kairos TV: si el servidor no atiende, se reintenta enseguida (ver KairosReintentoRapido); un MKV
+    // sin índice igual se puede adelantar (ver KairosExtractores)
+    return new DefaultMediaSourceFactory(context, new KairosExtractores())
         .setDataSourceFactory(dataSourceFactory)
         .setLoadErrorHandlingPolicy(new KairosReintentoRapido(kairosEsArchivo()));
   }

@@ -20,18 +20,21 @@ from usuarios.permisos import tiene_algun_permiso
 
 from .errores import ErrorApi
 
-# Lo único que puede usar un CLIENTE (login con código): ver canales (pedir
-# la dirección real de los de Twitch, Dailymotion..., avisar si uno falla o
-# cuánto se miró), su biblioteca (favoritos, "Continuar viendo"), su estado y
-# cerrar sesión. Todo lo demás es de los usuarios del panel.
-VISTAS_DE_CLIENTES = {'api_v1:canales', 'api_v1:canales_secciones', 'api_v1:fuente_resolver', 'api_v1:fuente_falla',
-                      'api_v1:canales_visto', 'api_v1:biblioteca', 'api_v1:cliente', 'api_v1:cliente_logout'}
+# Las vistas para MIRAR: los canales y las series (la lista y los capítulos al
+# abrir una), pedir la dirección real de los de Twitch, Dailymotion..., avisar
+# si uno falla, cuántos cortes tuvo o cuánto se miró, y la biblioteca
+# (favoritos, "Continuar viendo"). Un revendedor no las usa con su usuario del
+# panel: mira con su propia pantalla, un cliente que activa con sus créditos
+# (reventa.servicios.pantalla_propia). El administrador sí, para probar.
+# Una vista nueva para la app va acá: si no, a los clientes les dice "No tenés
+# permiso" (lo cuida api/tests/test_vistas_de_clientes.py).
+VISTAS_PARA_MIRAR = {'api_v1:canales', 'api_v1:canales_secciones', 'api_v1:canales_series',
+                     'api_v1:canales_series_capitulos', 'api_v1:fuente_falla', 'api_v1:fuente_estabilidad',
+                     'api_v1:fuente_resolver', 'api_v1:canales_visto', 'api_v1:biblioteca'}
 
-# Las vistas para MIRAR (los canales). Un revendedor no las usa con su usuario
-# del panel: mira con su propia pantalla, un cliente que activa con sus
-# créditos (reventa.servicios.pantalla_propia). El administrador sí, para probar.
-VISTAS_PARA_MIRAR = {'api_v1:canales', 'api_v1:canales_secciones', 'api_v1:fuente_falla', 'api_v1:fuente_resolver',
-                     'api_v1:canales_visto', 'api_v1:biblioteca'}
+# Lo único que puede usar un CLIENTE (login con código): mirar, su estado y
+# cerrar sesión. Todo lo demás es de los usuarios del panel.
+VISTAS_DE_CLIENTES = VISTAS_PARA_MIRAR | {'api_v1:cliente', 'api_v1:cliente_logout'}
 MENSAJE_REVENDEDOR = ('Para ver la app usá tu propia pantalla: en el panel, entrá a Reventa → "Mi pantalla", '
                       'activala con tus créditos y entrá a la app con ese código.')
 

@@ -6,9 +6,10 @@ en lugar de las originales (sección `dependency_overrides`).
 ## video_player_android/ (2.12.2)
 
 El reproductor de video de Android (ExoPlayer) que usa `video_player`. Es el
-paquete oficial **con siete cambios**: el buffer, el margen en vivo, el idioma
+paquete oficial **con nueve cambios**: el buffer, el margen en vivo, el idioma
 del audio, lo de la tele conectada, la espera de los canales Xtream, el audio
-MP2 (que Android no trae) y la reconexión sola de los canales que se cortan.
+MP2 (que Android no trae), la reconexión sola de los canales que se cortan, el
+audio Dolby y DTS, y adelantar en las películas MKV sin índice.
 
 ### 1. El buffer
 
@@ -166,9 +167,9 @@ hasta la primera imagen.
   NDK), `KairosAudioMpeg.java` (el decodificador), `KairosAudioRenderer.java`,
   `KairosRenderersFactory.java` (lo usan los dos reproductores, buscar "Kairos
   TV") y `kairos-proguard.pro` (que R8 no renombre las funciones nativas).
-- **AC3 / E-AC3 (Dolby)** no: necesita FFmpeg, y la versión ya compilada que
-  hay (Jellyfin) es GPL (obligaría a publicar el código de la app). Si hace
-  falta, compilar FFmpeg LGPL solo con esos decodificadores.
+- **Dolby (AC3 / E-AC3 / TrueHD) y DTS**: desde la 1.2.39, con FFmpeg (LGPL, armado
+  con solo esos decodificadores; la versión ya compilada de Jellyfin es GPL y
+  obligaría a publicar el código de la app). Ver `android/ffmpeg/README.md`.
 
 Tests: `android/src/test/cpp/kairos_audio_prueba.c` (el decodificador, en la
 compu: `gcc -O2 -I ../../main/cpp kairos_audio_prueba.c ../../main/cpp/kairos_audio.c -o prueba && ./prueba tono_440hz.mp2`;
@@ -214,3 +215,38 @@ este paquete: copiar la nueva de `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\video_
 siete cambios (con los archivos nuevos `Kairos*.java`, `src/main/cpp/` y lo de
 `build.gradle.kts`: `externalNativeBuild`, `ndkVersion` y `consumerProguardFiles`)
 y sacar `dev_dependencies` de su `pubspec.yaml`.
+
+### 8. El audio Dolby y DTS (desde la app 1.2.39)
+
+- Muchas películas y series "HD" traen el audio en **Dolby** (AC3, E-AC3,
+  TrueHD) o **DTS**. Muchos celulares y TV box no traen decodificador para eso
+  y el reproductor, en vez de avisar, mostraba la imagen **sin sonido** (en VLC
+  suena: trae los suyos).
+- Ahora la app trae los de **FFmpeg** (LGPL), armados con solo esos
+  decodificadores: `android/src/main/jniLibs/<abi>/libffmpegJNI.so`, con el lado
+  Java de androidx/media 1.9.2 sin cambios (`android/src/main/java/androidx/media3/decoder/ffmpeg/`).
+  `KairosRenderersFactory` lo agrega al final, después del de Android y del de
+  MP2: se usa solo si el aparato no trae el suyo. Suman ~1,1 MB por arquitectura.
+- Cómo se armó, cómo rehacerlo y qué pide la licencia: `android/ffmpeg/README.md`.
+- Test: `android/src/test/.../KairosAudioDolbyTest.java` (el orden, y que las
+  bibliotecas traigan esos decodificadores).
+
+### 9. Adelantar en una película MKV sin índice (desde la app 1.2.39)
+
+- Un MKV trae al final un **índice** (los "Cues") con el lugar de cada momento
+  de la película. Algunos vienen sin él (los grabados o convertidos al vuelo) y
+  el lector de ExoPlayer los marcaba "no se puede adelantar": **cualquier salto
+  volvía la película a 0**. VLC sí adelanta: va buscando dentro del archivo.
+- Ahora `KairosMkvSinIndice.java` (lo pone `KairosExtractores.java` en lugar
+  del lector de MKV de siempre; lo usa `HttpVideoAsset`): si no hay índice pero
+  sí duración y se sabe cuánto pesa el archivo, un salto calcula a qué parte del
+  archivo corresponde (como si pesara lo mismo cada minuto), busca desde ahí el
+  próximo bloque de la película ("Cluster": tiene una marca fija y dice su hora)
+  y, si quedó lejos, corrige y vuelve a probar: **4 pedidos al servidor como
+  mucho**, y cae hasta 10 s antes de lo pedido (lo que falta lo recorre el
+  reproductor sin mostrarlo) o apenas después. Lo demás lo hace el lector de
+  siempre. Un salto a los primeros 10 s vuelve a empezar (como antes).
+- Con índice no cambia nada (usa el del archivo).
+- Test: `android/src/test/.../KairosMkvSinIndiceTest.java`, con
+  `src/test/resources/kairos/mkv_sin_indice.mkv` (60 s hechos con ffmpeg y al
+  que se le borró el índice) y `mkv_con_indice.mkv`.

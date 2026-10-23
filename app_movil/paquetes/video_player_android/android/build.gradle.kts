@@ -69,6 +69,8 @@ android {
         implementation("androidx.media3:media3-exoplayer-dash:${exoplayerVersion}")
         implementation("androidx.media3:media3-exoplayer-rtsp:${exoplayerVersion}")
         implementation("androidx.media3:media3-exoplayer-smoothstreaming:${exoplayerVersion}")
+        // Kairos TV: las anotaciones que usa el decodificador FFmpeg de media3 (solo al compilar). Ver ffmpeg/README.md
+        compileOnly("org.checkerframework:checker-qual:3.43.0")
         testImplementation("junit:junit:4.13.2")
         testImplementation("androidx.test:core:1.7.0")
         testImplementation("org.mockito:mockito-core:5.23.0")
