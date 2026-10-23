@@ -299,8 +299,8 @@ class _Portada extends StatelessWidget {
       insignia = 'SERIE';
       etiqueta = categoriaLegible(laSerie.categoria);
       anio = null;
-      final temporadas = laSerie.temporadas.length;
-      bajada = '$temporadas temporada${temporadas == 1 ? '' : 's'} · ${laSerie.episodios.length} capítulos';
+      final temporadas = laSerie.cantidadDeTemporadas;
+      bajada = '$temporadas temporada${temporadas == 1 ? '' : 's'} · ${laSerie.cantidadDeCapitulos} capítulos';
       clave = laSerie.clave;
       reproducir = () => reproducirSerie(context, laSerie);
       info = () => abrirPantalla<void>(context, PantallaDetalle.serie(laSerie));

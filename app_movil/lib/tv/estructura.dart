@@ -135,6 +135,8 @@ class _PantallaTvState extends State<PantallaTv> {
     }
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_alCargarPorPrimeraVez);
+    _catalogo.addListener(_asegurarCapitulos);
+    _biblioteca.addListener(_asegurarCapitulos);
     // En la tele del celular avisa el celular (con el aviso de Android)
     if (!widget.espejo) _vigiaAgenda = Timer.periodic(const Duration(seconds: 30), (_) => _mirarAgenda());
     if (widget.catalogo != null) return;
@@ -153,6 +155,8 @@ class _PantallaTvState extends State<PantallaTv> {
   void dispose() {
     if (widget.espejo) EspejoTv.instancia.desconectar();
     _catalogo.removeListener(_alCargarPorPrimeraVez);
+    _catalogo.removeListener(_asegurarCapitulos);
+    _biblioteca.removeListener(_asegurarCapitulos);
     _ciclo?.dispose();
     _refresco?.cancel();
     _reposo?.cancel();
@@ -170,6 +174,18 @@ class _PantallaTvState extends State<PantallaTv> {
     if (widget.catalogo == null) _catalogo.dispose();
     if (widget.biblioteca == null) _biblioteca.dispose();
     super.dispose();
+  }
+
+  /// "Continuar viendo" y "Seguir acá" pueden tener capítulos de series que todavía no se abrieron
+  /// (desde la 1.2.38 los capítulos llegan a pedido): el catálogo trae esas series (una vez cada una).
+  void _asegurarCapitulos() {
+    if (!_catalogo.cargado) return;
+    unawaited(
+      _catalogo.asegurarCapitulos([
+        for (final progreso in _biblioteca.continuarViendo) progreso.id,
+        if (_biblioteca.seguirDeOtroAparato case final seguir?) seguir.id,
+      ]),
+    );
   }
 
   /// "Volver al último canal al abrir" (Mi cuenta): cuenta 3 segundos (se puede cancelar) y lo pone.

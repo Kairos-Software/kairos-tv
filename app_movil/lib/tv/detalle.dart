@@ -15,6 +15,7 @@ import '../movil/componentes.dart';
 import '../movil/datos.dart';
 import '../movil/detalle.dart' show proximoEpisodio;
 import '../movil/estilo.dart';
+import '../utiles.dart';
 import 'foco.dart';
 import 'inicio.dart';
 import 'piezas.dart';
@@ -33,6 +34,30 @@ class DetalleTv extends StatefulWidget {
 
 class _DetalleTvState extends State<DetalleTv> {
   int? _temporada;
+
+  /// La serie ya con sus capítulos (desde la 1.2.38 llegan al abrirla: Catalogo.abrirSerie).
+  Serie? _abierta;
+  Object? _errorAlAbrir;
+  bool _pedida = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_pedida && widget.serie != null) {
+      _pedida = true;
+      _abrirSerie();
+    }
+  }
+
+  Future<void> _abrirSerie() async {
+    setState(() => _errorAlAbrir = null);
+    try {
+      final abierta = await DatosScope.of(context).catalogo.abrirSerie(widget.serie!);
+      if (mounted) setState(() => _abierta = abierta);
+    } catch (error) {
+      if (mounted) setState(() => _errorAlAbrir = error);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +79,7 @@ class _DetalleTvState extends State<DetalleTv> {
                 gradient: LinearGradient(colors: [Tono.fondo, Color(0xCC131317), Color(0x99131317)]),
               ),
             ),
-            widget.pelicula != null ? _pelicula(context, widget.pelicula!) : _serie(context, widget.serie!),
+            widget.pelicula != null ? _pelicula(context, widget.pelicula!) : _serie(context, _abierta ?? widget.serie!),
           ],
         ),
       ),
@@ -173,6 +198,8 @@ class _DetalleTvState extends State<DetalleTv> {
   Widget _serie(BuildContext context, Serie serie) {
     final biblioteca = DatosScope.of(context).biblioteca;
     final favorito = biblioteca.estaEnMiLista(serie.clave);
+    // Todavía sin capítulos (o ninguno se puede ver acá): el póster y lo que pasa
+    if (!serie.cargada || serie.episodios.isEmpty) return _sinCapitulos(context, serie, favorito);
     final siguiente = proximoEpisodio(serie, biblioteca);
     final progresoSiguiente = biblioteca.progresoDe(siguiente.canal.id);
     final empezada = serie.episodios.any((e) => biblioteca.progresoDe(e.canal.id) != null);
@@ -272,6 +299,82 @@ class _DetalleTvState extends State<DetalleTv> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+extension on _DetalleTvState {
+  /// La serie mientras llegan sus capítulos (o si no se pudieron traer, o ninguno se ve en esta TV).
+  /// El foco queda en Favorito (o en Reintentar): el control nunca queda sin nada para elegir.
+  Widget _sinCapitulos(BuildContext context, Serie serie, bool favorito) {
+    final Widget estado;
+    if (_errorAlAbrir != null) {
+      estado = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('No se pudieron traer los capítulos. ${textoDeError(_errorAlAbrir!)}', style: LetraTv.cuerpo),
+          const SizedBox(height: 22),
+          BotonTv(
+            texto: 'Reintentar',
+            icono: Icons.refresh_rounded,
+            principal: true,
+            autofocus: true,
+            alOk: _abrirSerie,
+          ),
+        ],
+      );
+    } else if (serie.cargada) {
+      estado = Text('Esta serie no tiene capítulos que se puedan ver en esta TV.', style: LetraTv.cuerpo);
+    } else {
+      estado = const Padding(
+        padding: EdgeInsets.only(top: 12),
+        child: SizedBox(width: 48, height: 48, child: CircularProgressIndicator()),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(MargenTv.derecha, MargenTv.arriba + 14, MargenTv.derecha, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _encabezado('Serie'),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                children: [
+                  _poster(serie.imagen, serie.nombre, ancho: 300),
+                  const SizedBox(height: 22),
+                  BotonTv(
+                    texto: favorito ? 'En favoritos' : 'Favorito',
+                    icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: favorito ? Tono.rubi : null,
+                    ancho: 300,
+                    autofocus: _errorAlAbrir == null,
+                    alOk: () => alternarFavoritoTv(context, serie.clave),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 56),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(serie.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: LetraTv.portada),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${serie.cantidadDeTemporadas} temporada${serie.cantidadDeTemporadas == 1 ? '' : 's'} · '
+                      '${serie.cantidadDeCapitulos} episodio${serie.cantidadDeCapitulos == 1 ? '' : 's'}',
+                      style: LetraTv.cuerpo,
+                    ),
+                    const SizedBox(height: 24),
+                    estado,
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

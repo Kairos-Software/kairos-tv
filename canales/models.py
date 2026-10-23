@@ -23,6 +23,8 @@ from django.utils import timezone
 
 from herramientas.modelos import ModeloBase
 
+from . import clasificar
+
 
 class Idioma(models.TextChoices):
     ESPANOL = 'es', 'Español'
@@ -149,17 +151,47 @@ class Canal(ModeloBase):
     # "Dejar así" en Para revisar (bandeja.py): el estado de salud en que se
     # dejó (salud.Salud). No vuelve a aparecer en la bandeja mientras siga así.
     revisado = models.CharField('dejado así en', max_length=10, blank=True)
+    # De qué serie es un capítulo, y su temporada y número: lo que sale del nombre ("Pocoyó S01 E02") con
+    # clasificar.episodio, la misma regla que la app. Se guarda para no releer todos los nombres cada vez que
+    # se arman las series (con decenas de miles de capítulos, Organizar tardaba segundos). Lo anota save()
+    # y, lo que se cambia sin save() (bulk_update, update()...), consultas.anotar_series antes de cada
+    # consulta de series: `serie_leida_de` es el nombre del que se sacó, así se sabe cuáles cambiaron de
+    # nombre sin que cada lugar que cambia un nombre tenga que acordarse. Va en todos (no solo en los
+    # capítulos): pasar algo a Series no cambia nada.
+    # En minúsculas, para agrupar. Comparada byte a byte ("C"): con las reglas del idioma, agrupar 300.000
+    # capítulos por serie tardaba segundos (el orden que se ve lo arma Python)
+    serie = models.CharField(max_length=120, blank=True, editable=False, db_collation='C')
+    temporada = models.PositiveSmallIntegerField(default=1, editable=False)
+    capitulo = models.PositiveIntegerField(null=True, blank=True, editable=False)   # None: sin número
+    serie_leida_de = models.CharField(max_length=120, blank=True, editable=False)
 
     class Meta:
         verbose_name = 'canal'
         verbose_name_plural = 'canales'
         ordering = ['orden', 'nombre']
+        indexes = [
+            models.Index(fields=['contenido', 'serie'], name='canal_contenido_serie'),
+            # Los que hay que volver a anotar: el índice tiene solo esos, así preguntarlo no lee la tabla
+            models.Index(fields=['id'], condition=~models.Q(serie_leida_de=models.F('nombre')),
+                         name='canal_serie_sin_anotar'),
+        ]
 
     def __str__(self):
         return f'{self.numero} · {self.nombre}' if self.numero else self.nombre
 
     def get_contenido_display(self):
         return _nombre_del_contenido(self.contenido)
+
+    def save(self, *args, **kwargs):
+        # Si cambió el nombre, se anota ya de qué serie es (lo que se cambia sin save(), lo anota la próxima
+        # consulta: consultas.anotar_series). Si esos campos no se trajeron (only()), queda para esa consulta.
+        if 'serie_leida_de' not in self.get_deferred_fields() and self.serie_leida_de != self.nombre:
+            serie, self.temporada, self.capitulo, _ = clasificar.episodio(self.nombre)
+            self.serie, self.serie_leida_de = serie.lower()[:120], self.nombre
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = {*kwargs['update_fields'], 'serie', 'temporada', 'capitulo',
+                                           'serie_leida_de'}
+        super().save(*args, **kwargs)
 
 
 class LogoParejo(models.Model):

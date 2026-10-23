@@ -74,6 +74,8 @@ class _PantallaMovilState extends State<PantallaMovil> {
     Tele.instancia.seccion(_seccion.name); // si hay una tele conectada, que muestre lo mismo
     if (widget.biblioteca == null) _biblioteca.cargar();
     _catalogo.addListener(_volverAlUltimoCanal);
+    _catalogo.addListener(_asegurarCapitulos);
+    _biblioteca.addListener(_asegurarCapitulos);
     // Un aviso de "Mi agenda" tocado (o "Ver" en Mi agenda): a En Vivo con ese canal
     Recordatorios.canalPedido.addListener(_abrirCanalPedido);
     _catalogo.addListener(_abrirCanalPedido);
@@ -95,11 +97,25 @@ class _PantallaMovilState extends State<PantallaMovil> {
     Recordatorios.canalPedido.removeListener(_abrirCanalPedido);
     _catalogo.removeListener(_abrirCanalPedido);
     _catalogo.removeListener(_volverAlUltimoCanal);
+    _catalogo.removeListener(_asegurarCapitulos);
+    _biblioteca.removeListener(_asegurarCapitulos);
     _ciclo?.dispose();
     _refresco?.cancel();
     if (widget.catalogo == null) _catalogo.dispose();
     if (widget.biblioteca == null) _biblioteca.dispose();
     super.dispose();
+  }
+
+  /// "Continuar viendo" y "Seguir acá" pueden tener capítulos de series que todavía no se abrieron
+  /// (desde la 1.2.38 los capítulos llegan a pedido): el catálogo trae esas series (una vez cada una).
+  void _asegurarCapitulos() {
+    if (!_catalogo.cargado) return;
+    unawaited(
+      _catalogo.asegurarCapitulos([
+        for (final progreso in _biblioteca.continuarViendo) progreso.id,
+        if (_biblioteca.seguirDeOtroAparato case final seguir?) seguir.id,
+      ]),
+    );
   }
 
   /// "Volver al último canal al abrir" (Mi Espacio): apenas llega el catálogo, a En Vivo con ese canal.

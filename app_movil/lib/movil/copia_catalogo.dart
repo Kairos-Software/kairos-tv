@@ -62,6 +62,24 @@ ParteCatalogo leerParte(List<int> bytes, String contenido) {
   );
 }
 
+/// La lista de series SIN capítulos (GET /canales/series/, desde la 1.2.38): [ParteCatalogo.series] con
+/// series resumidas. Si no es esa lista (un servidor viejo contestó otra cosa), [FormatException].
+ParteCatalogo leerSeries(List<int> bytes) {
+  final datos = jsonDecode(utf8.decode(bytes));
+  if (datos is! Map<String, dynamic> || datos['series'] is! List) {
+    throw const FormatException('No es la lista de series');
+  }
+  return ParteCatalogo(
+    categorias: const [],
+    series: [for (final s in datos['series'] as List) Serie.resumida(s as Map<String, dynamic>)],
+  );
+}
+
+Future<ParteCatalogo> leerSeriesAparte(List<int> bytes) async {
+  if (bytes.length < grandeDesde) return leerSeries(bytes);
+  return Isolate.run(() => leerSeries(bytes));
+}
+
 /// Como [leerParte], pero lo grande en otro hilo (lo chico no vale lo que
 /// cuesta arrancar otro hilo).
 Future<ParteCatalogo> leerParteAparte(List<int> bytes, String contenido) async {

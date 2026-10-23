@@ -88,6 +88,23 @@ def lista(request):
 
 
 @api_view(['GET'])
+def series_de_la_app(request):
+    """La lista de series SIN sus capítulos (app 1.2.38+): comprimida, con huella, guardada un rato."""
+    tipos = tipos_pedidos(request.query_params.get('formatos'))
+    return catalogo.respuesta(request, tipos, 'series_sin_capitulos',
+                              construir=lambda: catalogo.armar_series(tipos, request))
+
+
+@api_view(['GET'])
+def capitulos_de_series(request):
+    """Los capítulos de las series ?nombre=...&nombre=... y de las de los capítulos ?ids=1,2 (app 1.2.38+)."""
+    nombres = request.query_params.getlist('nombre')[:catalogo.MAXIMO_A_PEDIR]
+    ids = [int(i) for i in request.query_params.get('ids', '').split(',') if i.strip().isdigit()]
+    return Response(catalogo.armar_capitulos(tipos_pedidos(request.query_params.get('formatos')), nombres,
+                                             ids[:catalogo.MAXIMO_A_PEDIR], request))
+
+
+@api_view(['GET'])
 def secciones_de_la_app(request):
     return Response({'secciones': [
         {'clave': s.clave, 'nombre': s.nombre, 'forma': s.forma, 'icono': s.icono} for s in secciones.nuevas()

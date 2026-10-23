@@ -149,7 +149,9 @@ class GuardadoDeImagenes {
     }
     final bytes = await (bajarDePrueba ?? _bajar)(url);
     if (archivo != null) {
-      unawaited(_guardar(archivo, bytes));
+      // Se espera a que quede en el disco (son milisegundos): si no, pedirla enseguida en otro tamaño
+      // (la grilla y después el detalle) no la encontraba y la bajaba de nuevo
+      await _guardar(archivo, bytes);
       if (!_ordenado) {
         _ordenado = true;
         // Una vez por vez que se abre la app, y un rato después (no mientras arranca)

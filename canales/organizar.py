@@ -38,13 +38,13 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import Count, Min, Q
+from django.db.models import Count, Max, Min, Q
 from django.utils import timezone
 
 from actividad.models import Accion
 from actividad.registro import registrar
 
-from . import clasificar, imagenes, secciones, youtube
+from . import clasificar, consultas, imagenes, secciones, youtube
 from .models import Canal, Categoria, Contenido, EntradaImportada, Fuente, medidas_de_calidad
 
 
@@ -382,14 +382,10 @@ def ultimo_capitulo(nombre_serie, temporada=1, excluir=()):
     Compara el nombre como la app (sin mayúsculas, CON acentos: para la app
     "Pocoyo" y "Pocoyó" son dos series distintas).
     """
-    buscada, ultimo = nombre_serie.strip().lower(), 0
-    candidatos = (Canal.objects.filter(contenido=Contenido.SERIE, nombre__istartswith=nombre_serie.strip())
-                  .exclude(pk__in=list(excluir)).values_list('nombre', flat=True))
-    for nombre in candidatos:
-        serie, de_temporada, numero, _ = clasificar.episodio(nombre)
-        if serie.lower() == buscada and de_temporada == int(temporada) and numero:
-            ultimo = max(ultimo, numero)
-    return ultimo
+    consultas.anotar_series()
+    return (Canal.objects.filter(contenido=Contenido.SERIE, serie=nombre_serie.strip().lower(),
+                                 temporada=int(temporada))
+            .exclude(pk__in=list(excluir)).aggregate(ultimo=Max('capitulo'))['ultimo'] or 0)
 
 
 _SIN_ELEGIR = object()
@@ -447,11 +443,18 @@ def cambiar_contenido(canales, contenido, nombre_serie='', temporada=1, usuario=
 
 
 def capitulos_de(nombres_de_series):
-    """Los capítulos (Canal) de esas series, por nombre de serie (como las arma la app)."""
+    """
+    Los capítulos (Canal) de esas series, por nombre de serie (sin acentos ni mayúsculas: "Pocoyo" trae
+    también los de "Pocoyó"). Con la serie de cada capítulo ya anotada (Canal.serie), se comparan los
+    nombres de las series (unos miles) y no los de todos los capítulos. Los capítulos que son ahora: si
+    después se les cambia el nombre, la lista sigue siendo la misma.
+    """
     buscados = {_clave(n) for n in nombres_de_series if n.strip()}
-    pks = [canal.pk for canal in Canal.objects.filter(contenido=Contenido.SERIE).only('pk', 'nombre')
-           if _clave(clasificar.episodio(canal.nombre)[0]) in buscados]
-    return Canal.objects.filter(pk__in=pks)
+    consultas.anotar_series()
+    capitulos = Canal.objects.filter(contenido=Contenido.SERIE)
+    series = [serie for serie in capitulos.order_by().values_list('serie', flat=True).distinct()
+              if _clave(serie) in buscados]
+    return Canal.objects.filter(pk__in=list(capitulos.filter(serie__in=series).values_list('pk', flat=True)))
 
 
 def unir_en_una_serie(nombres_de_series, nombre_serie, temporada=1, usuario=None, capitulos=None,

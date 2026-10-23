@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../api/modelos.dart';
 import '../marca.dart';
+import '../utiles.dart';
 import 'componentes.dart';
 import 'datos.dart';
 import 'estilo.dart';
@@ -35,8 +36,32 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
   bool _episodios = true;
   int? _temporada;
 
-  Serie? get _serie => widget.serie;
+  /// La serie ya con sus capítulos (desde la 1.2.38 llegan al abrirla: Catalogo.abrirSerie).
+  Serie? _abierta;
+  Object? _errorAlAbrir;
+  bool _pedida = false;
+
+  Serie? get _serie => _abierta ?? widget.serie;
   Canal? get _pelicula => widget.pelicula;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_pedida && widget.serie != null) {
+      _pedida = true;
+      _abrirSerie();
+    }
+  }
+
+  Future<void> _abrirSerie() async {
+    setState(() => _errorAlAbrir = null);
+    try {
+      final abierta = await DatosScope.of(context).catalogo.abrirSerie(widget.serie!);
+      if (mounted) setState(() => _abierta = abierta);
+    } catch (error) {
+      if (mounted) setState(() => _errorAlAbrir = error);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +71,8 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
       builder: (context, _) {
         final serie = _serie;
         final pelicula = _pelicula;
+        // Todavía sin capítulos (o ninguno se puede ver acá): la portada y lo que pasa
+        if (serie != null && (!serie.cargada || serie.episodios.isEmpty)) return _sinCapitulos(serie);
         final biblioteca = datos.biblioteca;
         final titulo = serie?.nombre ?? sinAnio(pelicula!.nombre);
         final imagen = serie?.imagen ?? pelicula!.logo;
@@ -84,7 +111,7 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
                 titulo: titulo,
                 insignia: serie != null ? 'SERIE' : 'PELÍCULA',
                 detalle: serie != null
-                    ? '${serie.temporadas.length} temporada${serie.temporadas.length == 1 ? '' : 's'} disponible${serie.temporadas.length == 1 ? '' : 's'}'
+                    ? '${serie.cantidadDeTemporadas} temporada${serie.cantidadDeTemporadas == 1 ? '' : 's'} disponible${serie.cantidadDeTemporadas == 1 ? '' : 's'}'
                     : (anio?.toString() ?? ''),
               ),
               Padding(
@@ -105,7 +132,7 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
                     const SizedBox(height: 4),
                     Text(
                       serie != null
-                          ? 'Serie • ${serie.episodios.length} capítulo${serie.episodios.length == 1 ? '' : 's'}'
+                          ? 'Serie • ${serie.cantidadDeCapitulos} capítulo${serie.cantidadDeCapitulos == 1 ? '' : 's'}'
                           : 'Película${categoria.isEmpty ? '' : ' • $categoria'}',
                       style: Letra.cuerpo.copyWith(fontWeight: FontWeight.w500),
                     ),
@@ -252,6 +279,73 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
           ),
         );
       },
+    );
+  }
+}
+
+extension on _PantallaDetalleState {
+  /// La serie mientras llegan sus capítulos (o si no se pudieron traer, o ninguno se ve en este aparato).
+  Widget _sinCapitulos(Serie serie) {
+    final Widget estado;
+    if (_errorAlAbrir != null) {
+      estado = Column(
+        children: [
+          Text(
+            'No se pudieron traer los capítulos. ${textoDeError(_errorAlAbrir!)}',
+            textAlign: TextAlign.center,
+            style: Letra.cuerpo,
+          ),
+          const SizedBox(height: Espacio.margen),
+          FilledButton.icon(
+            onPressed: _abrirSerie,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      );
+    } else if (serie.cargada) {
+      estado = Text(
+        'Esta serie no tiene capítulos que se puedan ver en este aparato.',
+        textAlign: TextAlign.center,
+        style: Letra.cuerpo,
+      );
+    } else {
+      estado = const Center(child: CircularProgressIndicator());
+    }
+    return Scaffold(
+      backgroundColor: Tono.fondo,
+      extendBodyBehindAppBar: true,
+      appBar: _BarraDetalle(titulo: serie.nombre),
+      body: ListView(
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + Espacio.xl),
+        children: [
+          _Portada(
+            imagen: serie.imagen,
+            titulo: serie.nombre,
+            insignia: 'SERIE',
+            detalle: '${serie.cantidadDeTemporadas} temporada${serie.cantidadDeTemporadas == 1 ? '' : 's'}',
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Espacio.margen),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  serie.nombre.toUpperCase(),
+                  style: Letra.titulo.copyWith(fontSize: 28, height: 36 / 28, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Serie • ${serie.cantidadDeCapitulos} capítulo${serie.cantidadDeCapitulos == 1 ? '' : 's'}',
+                  style: Letra.cuerpo.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: Espacio.xl),
+                estado,
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -41,8 +41,8 @@ def _canal_para_tarjeta(pk):
 
 
 def _serie_para_tarjeta(nombre):
-    clave = (nombre or '').strip().lower()
-    return next((s for s in consultas.series(texto=nombre) if s.nombre.lower() == clave), None)
+    """La serie con los números de la lista (consultas.resumen_de_series), como la arma Organizar."""
+    return next(iter(consultas.resumen_de_series(clave=nombre or '')), None)
 
 
 def tarjeta_json(request, item, contenido, mensaje='', status=200):

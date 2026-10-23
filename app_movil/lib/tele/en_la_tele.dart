@@ -202,6 +202,18 @@ class EspejoTv {
     }
     final rutas = capas.where((c) => c['tipo'] != 'seccion').toList();
 
+    // Un capítulo de una serie que acá todavía no tiene sus capítulos (desde la 1.2.38 llegan al
+    // abrirla): primero se traen y después se aplica lo que mandó el celular
+    final sinCapitulos = [
+      for (final capa in rutas)
+        if (capa['tipo'] == 'episodio' && capa['serie'] is String)
+          if (datos.catalogo.seriePorNombre(capa['serie'] as String) case final serie? when !serie.cargada) serie,
+    ];
+    if (sinCapitulos.isNotEmpty) {
+      Future.wait(sinCapitulos.map(datos.catalogo.abrirSerie)).then((_) => _aplicar(), onError: (_) {});
+      return;
+    }
+
     final navegador = Navigator.of(contexto);
     final claveSeccion = seccion == 'nueva' ? 'nueva:$nueva' : seccion;
     if (claveSeccion != _seccion) {

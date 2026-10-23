@@ -42,12 +42,12 @@ Widget tarjetaPelicula(BuildContext context, Canal pelicula, {String tipo = 'Pel
 }
 
 Widget tarjetaSerie(BuildContext context, Serie serie) {
-  final temporadas = serie.temporadas.length;
+  final temporadas = serie.cantidadDeTemporadas;
   return TarjetaPoster(
     titulo: serie.nombre,
     subtitulo: temporadas > 1
         ? 'Serie • $temporadas temporadas'
-        : 'Serie • ${serie.episodios.length} capítulo${serie.episodios.length == 1 ? '' : 's'}',
+        : 'Serie • ${serie.cantidadDeCapitulos} capítulo${serie.cantidadDeCapitulos == 1 ? '' : 's'}',
     imagen: serie.imagen,
     etiqueta: categoriaLegible(serie.categoria),
     alTocar: () => abrirPantalla<void>(context, PantallaDetalle.serie(serie)),

@@ -39,9 +39,53 @@ class Episodio {
   String get codigo => 'T$temporada:E$numero';
 }
 
-/// Una serie con sus temporadas (armada a partir de los capítulos sueltos).
+/// Lo que manda el servidor de una serie SIN sus capítulos (GET /canales/series/, desde la 1.2.38): con
+/// decenas de miles de capítulos, bajarlos todos al abrir la app ya no entraba en un TV box. Los capítulos
+/// se piden al abrir la serie ([Catalogo.abrirSerie]).
+class ResumenDeSerie {
+  ResumenDeSerie({
+    required this.capitulos,
+    required this.temporadas,
+    this.imagen = '',
+    this.destacada = false,
+    this.codecs = const [],
+  });
+
+  ResumenDeSerie.desdeJson(Map<String, dynamic> json)
+    : capitulos = json['capitulos'] as int? ?? 0,
+      temporadas = [
+        for (final t in json['temporadas'] as List? ?? const [])
+          if (t is List && t.length >= 2) (t[0] as int, t[1] as int),
+      ],
+      imagen = '${json['imagen'] ?? ''}',
+      destacada = json['destacada'] == true,
+      codecs = [for (final c in json['codecs'] as List? ?? const []) '$c'];
+
+  /// Cuántos capítulos manda el servidor (este aparato puede ver alguno menos).
+  final int capitulos;
+
+  /// (número, cuántos capítulos) de cada temporada.
+  final List<(int, int)> temporadas;
+
+  /// La portada propia o la imagen del primer capítulo que tiene.
+  final String imagen;
+  final bool destacada;
+
+  /// Los códecs de sus señales ('' = no se sabe).
+  final List<String> codecs;
+}
+
+/// Una serie con sus temporadas (armada a partir de los capítulos sueltos), o
+/// todavía resumida: con [resumen] y sin capítulos hasta que se abre.
 class Serie {
-  Serie({required this.nombre, required this.categoria, this.portada = ''});
+  Serie({required this.nombre, required this.categoria, this.portada = '', this.resumen}) : cargada = resumen == null;
+
+  /// Una de la lista del servidor (GET /canales/series/): sin capítulos todavía.
+  factory Serie.resumida(Map<String, dynamic> json) => Serie(
+    nombre: '${json['nombre'] ?? ''}',
+    categoria: '${json['categoria'] ?? ''}',
+    resumen: ResumenDeSerie.desdeJson(json),
+  );
 
   final String nombre;
   final String categoria;
@@ -50,12 +94,34 @@ class Serie {
   /// La portada propia de la serie, si se la pusieron en el panel ('' = no tiene).
   final String portada;
 
-  /// La imagen de la serie: su portada o, si no tiene, la del primer capítulo que tenga.
-  String get imagen => portada.isNotEmpty
-      ? portada
-      : episodios.map((e) => e.canal.logo).firstWhere((logo) => logo.isNotEmpty, orElse: () => '');
+  /// Lo que dijo el servidor antes de traer los capítulos (null: se armó de los capítulos).
+  final ResumenDeSerie? resumen;
 
-  List<int> get numerosDeTemporada => temporadas.keys.toList()..sort();
+  /// Ya tiene sus capítulos (los de este aparato). Una resumida, recién cuando se abre.
+  bool cargada;
+
+  /// La imagen de la serie: su portada o, si no tiene, la del primer capítulo que tenga.
+  String get imagen {
+    if (portada.isNotEmpty) return portada;
+    final delPrimero = episodios.map((e) => e.canal.logo).firstWhere((logo) => logo.isNotEmpty, orElse: () => '');
+    return delPrimero.isNotEmpty ? delPrimero : (resumen?.imagen ?? '');
+  }
+
+  List<int> get numerosDeTemporada =>
+      cargada ? (temporadas.keys.toList()..sort()) : [for (final (t, _) in resumen!.temporadas) t];
+
+  /// Cuántos capítulos y temporadas tiene (antes de abrirla, lo que dijo el servidor).
+  int get cantidadDeCapitulos => cargada ? episodios.length : resumen!.capitulos;
+
+  int get cantidadDeTemporadas => cargada ? temporadas.length : resumen!.temporadas.length;
+
+  /// Si este aparato la puede mostrar por el códec de sus señales (antes de abrirla: después lo
+  /// decide cada capítulo, como siempre).
+  bool get aparatoLaMuestra {
+    final codecs = resumen?.codecs ?? const <String>[];
+    if (cargada || codecs.isEmpty || FuenteCanal.probarTodo || Aparato.codecs.isEmpty) return true;
+    return codecs.any((c) => c.isEmpty || Aparato.codecs.contains(c));
+  }
 
   /// Si sus capítulos dicen temporada y capítulo ("S01 E02"). Un video suelto
   /// cargado como serie no lo dice: no se puede saber cuál es el primero.
@@ -63,12 +129,14 @@ class Serie {
 
   /// Se puede seguir desde el principio: tiene el T1:E1. Una serie nueva se
   /// muestra desde su primer capítulo; las que empiezan a mitad no se muestran.
-  bool get completa => numerada && (temporadas[1]?.any((e) => e.numero == 1) ?? false);
+  /// Una resumida, sí (el servidor solo manda las que tienen el T1:E1).
+  bool get completa => !cargada || (numerada && (temporadas[1]?.any((e) => e.numero == 1) ?? false));
 
-  List<Episodio> get episodios => [for (final t in numerosDeTemporada) ...temporadas[t]!];
+  /// Sus capítulos, en orden (vacío si todavía no se abrió: ver [cargada]).
+  List<Episodio> get episodios => [for (final t in temporadas.keys.toList()..sort()) ...temporadas[t]!];
 
   /// Destacada en el panel (se marcan sus capítulos): el modo reposo la muestra más seguido.
-  bool get destacada => episodios.any((e) => e.canal.destacado);
+  bool get destacada => cargada ? episodios.any((e) => e.canal.destacado) : resumen!.destacada;
 
   /// Para "Mi lista": las series se guardan por nombre (sus capítulos tienen cada uno su id).
   String get clave => 's:$nombre';
@@ -76,7 +144,9 @@ class Serie {
   /// Una copia con solo los capítulos que cumplen [queda] (sin las temporadas
   /// que quedan vacías). Esta no se toca: es la que mandó el servidor.
   Serie soloCon(bool Function(Canal) queda) {
-    final copia = Serie(nombre: nombre, categoria: categoria, portada: portada)..numerada = numerada;
+    final copia = Serie(nombre: nombre, categoria: categoria, portada: portada, resumen: resumen)
+      ..numerada = numerada
+      ..cargada = cargada;
     for (final MapEntry(key: numero, value: capitulos) in temporadas.entries) {
       final quedan = [
         for (final e in capitulos)
@@ -280,6 +350,15 @@ class Catalogo extends ChangeNotifier {
   bool cargado = false;
   Object? error;
 
+  /// Los capítulos que ya se trajeron de cada serie resumida (por nombre en minúsculas), sin filtrar.
+  final Map<String, List<Canal>> _capitulosTraidos = {};
+
+  /// Los capítulos (de "Continuar viendo") cuya serie ya se pidió: no se vuelven a pedir.
+  final Set<int> _idsPedidos = {};
+
+  /// Las series que se están trayendo (si dos pantallas piden la misma, se pide una vez).
+  final Map<String, Future<void>> _trayendo = {};
+
   /// Lo que mandó el servidor de cada parte ("vivo", "pelicula", "serie" y
   /// `s:clave` de cada sección nueva), con su huella, sin filtrar.
   final Map<String, ({String huella, ParteCatalogo parte})> _partes = {};
@@ -441,8 +520,13 @@ class Catalogo extends ChangeNotifier {
 
   /// Lee lo guardado en el aparato (en otro hilo). False si no hay (o le falta una parte).
   Future<bool> _abrirLoGuardado() async {
+    // Las series: la lista resumida (desde la 1.2.38) o, de un servidor viejo, todos los capítulos
+    final resumidas = await _copia.leer('series');
+    final claveSeries = resumidas != null ? 'series' : 'serie';
     final guardadas = await Future.wait([
-      for (final p in ['vivo', 'pelicula', 'serie', 'secciones']) _copia.leer(p),
+      for (final p in ['vivo', 'pelicula']) _copia.leer(p),
+      if (resumidas != null) Future.value(resumidas) else _copia.leer('serie'),
+      _copia.leer('secciones'),
     ]);
     if (guardadas.any((g) => g == null)) return false;
     try {
@@ -451,11 +535,11 @@ class Catalogo extends ChangeNotifier {
       final leidas = await Future.wait([
         leerParteAparte(guardadas[0]!.bytes, 'vivo'),
         leerParteAparte(guardadas[1]!.bytes, 'pelicula'),
-        leerParteAparte(guardadas[2]!.bytes, 'serie'),
+        if (resumidas != null) leerSeriesAparte(guardadas[2]!.bytes) else leerParteAparte(guardadas[2]!.bytes, 'serie'),
         for (final (i, s) in definiciones.indexed)
           if (deSecciones[i] case final guardada?) leerParteAparte(guardada.bytes, s.forma),
       ]);
-      for (final (i, clave) in ['vivo', 'pelicula', 'serie'].indexed) {
+      for (final (i, clave) in ['vivo', 'pelicula', claveSeries].indexed) {
         _partes[clave] = (huella: guardadas[i]!.huella, parte: leidas[i]);
       }
       var siguiente = 3;
@@ -535,13 +619,120 @@ class Catalogo extends ChangeNotifier {
       return cambio || cambiadas.contains(true);
     }
 
+    // Las series SIN capítulos (desde la 1.2.38). Un servidor viejo no las tiene (404, o no manda
+    // "series"): entonces todos los capítulos, como antes
+    Future<bool> traerSeries() async {
+      if (!_partes.containsKey('serie')) {
+        final anterior = _partes['series'];
+        try {
+          final llegado = await api.getCrudo(
+            'canales/series/',
+            parametros: {'formatos': formatos},
+            huella: anterior?.huella ?? '',
+          );
+          final bytes = llegado.bytes;
+          if (bytes == null && anterior != null) return false;
+          if (bytes != null) {
+            _partes['series'] = (huella: llegado.huella, parte: await leerSeriesAparte(bytes));
+            // Cambió la lista: los capítulos ya traídos pueden haber cambiado también (se vuelven a pedir)
+            _capitulosTraidos.clear();
+            _idsPedidos.clear();
+            await _copia.guardar('series', bytes, llegado.huella);
+            return true;
+          }
+        } on ApiError catch (error) {
+          if (error.status != 404) rethrow;
+        } on FormatException {
+          // No es la lista nueva: un servidor viejo
+        }
+      }
+      _partes.remove('series');
+      return traer('serie', 'serie', 'serie');
+    }
+
     final cambios = await Future.wait([
       traer('vivo', 'vivo', 'vivo'),
       traer('pelicula', 'pelicula', 'pelicula'),
-      traer('serie', 'serie', 'serie'),
+      traerSeries(),
       traerSeccionesNuevas(),
     ]);
     return cambios.contains(true);
+  }
+
+  /// Los capítulos de [serie] (si es resumida, se piden al servidor). Devuelve la serie ya con sus
+  /// capítulos (la que queda en [series]); si no se pudo, tira el error (sin internet...).
+  Future<Serie> abrirSerie(Serie serie) async {
+    final clave = serie.nombre.toLowerCase();
+    if (serie.cargada) return seriePorNombre(serie.nombre) ?? serie;
+    if (!_capitulosTraidos.containsKey(clave)) await _traerCapitulos(nombres: [serie.nombre]);
+    return seriePorNombre(serie.nombre) ?? _llena(serie);
+  }
+
+  /// Trae las series de estos capítulos (los de "Continuar viendo" y "Seguir acá"), si todavía no se
+  /// sabe de cuál son: así esas filas pueden mostrarlos. Lo llaman las estructuras del celular y la TV.
+  Future<void> asegurarCapitulos(Iterable<int> ids) async {
+    final faltan = {
+      for (final id in ids)
+        if (!_idsPedidos.contains(id) && canalPorId(id) == null) id,
+    };
+    if (faltan.isEmpty || !_partes.containsKey('series')) return;
+    _idsPedidos.addAll(faltan);
+    try {
+      await _traerCapitulos(ids: faltan);
+    } catch (_) {
+      _idsPedidos.removeAll(faltan); // se reintenta la próxima vez
+    }
+  }
+
+  Future<void> _traerCapitulos({List<String> nombres = const [], Set<int> ids = const {}}) {
+    final clave = [...nombres.map((n) => n.toLowerCase()), ...ids.map((i) => '#$i')].join('|');
+    return _trayendo[clave] ??= () async {
+      try {
+        final consulta = [
+          'formatos=${Uri.encodeQueryComponent(FuenteCanal.formatosQueReproduce.join(','))}',
+          for (final nombre in nombres) 'nombre=${Uri.encodeQueryComponent(nombre)}',
+          if (ids.isNotEmpty) 'ids=${ids.join(',')}',
+        ].join('&');
+        final datos = await api.get('canales/series/capitulos/?$consulta') as Map<String, dynamic>;
+        final canales = [
+          for (final c in datos['categorias'] as List? ?? const [])
+            ...CategoriaCanales(c as Map<String, dynamic>, contenido: 'serie').canales,
+        ];
+        // Cada capítulo a su serie (con la misma regla que agruparSeries)
+        for (final nombre in nombres) {
+          _capitulosTraidos.putIfAbsent(nombre.toLowerCase(), () => []);
+        }
+        final porSerie = <String, List<Canal>>{};
+        for (final serie in agruparSeries(canales)) {
+          porSerie[serie.nombre.toLowerCase()] = [for (final e in serie.episodios) e.canal];
+        }
+        _capitulosTraidos.addAll(porSerie);
+        final yaEstaban = {for (final c in _recibidos) c.id};
+        _recibidos = [..._recibidos, ...canales.where((c) => !yaEstaban.contains(c.id))];
+        // Las que llegaron, ya con sus capítulos, en el mismo lugar de la lista
+        final llegaron = {...porSerie.keys, ...nombres.map((n) => n.toLowerCase())};
+        series = [
+          for (final serie in series)
+            if (llegaron.contains(serie.nombre.toLowerCase())) _llena(serie) else serie,
+        ];
+        notifyListeners();
+      } finally {
+        _trayendo.remove(clave);
+      }
+    }();
+  }
+
+  /// Una serie resumida con los capítulos que ya se trajeron, solo los que este aparato ve.
+  Serie _llena(Serie serie) {
+    final capitulos = _capitulosTraidos[serie.nombre.toLowerCase()];
+    if (capitulos == null) return serie;
+    final armada = agruparSeries(capitulos.where(_seVe).toList()).firstOrNull;
+    final llena =
+        Serie(nombre: serie.nombre, categoria: serie.categoria, portada: serie.portada, resumen: serie.resumen)
+          ..cargada = true
+          ..numerada = armada?.numerada ?? false;
+    armada?.temporadas.forEach((numero, lista) => llena.temporadas[numero] = lista);
+    return llena;
   }
 
   /// Arma lo que se muestra a partir de lo que mandó el servidor ([_partes]),
@@ -556,6 +747,7 @@ class Catalogo extends ChangeNotifier {
     final vivo = _partes['vivo']?.parte;
     final pelicula = _partes['pelicula']?.parte;
     final serie = _partes['serie']?.parte;
+    final resumidas = _partes['series']?.parte;
     final secciones = [for (final s in _definiciones) (s, _partes['s:${s.clave}']?.parte)];
     _recibidos = [
       ...?vivo?.canales,
@@ -565,10 +757,18 @@ class Catalogo extends ChangeNotifier {
     ];
     categoriasEnVivo = filtrar(vivo?.categorias ?? const []);
     peliculas = [for (final c in pelicula?.categorias ?? const <CategoriaCanales>[]) ...c.canales.where(_seVe)];
-    series = [
-      for (final s in serie?.series ?? const <Serie>[])
-        if (s.soloCon(_seVe) case final quedan when quedan.completa) quedan,
-    ];
+    series = resumidas != null
+        ? [
+            for (final s in resumidas.series)
+              if (s.aparatoLaMuestra)
+                if (_llena(s) case final llena when llena.completa) llena,
+          ]
+        : [
+            for (final s in serie?.series ?? const <Serie>[])
+              if (s.soloCon(_seVe) case final quedan when quedan.completa) quedan,
+          ];
+    // Los capítulos ya traídos también cuentan como recibidos ("Lo que no se ve en esta TV")
+    _recibidos = [..._recibidos, for (final capitulos in _capitulosTraidos.values) ...capitulos];
     seccionesNuevas = [
       for (final (definicion, parte) in secciones)
         if (filtrar(parte?.categorias ?? const []) case final categorias when categorias.isNotEmpty)

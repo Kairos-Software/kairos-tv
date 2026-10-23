@@ -132,7 +132,7 @@ class _BuscarTvState extends State<BuscarTv> {
             imagen: Imagen(url: serie.imagen, nombre: serie.nombre, tamanioIniciales: 16),
             poster: true,
             titulo: serie.nombre,
-            subtitulo: 'Serie · ${serie.episodios.length} capítulos',
+            subtitulo: 'Serie · ${serie.cantidadDeCapitulos} capítulos',
             alOk: () => abrirTv<void>(context, DetalleTv.serie(serie)),
           ),
       if (_que == QueBuscar.todo)

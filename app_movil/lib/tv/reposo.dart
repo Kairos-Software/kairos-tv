@@ -155,7 +155,7 @@ class Vidriera {
       titulo: serie.nombre,
       tipo: 'Serie',
       imagen: serie.imagen,
-      detalle: serie.temporadas.length == 1 ? '1 temporada' : '${serie.temporadas.length} temporadas',
+      detalle: serie.cantidadDeTemporadas == 1 ? '1 temporada' : '${serie.cantidadDeTemporadas} temporadas',
     );
     Diapositiva deCanal(Canal canal) => Diapositiva(
       titulo: canal.nombre,

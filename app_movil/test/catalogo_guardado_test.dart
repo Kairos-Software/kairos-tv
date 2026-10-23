@@ -35,6 +35,8 @@ class _Servidor extends ApiCliente {
     String huella = '',
   }) async {
     if (sinInternet) throw ApiError(status: 0, codigo: 'sin_conexion', detalle: 'Sin internet.');
+    // Un servidor de antes de las series a pedido (1.2.38): no tiene la lista de series sin capítulos
+    if (ruta == 'canales/series/') throw ApiError(status: 404, codigo: 'no_existe', detalle: 'No existe.');
     if (ruta == 'canales/secciones/') {
       final secciones = {
         'secciones': [

@@ -41,7 +41,7 @@ from actividad.registro import registrar
 
 from . import clasificar, organizar, salud, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
-from .consultas import fuentes_usables
+from .consultas import anotar_series, fuentes_usables
 from .m3u import EntradaM3U, leer_m3u, normalizar
 from .models import (OCULTA_POR, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
                      medidas_de_calidad)
@@ -555,11 +555,11 @@ def _revisar_series(importacion):
     if not aptas:
         return 0
     ya_cargados = {}
-    for nombre in (Canal.objects.filter(contenido=Contenido.SERIE, activo=True,
-                                        pk__in=fuentes_usables().values('canal'))
-                   .values_list('nombre', flat=True)):
-        serie, temporada, numero, _ = clasificar.episodio(nombre)
-        ya_cargados.setdefault(serie.lower(), set()).add((temporada, numero))
+    anotar_series()
+    for serie, temporada, numero in (Canal.objects.filter(contenido=Contenido.SERIE, activo=True,
+                                                          pk__in=fuentes_usables().values('canal'))
+                                     .order_by().values_list('serie', 'temporada', 'capitulo')):
+        ya_cargados.setdefault(serie, set()).add((temporada, numero))
     por_serie = {}
     for entrada in aptas:
         serie, temporada, numero, _ = clasificar.episodio(entrada.nombre)
@@ -959,8 +959,9 @@ def como_va(importacion, seleccion, series_del_panel=None):
     series = None
     if seleccion.contenido == Contenido.SERIE and 0 < total <= MAXIMO_PARA_CONTAR_SERIES:
         if series_del_panel is None:
-            series_del_panel = {clasificar.episodio(n)[0].lower() for n in
-                                Canal.objects.filter(contenido=Contenido.SERIE).values_list('nombre', flat=True)}
+            anotar_series()
+            series_del_panel = set(Canal.objects.filter(contenido=Contenido.SERIE).order_by()
+                                   .values_list('serie', flat=True).distinct())
         de_la_lista = {clasificar.episodio(n)[0].lower() for n in entradas.values_list('nombre', flat=True)}
         series = {'total': len(de_la_lista), 'existen': len(de_la_lista & series_del_panel)}
     return {'total': total, 'categorias': categorias,

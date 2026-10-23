@@ -29,7 +29,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Prefetch, prefetch_related_objects
+from django.db.models import F, Prefetch, prefetch_related_objects
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -617,21 +617,20 @@ def _preparar_para_editar(pagina, contenido):
     importaciones = {archivo: reverse('canales:importacion', args=[pk])
                      for archivo, pk in Importacion.objects.order_by('creada').values_list('archivo', 'pk')}
     if contenido == Contenido.SERIE:
-        por_capitulo = {}
-        capitulos = [c.canal.pk for serie in pagina for c in serie.capitulos]
-        for fuente in Fuente.objects.filter(canal_id__in=capitulos).order_by('prioridad', 'pk'):
-            por_capitulo.setdefault(fuente.canal_id, []).append(fuente)
+        # Las señales de sus capítulos, una por origen (no una por capítulo): la base elige la primera de cada
+        # origen en cada serie, así una serie de 1.000 capítulos no trae 1.000 señales
+        por_serie = {}
+        for fuente in (Fuente.objects.filter(canal__contenido=Contenido.SERIE, canal__eliminado_en__isnull=True,
+                                             canal__serie__in=[serie.clave for serie in pagina])
+                       .annotate(de_la_serie=F('canal__serie'))
+                       .order_by('canal__serie', 'origen', 'canal__temporada',
+                                 F('canal__capitulo').asc(nulls_last=True), 'prioridad', 'pk')
+                       .distinct('canal__serie', 'origen')):
+            por_serie.setdefault(fuente.de_la_serie, []).append(fuente)
         for serie in pagina:
             serie.logo_ver = serie.logo
-            fuentes, vistos = [], set()
-            for capitulo in serie.capitulos:
-                for fuente in por_capitulo.get(capitulo.canal.pk, []):
-                    if fuente.origen not in vistos:   # una vez por origen (no una por capítulo)
-                        vistos.add(fuente.origen)
-                        fuentes.append(fuente)
-            serie.activo = any(c.canal.activo for c in serie.capitulos)
-            serie.destacado = any(c.canal.destacado for c in serie.capitulos)
-            temporadas = sorted(serie.temporadas)
+            fuentes = por_serie.get(serie.clave, [])
+            temporadas = serie.numeros_de_temporada
             serie.datos = json.dumps({
                 'tipo': 'serie', 'nombre': serie.nombre, 'logo': serie.logo, 'portada': bool(serie.portada),
                 'activo': serie.activo, 'destacado': serie.destacado,
@@ -715,9 +714,8 @@ def organizar_contenido(request):
     if not secciones.es_valida(contenido):
         contenido = Contenido.VIVO
     filtros = _filtros_de_organizar(request.GET)
-    # En Series, armarlas (de los capítulos sueltos) es lo que más tarda: una sola vez, para la lista y los chips
-    armadas = (consultas.series(texto=filtros['texto'], origen=filtros['origen'], idioma=filtros['idioma'],
-                                ligero=True)
+    # En Series, una sola vez para la lista y para los chips
+    armadas = (consultas.resumen_de_series(texto=filtros['texto'], origen=filtros['origen'], idioma=filtros['idioma'])
                if contenido == Contenido.SERIE else None)
     datos = consultas.organizar_contenido(contenido, categoria=request.GET.get('categoria', ''),
                                           pagina=request.GET.get('pagina'), series_armadas=armadas, **filtros)
@@ -984,10 +982,9 @@ def serie_detalle(request):
     if not nombre:
         raise Http404('Falta el nombre de la serie.')
 
-    serie = next(
-        (item for item in consultas.series(texto=nombre) if item.nombre.casefold() == nombre.casefold()),
-        None,
-    )
+    # Solo los capítulos de esa serie (Canal.serie), no los de todas las que tienen ese nombre adentro
+    serie = next((item for item in consultas.series(clave=nombre) if item.nombre.casefold() == nombre.casefold()),
+                 None)
     if serie is None:
         raise Http404('No se encontró la serie.')
 
