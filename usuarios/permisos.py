@@ -5,6 +5,11 @@ si un usuario puede hacer algo, pregunta acá.
 Cómo se decide si un usuario tiene un permiso:
   1. Superusuario            -> siempre sí.
   2. Usuario inactivo        -> nunca.
+  2b. Revendedor             -> nunca, tenga el rol o los permisos que tenga: ve
+                                SU panel de reventa (sus clientes, créditos,
+                                estadísticas) por su perfil de Revendedor, y nada
+                                de otros. Un rol con "administrar_reventa" le
+                                mostraba todos los clientes y revendedores.
   3. Permiso individual      -> si existe, manda (sí o no).
   4. Rol                     -> si no hay permiso individual, manda el rol.
   5. Sin rol ni individual   -> no.
@@ -38,6 +43,10 @@ def permisos_efectivos(usuario):
     if cache is not None:
         return cache
 
+    if es_revendedor(usuario):
+        setattr(usuario, _CACHE, frozenset())
+        return frozenset()
+
     resultado = set(usuario.rol.get_permisos()) if usuario.rol_id else set()
     for permiso, concedido in usuario.permisos_individuales.values_list('permiso', 'concedido'):
         if concedido:
@@ -48,6 +57,13 @@ def permisos_efectivos(usuario):
     resultado = frozenset(resultado & CODIGOS_PERMISOS)
     setattr(usuario, _CACHE, resultado)
     return resultado
+
+
+def es_revendedor(usuario):
+    """True si `usuario` tiene un perfil de revendedor (no borrado)."""
+    # Import acá: reventa usa este módulo (sería circular arriba)
+    from reventa.models import Revendedor
+    return Revendedor.objects.filter(usuario_id=usuario.pk).exists()
 
 
 def limpiar_cache_permisos(usuario):

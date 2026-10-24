@@ -58,7 +58,8 @@ class PermisosEfectivosTests(TestCase):
 
     def test_una_sola_consulta_para_varios_chequeos(self):
         usuario = Usuario.objects.select_related('rol').get(pk=self.usuario.pk)
-        with self.assertNumQueries(1):
+        # Si es revendedor (no tiene permisos) y sus permisos individuales: una vez, no por cada chequeo
+        with self.assertNumQueries(2):
             for codigo in CODIGOS_PERMISOS:
                 chequear_permiso(usuario, codigo)
 

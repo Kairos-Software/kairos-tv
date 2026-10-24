@@ -7,7 +7,8 @@ from django.urls import reverse
 
 from reventa import servicios
 from reventa.models import Cliente, Compra, Paquete, Revendedor
-from usuarios.models import Usuario
+from usuarios.catalogo_permisos import CODIGOS_PERMISOS
+from usuarios.models import PermisoIndividual, Rol, Usuario
 
 
 class Base(TestCase):
@@ -45,6 +46,28 @@ class AccesoTests(Base):
         self.assertEqual(self.client.post(reverse('reventa:cliente_activar', args=[pk])).status_code, 404)
         self.assertEqual(self.client.post(reverse('reventa:cliente_cargar', args=[pk])).status_code, 404)
         self.assertEqual(self.client.post(reverse('reventa:cliente_codigo', args=[pk])).status_code, 404)
+
+    def test_con_un_rol_de_administrador_igual_ve_solo_lo_suyo(self):
+        # Le quedó un rol con todos los permisos (o uno individual): antes veía todos los clientes y revendedores
+        todo = Rol.objects.create(nombre='Todo', permisos=sorted(CODIGOS_PERMISOS))
+        Usuario.objects.filter(pk=self.juan.usuario_id).update(rol=todo)
+        PermisoIndividual.objects.create(usuario=self.juan.usuario, permiso='administrar_reventa', concedido=True)
+        servicios.crear_cliente(self.juan, 'Cliente de Juan')
+        directo = servicios.crear_cliente(None, 'Cliente directo de la empresa')
+        self.entrar(Usuario.objects.get(pk=self.juan.usuario_id))
+        respuesta = self.client.get(reverse('reventa:clientes'))
+        self.assertContains(respuesta, 'Cliente de Juan')
+        self.assertNotContains(respuesta, 'Cliente de Pepe')
+        self.assertNotContains(respuesta, 'Cliente directo de la empresa')
+        # En el menú, solo lo suyo
+        self.assertContains(respuesta, reverse('reventa:creditos'))
+        for ajeno in ('reventa:revendedores', 'reventa:paquetes', 'usuarios:lista', 'usuarios:roles_lista'):
+            self.assertNotContains(respuesta, f'href="{reverse(ajeno)}"', msg_prefix=ajeno)
+        for nombre, args in [('revendedores', []), ('revendedor', [self.pepe.pk]), ('cliente', [directo.pk])]:
+            self.assertIn(self.client.get(reverse(f'reventa:{nombre}', args=args)).status_code, (403, 404), nombre)
+        self.assertEqual(self.client.get(reverse('usuarios:lista')).status_code, 403)
+        # Sus estadísticas, no las del negocio
+        self.assertFalse(self.client.get(reverse('reventa:estadisticas')).context['es_negocio'])
 
     def test_el_revendedor_no_entra_a_lo_del_administrador(self):
         self.entrar(self.juan.usuario)

@@ -113,7 +113,9 @@ pueden gastar el mismo crédito.
 | `/reventa/paquetes/` | Con `gestionar_paquetes` | — |
 
 Un revendedor **no necesita permisos**: entra porque tiene perfil de
-`Revendedor`. El superusuario tiene todos los permisos. Los clientes siempre
+`Revendedor`. Y **nunca los tiene**, aunque su rol o un permiso individual
+digan otra cosa (`usuarios/permisos.py`): con un rol con `administrar_reventa`
+veía todos los clientes y revendedores. El superusuario tiene todos los permisos. Los clientes siempre
 se buscan dentro de los que el usuario puede ver: cambiar el número en la URL
 da 404.
 

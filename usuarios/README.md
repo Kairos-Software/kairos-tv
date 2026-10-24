@@ -46,6 +46,7 @@ entran y qué puede hacer cada una.
 
 1. **Superusuario** → siempre sí.
 2. **Usuario inactivo** → nunca.
+   - **Revendedor** (tiene perfil de `Revendedor`) → nunca, tenga el rol o los permisos individuales que tenga. Ve su parte de reventa por ser revendedor, y nada de otros (ver `reventa/README.md`).
 3. **Permiso individual** → si existe, manda (sí o no).
 4. **Rol** → si no hay permiso individual, manda el rol.
 5. Sin rol ni permiso individual → no.
