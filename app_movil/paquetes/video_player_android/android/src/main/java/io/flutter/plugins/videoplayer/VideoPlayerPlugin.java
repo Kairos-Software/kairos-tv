@@ -57,6 +57,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
         (llamada, resultado) -> {
           if ("diagnostico".equals(llamada.method)) {
             resultado.success(KairosVigia.diagnostico(llamada.<String>argument("url")));
+          } else if ("otroDecodificador".equals(llamada.method)) {
+            // La persona dijo que la imagen se ve verde o rara (Ajustes de la app)
+            resultado.success(KairosVigia.otroDecodificadorAMano(llamada.<String>argument("url")));
           } else {
             resultado.notImplemented();
           }

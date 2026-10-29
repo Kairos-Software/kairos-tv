@@ -2023,43 +2023,62 @@ class _AjustesTv extends StatelessWidget {
               ),
           ],
         ),
+      // El video llega pero se ve verde (o en cuadritos): ver ControlSenal.arreglarImagen
+      if (control.video != null)
+        (
+          '¿Se ve verde o rara?',
+          [(texto: 'Probar arreglo', elegida: false, alOk: () => arreglarImagen(context, control))],
+        ),
     ];
+    // Con muchas opciones (calidades, 7 fuentes, el arreglo de la imagen) el cuadro no entra en la
+    // pantalla: lo de adentro se desliza, y al moverse con el control se acomoda solo para que se
+    // vea el botón con el foco. Lo que no entra: el borde del cuadro, el ícono y el título.
+    final lugar = (MediaQuery.sizeOf(context).height - 460).clamp(240.0, 900.0);
     return DialogoTv(
       icono: Icons.settings_rounded,
       titulo: 'Ajustes',
       botones: const [],
-      hijo: FocusTraversalGroup(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final (i, (nombre, opciones)) in filas.indexed) ...[
-              if (i > 0) const SizedBox(height: 22),
-              Text(nombre.toUpperCase(), style: LetraTv.sobretitulo),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                child: Row(
-                  children: [
-                    for (final (j, opcion) in opciones.indexed) ...[
-                      if (j > 0) const SizedBox(width: 12),
-                      BotonTv(
-                        texto: opcion.texto,
-                        icono: opcion.elegida ? Icons.check_rounded : null,
-                        principal: opcion.elegida,
-                        autofocus: i == 0 && opcion.elegida,
-                        alto: 52,
-                        tamanioTexto: 16,
-                        alOk: opcion.alOk,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ],
+      hijo: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: lugar),
+        child: SingleChildScrollView(
+          // Lugar para el brillo del botón con foco (el borde de lo que se desliza lo cortaría)
+          padding: const EdgeInsets.all(10),
+          child: _filasDeAjustes(filas),
         ),
+      ),
+    );
+  }
+
+  Widget _filasDeAjustes(List<(String, List<_Opcion>)> filas) {
+    return FocusTraversalGroup(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, (nombre, opciones)) in filas.indexed) ...[
+            if (i > 0) const SizedBox(height: 22),
+            Text(nombre.toUpperCase(), style: LetraTv.sobretitulo),
+            const SizedBox(height: 10),
+            // Si no entran en una fila (un canal con 7 fuentes, muchas calidades), siguen abajo:
+            // antes iban en una tira sin borde y se dibujaban afuera del cuadro
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final opcion in opciones)
+                  BotonTv(
+                    texto: opcion.texto,
+                    icono: opcion.elegida ? Icons.check_rounded : null,
+                    principal: opcion.elegida,
+                    autofocus: i == 0 && opcion.elegida,
+                    alto: 52,
+                    tamanioTexto: 16,
+                    alOk: opcion.alOk,
+                  ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -6,6 +6,8 @@
 ///   - Imagen: Ajustar (se ve entera, con bordes negros si no es de la misma
 ///     forma que la pantalla), Llenar (sin bordes, recorta un poco) o Estirar.
 ///   - Fuente: otra dirección de la misma señal, si tiene varias.
+///   - ¿Se ve verde o rara?: "Probar arreglo" (otro decodificador del aparato
+///     y, si no hay, otra forma de dibujar el video: [arreglarImagen]).
 ///
 /// Lo que se elige lo aplica [ControlSenal] (calidad e idioma valen para lo
 /// que se está viendo; la imagen queda para todo lo que se vea después).
@@ -18,6 +20,7 @@ import 'package:video_player/video_player.dart';
 
 import '../tv/escala.dart' show TamanioReal;
 import 'control_senal.dart';
+import 'datos.dart' show DatosScope;
 import 'estilo.dart';
 
 enum AjusteImagen {
@@ -168,6 +171,15 @@ class OpcionesDeVideo {
   }
 }
 
+/// "Probar arreglo" de "¿Se ve verde o rara?" (celular y TV): cierra los ajustes y prueba el
+/// paso que sigue (ver [ControlSenal.arreglarImagen]). La forma de dibujar el video, si cambia,
+/// queda guardada en el aparato (`Biblioteca.videoEnSuperficie`, la de "Mi cuenta" en la TV).
+void arreglarImagen(BuildContext context, ControlSenal control) {
+  final biblioteca = context.getInheritedWidgetOfExactType<DatosScope>()?.biblioteca;
+  Navigator.pop(context);
+  control.arreglarImagen(guardarSuperficie: (valor) => biblioteca?.videoEnSuperficie = valor);
+}
+
 /// Los ajustes en el celular: una hoja de abajo con las cuatro secciones.
 Future<void> ajustesDeVideoMovil(BuildContext context, ControlSenal control) async {
   final opciones = await OpcionesDeVideo.de(control);
@@ -235,6 +247,17 @@ Future<void> ajustesDeVideoMovil(BuildContext context, ControlSenal control) asy
                         if (i != control.fuente) control.usarFuente(i);
                         Navigator.pop(context);
                       }),
+                  ]),
+                ],
+                // El video llega pero se ve verde (o en cuadritos): ver ControlSenal.arreglarImagen
+                if (control.video != null) ...[
+                  titulo('¿Se ve verde o rara?'),
+                  chips([
+                    ActionChip(
+                      avatar: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                      label: const Text('Probar arreglo'),
+                      onPressed: () => arreglarImagen(context, control),
+                    ),
                   ]),
                 ],
               ],

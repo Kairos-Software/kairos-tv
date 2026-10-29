@@ -211,6 +211,65 @@ public final class KairosVigiaTest {
     assertFalse(vigia.otroDecodificadorPorError(error));
   }
 
+  // ── "¿Se ve verde o rara?" (lo pide la persona desde la app) ──
+
+  @Test
+  public void aPedidoPasaDelDecodificadorDelFabricanteAlDeAndroid() {
+    KairosVigia vigia = conVideoTrabadoEn(DEL_FABRICANTE);
+    contadores.renderedOutputBufferCount = 50; // se ve, pero verde: el vigía no lo puede saber
+    vigia.onRenderedFirstFrame(null, new Object(), 0);
+
+    assertTrue(KairosVigia.otroDecodificadorAMano(DIRECCION));
+
+    assertEquals(1, pedidos.cambios);
+    assertTrue(KairosDecodificadores.estaTrabado(H264, DEL_FABRICANTE, System.currentTimeMillis()));
+  }
+
+  @Test
+  public void aPedidoConElDeAndroidYaNoHayOtro() {
+    // El del fabricante ya quedó anotado (el primer "Probar arreglo") y anda el de Android
+    KairosDecodificadores.anotarTrabado(H264, DEL_FABRICANTE, System.currentTimeMillis());
+    KairosVigia vigia = conVideoTrabadoEn(DE_ANDROID);
+    vigia.onRenderedFirstFrame(null, new Object(), 0);
+
+    // La app prueba entonces otra forma de dibujar el video
+    assertFalse(KairosVigia.otroDecodificadorAMano(DIRECCION));
+    assertFalse(KairosVigia.otroDecodificadorAMano("http://otra/direccion"));
+    assertEquals(0, pedidos.cambios);
+  }
+
+  // ── El error que recibe la app ──
+
+  private static final class Escucha extends ExoPlayerEventListener {
+    Escucha(ExoPlayer exoPlayer, VideoPlayerCallbacks events) {
+      super(exoPlayer, events);
+    }
+
+    @Override
+    protected void sendInitialized() {}
+  }
+
+  @Test
+  public void elErrorTraeElDiagnosticoDespuesDeLaMarca() {
+    VideoPlayerCallbacks events = org.mockito.Mockito.mock(VideoPlayerCallbacks.class);
+    org.mockito.ArgumentCaptor<KairosVigia> vigia = org.mockito.ArgumentCaptor.forClass(KairosVigia.class);
+    when(exoPlayer.getTotalBufferedDuration()).thenReturn(4_000L);
+    Escucha escucha = new Escucha(exoPlayer, events);
+    org.mockito.Mockito.verify(exoPlayer).addAnalyticsListener(vigia.capture());
+    vigia.getValue().onVideoInputFormatChanged(null, videoH264(), null);
+    vigia.getValue().onVideoDecoderInitialized(null, DEL_FABRICANTE, 0, 0);
+
+    escucha.onPlayerError(new PlaybackException("Source error", null, PlaybackException.ERROR_CODE_IO_UNSPECIFIED));
+
+    org.mockito.ArgumentCaptor<String> mensaje = org.mockito.ArgumentCaptor.forClass(String.class);
+    org.mockito.Mockito.verify(events).onError(org.mockito.ArgumentMatchers.eq("VideoError"), mensaje.capture(), org.mockito.ArgumentMatchers.isNull());
+    // La app decide el motivo con lo de antes de la marca (el nombre del decodificador va después)
+    String[] partes = mensaje.getValue().split(KairosVigia.POR_DENTRO, 2);
+    assertEquals(2, partes.length);
+    assertFalse(partes[0], partes[0].toUpperCase(java.util.Locale.ROOT).contains("DECODER"));
+    assertTrue(partes[1], partes[1].contains("deco " + DEL_FABRICANTE));
+  }
+
   // ── El diagnóstico ──
 
   @Test

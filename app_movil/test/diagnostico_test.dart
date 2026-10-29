@@ -15,6 +15,7 @@ import 'package:app_movil/movil/diagnostico.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'servidor_de_prueba.dart';
@@ -30,6 +31,9 @@ class _VideoDeMentira extends VideoPlayerPlatform {
   final _direcciones = <int, String>{};
   final abiertas = <String>[];
 
+  /// Cómo se pidió dibujar cada video que se abrió (textura o superficie de Android).
+  final formasDeDibujar = <VideoViewType>[];
+
   @override
   Future<void> init() async {}
 
@@ -39,6 +43,7 @@ class _VideoDeMentira extends VideoPlayerPlatform {
     _eventos[id] = StreamController<VideoEvent>();
     _direcciones[id] = options.dataSource.uri ?? '';
     abiertas.add(_direcciones[id]!);
+    formasDeDibujar.add(options.viewType);
     return id;
   }
 
@@ -123,11 +128,14 @@ Canal _canal(List<String> direcciones) => Canal({
   ],
 }, contenido: 'vivo');
 
-/// Lo que contesta "el reproductor" cuando la app pregunta qué pasó.
-void _elReproductorDice(Map<String, Object?>? Function(String url) respuesta) {
+/// Lo que contesta "el reproductor" cuando la app pregunta qué pasó ([respuesta]) y si le pide
+/// otro decodificador ([hayOtroDecodificador]).
+void _elReproductorDice(Map<String, Object?>? Function(String url) respuesta, {bool hayOtroDecodificador = false}) {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
     _canalReproductor,
-    (llamada) async => respuesta((llamada.arguments as Map)['url'] as String),
+    (llamada) async => llamada.method == 'otroDecodificador'
+        ? hayOtroDecodificador
+        : respuesta((llamada.arguments as Map)['url'] as String),
   );
 }
 
@@ -151,6 +159,7 @@ void main() {
     Aparato.version = '';
     Aparato.nombre = 'App Android';
     Aparato.android = '';
+    ControlSenal.enSuperficie = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_canalReproductor, null);
   });
 
@@ -267,5 +276,98 @@ void main() {
     control.dispose();
     // Las esperas de las señales que se dejaron (vencen solas, sin efecto)
     await _pasar(tester, const Duration(seconds: 16));
+  });
+
+  group('el error de la 1.2.40', () {
+    test('un corte con el diagnóstico atrás NO es "el aparato no puede con el formato"', () {
+      // El diagnóstico trae el nombre del decodificador ("...DECODER.AVC") y los reintentos (con un 404)
+      final corte = Falla.de(
+        PlatformException(
+          code: 'VideoError',
+          message:
+              'Video player had error ERROR_CODE_IO_NETWORK_CONNECTION_FAILED: Source error'
+              '${Falla.porDentro}video h264 1920x1080 · deco OMX.MTK.VIDEO.DECODER.AVC: entraron 900, '
+              'salieron 890 · 2 reintentos (Response code: 404)',
+        ),
+      );
+      expect((corte.motivo, corte.delAparato), ('conexion', false));
+      expect(ControlSenal.esconderDespuesDe(corte, hayFuentes: true, seVio: false), isFalse);
+      // Pero el panel lo recibe entero
+      expect(corte.detalle, contains('deco OMX.MTK.VIDEO.DECODER.AVC'));
+      // Un error de verdad del decodificador sigue siendo del aparato
+      final decodificador = Falla.de(
+        PlatformException(
+          code: 'VideoError',
+          message:
+              'Video player had error ERROR_CODE_DECODER_INIT_FAILED: Decoder init failed${Falla.porDentro}video h264',
+        ),
+      );
+      expect((decodificador.motivo, decodificador.delAparato), ('aparato', true));
+    });
+
+    test('al actualizar, vuelve lo que se escondió antes (la 1.2.40 escondía canales que solo se cortaron)', () async {
+      final enUnaSemana = DateTime.now().add(const Duration(days: 7)).millisecondsSinceEpoch;
+      SharedPreferences.setMockInitialValues({'kairos.no_anda.2': '{"7": $enUnaSemana}'});
+      NoAnda.olvidarTodo(volverALeer: true);
+
+      await NoAnda.cargar();
+
+      expect(NoAnda.oculto(7), isFalse);
+      expect((await SharedPreferences.getInstance()).containsKey('kairos.no_anda.2'), isFalse);
+    });
+  });
+
+  group('¿Se ve verde o rara?', () {
+    testWidgets('primero, otro decodificador del aparato (y el panel se entera)', (tester) async {
+      final video = VideoPlayerPlatform.instance = _VideoDeMentira({});
+      _elReproductorDice(
+        (url) => {'texto': 'video h264 1920x1080 · deco OMX.MTK.VIDEO.DECODER.AVC: entraron 90, salieron 90'},
+        hayOtroDecodificador: true,
+      );
+      final api = _ApiDePrueba();
+      final control = ControlSenal(api);
+      unawaited(control.abrir(_canal([_hls])));
+      await _pasar(tester, const Duration(seconds: 1));
+      expect(control.video, isNotNull);
+
+      final hecho = await control.arreglarImagen(guardarSuperficie: (_) => fail('no tenía que cambiar la forma'));
+      await _pasar(tester, const Duration(milliseconds: 300));
+
+      expect(hecho, ArregloDeImagen.otroDecodificador);
+      // Sigue con el mismo video: lo vuelve a arrancar el reproductor de Android, con otro decodificador
+      expect(video.abiertas, [_hls]);
+      expect(api.fallas.single['motivo'], 'aparato'); // no cuenta contra la señal
+      expect(
+        api.fallas.single['detalle'],
+        allOf(
+          contains('la imagen se ve verde o rara'),
+          contains('OMX.MTK.VIDEO.DECODER.AVC'),
+          contains('Lenovo TB-X505F'),
+        ),
+      );
+      control.dispose();
+      await _pasar(tester, const Duration(milliseconds: 300));
+    });
+
+    testWidgets('si ya no hay otro decodificador, otra forma de dibujar el video (y queda guardada)', (tester) async {
+      final video = VideoPlayerPlatform.instance = _VideoDeMentira({});
+      _elReproductorDice((url) => {'texto': 'deco c2.android.avc.decoder'});
+      final control = ControlSenal(_ApiDePrueba());
+      unawaited(control.abrir(_canal([_hls])));
+      await _pasar(tester, const Duration(seconds: 1));
+      bool? guardada;
+
+      final hecho = await control.arreglarImagen(guardarSuperficie: (valor) => guardada = valor);
+      expect(control.avisoDeConexion, 'Probando otra forma de mostrar la imagen…');
+      await _pasar(tester, const Duration(seconds: 1));
+
+      expect(hecho, ArregloDeImagen.otraForma);
+      expect(guardada, isTrue);
+      expect(video.formasDeDibujar, [VideoViewType.textureView, VideoViewType.platformView]);
+      expect(control.video, isNotNull); // volvió a arrancar
+      expect(control.avisoDeConexion, isNull);
+      control.dispose();
+      await _pasar(tester, const Duration(milliseconds: 300));
+    });
   });
 }

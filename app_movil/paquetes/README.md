@@ -286,7 +286,8 @@ reproductores) y sacar `dev_dependencies` de su `pubspec.yaml`.
   más. Si sigue trabado, volver a darse cuenta cuesta unos 6 s.
 - **El diagnóstico**: el vigía junta qué video llegó (tipo, tamaño, cuadros por
   segundo), qué decodificador se usó y cuánto entró y salió, el audio, lo
-  guardado y los reintentos de conexión. Va al final de cada error ("· video
+  guardado y los reintentos de conexión. Va al final de cada error, **después
+  de la marca `· por dentro: `** (`KairosVigia.POR_DENTRO`: "· por dentro: video
   h264 1920x1080 25 fps · deco OMX.MTK.VIDEO.DECODER.AVC: entraron 12, salieron
   0 · ...") y la app lo pide cuando una señal no arranca a tiempo, por el canal
   `kairos/reproductor` (método `diagnostico` con la dirección del video; lo
@@ -294,7 +295,20 @@ reproductores) y sacar `dev_dependencies` de su `pubspec.yaml`.
   `aparato` (llegó y no se mostró), `sin_datos` (no llegó nada del servidor),
   `sin_video` (la señal no trae video), `cambiando` (está probando otro
   decodificador: la app espera 20 s más) o `desconocida`.
+- **La marca (desde la 1.2.41):** la app decide el motivo de un error solo con
+  lo de antes de `· por dentro: `. En la 1.2.40 iba pegado y el diagnóstico
+  tiene nombres de decodificadores ("...DECODER.AVC"): cualquier corte después
+  de arrancar se leía como "este aparato no puede con el formato" y escondía
+  el canal 7 días en ese aparato.
+- **"¿Se ve verde o rara?" (desde la 1.2.41):** a veces el decodificador
+  devuelve imágenes, pero mal (la imagen de fondo verde, con los carteles del
+  canal encima), y eso el vigía no lo puede ver. Lo dice la persona en Ajustes
+  ("Probar arreglo"): la app llama a `otroDecodificador` (mismo canal, con la
+  dirección del video) y `KairosVigia.otroDecodificadorAMano` anota el actual
+  como trabado y arranca de nuevo con el siguiente; contesta `false` si ya no
+  hay otro (la app prueba entonces la otra forma de dibujar el video).
 - Tests: `android/src/test/.../KairosVigiaTest.java` (las reglas, y con un
   reproductor de mentira: el del fabricante trabado pasa al de Android; si ese
-  también, se rinde) y `KairosDecodificadoresTest.java` (lo anotado, cuánto
-  dura, que quede aunque se cierre la app).
+  también, se rinde; a pedido; la marca en el error) y
+  `KairosDecodificadoresTest.java` (lo anotado, cuánto dura, que quede aunque
+  se cierre la app).

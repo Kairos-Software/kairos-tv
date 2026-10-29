@@ -819,8 +819,10 @@ class Catalogo extends ChangeNotifier {
 /// escondido las versiones anteriores (hasta 30 días, a veces por un error
 /// pasajero) se olvida al actualizar.
 class NoAnda {
-  static const _clave = 'kairos.no_anda.2';
-  static const _claveVieja = 'kairos.no_anda';
+  /// Desde la 1.2.41 la clave es otra: la 1.2.40 escondía por error canales que solo se habían
+  /// cortado (ver Falla.porDentro); al actualizar se olvida lo escondido antes y vuelven.
+  static const _clave = 'kairos.no_anda.3';
+  static const _clavesViejas = ['kairos.no_anda', 'kairos.no_anda.2'];
   static const _maximo = 500;
 
   static final Map<int, DateTime> _hasta = {};
@@ -858,7 +860,9 @@ class NoAnda {
     _cargado = true;
     try {
       final preferencias = await SharedPreferences.getInstance();
-      if (preferencias.containsKey(_claveVieja)) await preferencias.remove(_claveVieja);
+      for (final vieja in _clavesViejas) {
+        if (preferencias.containsKey(vieja)) await preferencias.remove(vieja);
+      }
       final guardados = jsonDecode(preferencias.getString(_clave) ?? '{}') as Map<String, dynamic>;
       for (final MapEntry(:key, :value) in guardados.entries) {
         final id = int.tryParse(key);
@@ -891,11 +895,11 @@ class NoAnda {
     } catch (_) {}
   }
 
-  /// Solo para las pruebas.
+  /// Solo para las pruebas. [volverALeer]: la próxima [cargar] lee lo guardado en el aparato.
   @visibleForTesting
-  static void olvidarTodo() {
+  static void olvidarTodo({bool volverALeer = false}) {
     _hasta.clear();
-    _cargado = true;
+    _cargado = !volverALeer;
   }
 }
 

@@ -220,9 +220,14 @@ class ApiCliente {
     return Isolate.run(() => jsonDecode(utf8.decode(bytes)));
   }
 
+  /// Lo ven los clientes (al entrar con el código, por ejemplo). Antes decía "que el celular y
+  /// el servidor estén en la misma red", de cuando el servidor era la compu de desarrollo.
+  /// Pasó que con un WiFi no entraba y con los datos del celular sí: por eso sugiere otra red.
   ApiError _errorConexion(String detalle) => ApiError(
     status: 0,
     codigo: 'sin_conexion',
-    detalle: '$detalle Revisá que el celular y el servidor estén en la misma red y que el servidor esté encendido.',
+    detalle:
+        '$detalle Revisá la conexión a internet de este aparato. Si con este WiFi no entra, probá con otra '
+        'red (por ejemplo, los datos del celular) y avisale a tu vendedor.',
   );
 }

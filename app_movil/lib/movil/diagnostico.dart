@@ -29,6 +29,18 @@ class Diagnostico {
   bool get sinDatos => causa == 'sin_datos';
   bool get sinVideo => causa == 'sin_video';
 
+  /// La imagen se ve verde o rara (lo dijo la persona): que el reproductor siga con otro
+  /// decodificador del aparato. false si no hay otro (o fuera de Android: en las pruebas).
+  static Future<bool> otroDecodificador(String url) async {
+    try {
+      return await _canal.invokeMethod<bool>('otroDecodificador', {'url': url}) ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// El del último video abierto con la dirección [url] (null si el
   /// reproductor no sabe nada, o fuera de Android: en las pruebas).
   static Future<Diagnostico?> de(String url) async {

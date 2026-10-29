@@ -233,6 +233,41 @@ void main() {
     expect(find.text('Telemax'), findsWidgets);
   });
 
+  testWidgets('en vivo: con muchas fuentes, todas quedan adentro del cuadro de ajustes', (tester) async {
+    final conSiete = Canal({
+      'id': 12,
+      'nombre': 'America TV',
+      'fuentes': [
+        for (var n = 1; n <= 7; n++) {'id': 100 + n, 'url': 'https://x/12-$n.m3u8', 'tipo': 'hls', 'codec': 'h264'},
+      ],
+    }, categoria: 'Noticias');
+    await _abrir(tester, ReproductorVivoTv(canal: conSiete, lista: [conSiete]));
+    await _tecla(tester, LogicalKeyboardKey.arrowRight); // opciones, en "Guía"
+    while (_enfocado() != 'Ajustes') {
+      await _tecla(tester, LogicalKeyboardKey.arrowRight);
+    }
+    await _tecla(tester, LogicalKeyboardKey.select);
+
+    // Cada botón, cuando se llega a él, se ve entero adentro del cuadro (si no entra todo, se desliza)
+    final cuadro = tester.getRect(find.byType(Dialog));
+    void adentro(String texto) {
+      final boton = tester.getRect(find.text(texto));
+      expect(cuadro.contains(boton.topLeft) && cuadro.contains(boton.bottomRight), isTrue, reason: '$texto se sale');
+    }
+
+    for (var n = 1; n <= 7; n++) {
+      await tester.ensureVisible(find.text('Fuente $n'));
+      await _pasar(tester);
+      adentro('Fuente $n');
+    }
+    // Con el control: Abajo hasta "Probar arreglo" (lo último), y se ve
+    for (var i = 0; i < 8 && _enfocado() != 'Probar arreglo'; i++) {
+      await _tecla(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(_enfocado(), 'Probar arreglo');
+    adentro('Probar arreglo');
+  });
+
   testWidgets('en vivo: "Recordarme" desde las opciones anota ese canal en Mi agenda', (tester) async {
     SharedPreferences.setMockInitialValues({});
     Recordatorios.poner([]);

@@ -270,6 +270,7 @@ class ControlSenal extends ChangeNotifier {
     _medir(seVe: false);
     _cerrarFuente();
     canal = nuevo;
+    _avisoDeArreglo = null;
     _vistoDeEstaVez = Duration.zero;
     _vistaContada = false;
     _desde = desde;
@@ -453,6 +454,7 @@ class ControlSenal extends ChangeNotifier {
     await nuevo.play();
     video = nuevo;
     _enUso = elegida;
+    _direccionEnUso = senal.url;
     _canalEnUso = canal!.id;
     _vigilar(); // lo que avisó al arrancar llegó antes de ser el video actual
     if (video != nuevo) return; // (ya se cortó y se pasó a otra)
@@ -522,6 +524,7 @@ class ControlSenal extends ChangeNotifier {
       if (_anotarCorte(actual)) return; // se pasó a otra fuente
     } else if (seVe) {
       _seEstabaViendo = true;
+      _avisoDeArreglo = null;
     }
     if (actual.value.isBuffering) {
       _esperandoDesde ??= DateTime.now();
@@ -617,6 +620,7 @@ class ControlSenal extends ChangeNotifier {
     final cortes = _cortes;
     final proporcion = _proporcion;
     _enUso = null;
+    _direccionEnUso = null;
     _canalEnUso = null;
     _vistoEnFuente = Duration.zero;
     _cortes = 0;
@@ -717,10 +721,66 @@ class ControlSenal extends ChangeNotifier {
   /// probando, para que una espera larga no parezca la app colgada. null si ya
   /// se ve, hay una sola señal o no es en vivo.
   String? get avisoDeConexion {
+    if (cargando && _avisoDeArreglo != null) return _avisoDeArreglo;
     final total = fuentes.length;
     if (!cargando || !_enVivo || canal == null || total < 2 || fuente >= total) return null;
     final numero = (fuente - _inicio) % total + 1;
     return numero == 1 ? 'Conectando…' : 'La señal anterior no respondió. Probando la $numero de $total…';
+  }
+
+  /// Lo que se está probando por "¿Se ve verde o rara?" (debajo de la ruedita, hasta que se ve).
+  String? _avisoDeArreglo;
+
+  /// La dirección del video que se está viendo (la que conoce el reproductor de Android).
+  String? _direccionEnUso;
+
+  /// La persona dijo (en Ajustes) que la imagen se ve verde o rara. El video llega (se ven los
+  /// carteles del canal) pero el decodificador del aparato lo entrega mal, o el aparato no se
+  /// lleva bien con la forma de dibujarlo, y eso la app no lo puede ver sola. Primero, otro
+  /// decodificador del aparato (el de Android: anda en todos; queda anotado 2 días para los
+  /// próximos canales); si ya no hay otro, la otra forma de dibujar el video ([enSuperficie],
+  /// que queda guardada con [guardarSuperficie]). Cada vez que se toca, el paso que sigue. Le
+  /// cuenta al panel qué aparato y qué decodificador la mostraban mal (motivo "aparato": no
+  /// cuenta contra la señal). null si no hay nada que arreglar (no se está viendo nada).
+  Future<ArregloDeImagen?> arreglarImagen({required ValueSetter<bool> guardarSuperficie}) async {
+    final actual = video;
+    final elegida = _enUso;
+    final direccion = _direccionEnUso;
+    if (actual == null || elegida == null || direccion == null) return null;
+    final diagnostico = await Diagnostico.de(direccion);
+    final ArregloDeImagen hecho;
+    _ignorarCortesHasta = DateTime.now().add(const Duration(seconds: 15)); // va a cargar: no es un corte
+    if (await Diagnostico.otroDecodificador(direccion)) {
+      hecho = ArregloDeImagen.otroDecodificador;
+    } else {
+      hecho = ArregloDeImagen.otraForma;
+      enSuperficie = !enSuperficie;
+      guardarSuperficie(enSuperficie);
+      if (!_enVivo) _desde = actual.value.position;
+    }
+    if (video != actual || _cerrado) return hecho;
+    _avisoDeArreglo = hecho.aviso;
+    api
+        .post('canales/fuentes/${elegida.id}/falla/', {
+          'motivo': Falla.formato.motivo,
+          'detalle': detalleDeLaFalla(
+            Falla(
+              Falla.formato.motivo,
+              '',
+              Falla._recortar(
+                'la persona dijo que la imagen se ve verde o rara · ${hecho.paraElPanel}'
+                '${diagnostico == null ? '' : ' · ${diagnostico.texto}'}',
+              ),
+            ),
+          ),
+        })
+        .catchError((Object _) => null);
+    if (hecho == ArregloDeImagen.otraForma) {
+      unawaited(_probar(fuente));
+    } else {
+      _avisar();
+    }
+    return hecho;
   }
 
   void alternarPausa() {
@@ -937,13 +997,24 @@ class Falla {
 
   static String _recortar(String texto) => texto.length > _largo ? texto.substring(0, _largo) : texto;
 
+  /// Lo que separa el error del reproductor de lo que vio por dentro (paquetes/video_player_android:
+  /// KairosVigia.POR_DENTRO). El motivo se decide solo con lo de antes: lo de después tiene
+  /// nombres de decodificadores ("OMX.MTK.VIDEO.DECODER.AVC") y errores de reintentos. En la
+  /// 1.2.40 se leía todo junto y cualquier corte después de arrancar quedaba como "el aparato no
+  /// puede con el formato" (y escondía el canal en el aparato).
+  static const porDentro = ' · por dentro: ';
+
   /// Lee el error que dio el reproductor (ExoPlayer) o la espera.
   factory Falla.de(Object error) {
     if (error is TimeoutException) return tiempo;
-    final texto = error is PlatformException ? '${error.message} ${error.details ?? ''}' : '$error';
+    final completo = error is PlatformException ? '${error.message} ${error.details ?? ''}' : '$error';
     // Sin el "Video player had error" del reproductor (no dice nada y ocupa lugar)
-    final detalle = texto.replaceAll(RegExp(r'\s+'), ' ').trim().replaceFirst(RegExp(r'^Video player had error '), '');
+    final detalle = completo
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .replaceFirst(RegExp(r'^Video player had error '), '');
     final corto = _recortar(detalle);
+    final texto = completo.split(porDentro).first;
     if (RegExp(
       r'UnknownHost|Unable to resolve host|ENETUNREACH|Network is unreachable',
       caseSensitive: false,
@@ -968,4 +1039,18 @@ class Falla {
     if (error is SenalNoDisponible) return Falla('error', error.toString(), corto);
     return Falla(conexion.motivo, conexion.mensaje, corto);
   }
+}
+
+/// Lo que se probó con "¿Se ve verde o rara?" ([ControlSenal.arreglarImagen]).
+enum ArregloDeImagen {
+  otroDecodificador('Probando con otro decodificador de este aparato…', 'se pasó a otro decodificador del aparato'),
+  otraForma('Probando otra forma de mostrar la imagen…', 'se cambió la forma de dibujar el video');
+
+  const ArregloDeImagen(this.aviso, this.paraElPanel);
+
+  /// Debajo de la ruedita mientras vuelve a arrancar.
+  final String aviso;
+
+  /// Para el diagnóstico del panel.
+  final String paraElPanel;
 }

@@ -82,6 +82,14 @@ final class KairosVigia implements AnalyticsListener {
   /** El comienzo del error que manda el vigía (la app lo reconoce: es el aparato). */
   static final String TRABADO = "KAIROS_DECODIFICADOR_TRABADO";
 
+  /**
+   * Entre el error y el diagnóstico (ver ExoPlayerEventListener.kairosError). La app decide el
+   * motivo solo con lo de antes: el diagnóstico tiene nombres de decodificadores
+   * ("OMX.MTK.VIDEO.DECODER.AVC") y errores de los reintentos, y en la 1.2.40 cualquier corte
+   * después de arrancar se leía como "este aparato no puede con el formato".
+   */
+  static final String POR_DENTRO = " · por dentro: ";
+
   enum Accion {
     NADA,
     OTRO_DECODIFICADOR,
@@ -344,6 +352,35 @@ final class KairosVigia implements AnalyticsListener {
     handler.removeCallbacks(mirar);
     handler.postDelayed(mirar, MIRAR_CADA_MS);
     return true;
+  }
+
+  /**
+   * La persona dijo (en Ajustes de la app) que la imagen se ve verde o rara: el decodificador
+   * devuelve imágenes, pero mal, y eso el vigía no lo puede ver (pasa con algunos del fabricante
+   * y ciertos canales, y la imagen de fondo queda verde con los carteles del canal encima). Si hay
+   * otro, lo anota (como uno trabado) y arranca de nuevo con ese: true. Si no (ya es el de
+   * Android, o no hay otro), false: la app prueba otra forma de dibujar el video.
+   */
+  boolean otroDecodificadorAMano() {
+    if (alCerrar != null || video == null || video.sampleMimeType == null || decoVideo == null) {
+      return false;
+    }
+    String tipo = video.sampleMimeType;
+    if (!KairosDecodificadores.hayOtro(tipo, decoVideo)) {
+      return false;
+    }
+    seVio = false; // vuelve a mirar hasta que el nuevo muestre imagen
+    seRindio = false;
+    cambiar(tipo, decoVideo);
+    handler.removeCallbacks(mirar);
+    handler.postDelayed(mirar, MIRAR_CADA_MS);
+    return true;
+  }
+
+  /** Lo mismo, para el último video abierto con esa dirección (lo pide la app). */
+  static boolean otroDecodificadorAMano(@Nullable String direccion) {
+    KairosVigia vigia = direccion == null ? null : porDireccion.get(direccion);
+    return vigia != null && vigia.otroDecodificadorAMano();
   }
 
   // ── Lo que se ve del reproductor (con cuidado: en las pruebas es de mentira) ──

@@ -146,7 +146,7 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
     return "Video player had error "
         + detalle
         + (veces > 0 ? " · se reconectó sola " + veces + (veces == 1 ? " vez" : " veces") : "")
-        + (diagnostico.isEmpty() ? "" : " · " + diagnostico);
+        + (diagnostico.isEmpty() ? "" : KairosVigia.POR_DENTRO + diagnostico);
   }
 
   /**
