@@ -164,6 +164,7 @@ hr { border-color: var(--borde); opacity: 1; margin: 1.5rem 0; }
 .menu {
     position: sticky; top: 0;
     height: 100vh;
+    height: 100dvh;
     display: flex; flex-direction: column;
     background: var(--capa-minima);
     border-right: 1px solid var(--borde);
@@ -194,6 +195,7 @@ hr { border-color: var(--borde); opacity: 1; margin: 1.5rem 0; }
 }
 
 .menu-nav {
+    min-height: 0;
     flex: 1; overflow-y: auto;
     padding: .35rem .65rem .75rem;
     display: flex; flex-direction: column; gap: 2px;
@@ -296,6 +298,7 @@ hr { border-color: var(--borde); opacity: 1; margin: 1.5rem 0; }
 .aviso-mantenimiento a { color: var(--dorado); font-weight: 600; margin-left: auto; }
 
 .pagina {
+    min-width: 0;
     width: 100%; max-width: 1480px;
     margin: 0 auto;
     padding: 1.5rem 2rem 3rem;
@@ -370,7 +373,7 @@ hr { border-color: var(--borde); opacity: 1; margin: 1.5rem 0; }
 /* Ficha de datos: cada dato con su etiqueta ARRIBA (no al costado) */
 .ficha-datos {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
     gap: 1.1rem 1.5rem;
     margin: 0 0 1rem;
 }
@@ -399,7 +402,7 @@ hr { border-color: var(--borde); opacity: 1; margin: 1.5rem 0; }
 }
 .metricas-bloque-titulo i { color: var(--celeste); }
 .resumen-metricas {
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
     gap: .75rem;
 }
 .resumen-metricas > div {
@@ -668,7 +671,8 @@ fieldset { min-width: 0; }
 .filtros-mas-panel-ancho { width: min(440px, 90vw); }
 .filtros-fechas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
 
-.table-responsive { scrollbar-width: thin; }
+/* La tabla desplaza sus columnas dentro del recuadro, incluso con formularios en las celdas. */
+.table-responsive { min-width: 0; max-width: 100%; contain: paint; scrollbar-width: thin; }
 .table-responsive:focus-visible { outline-offset: -2px; }
 .tabla, .table {
     --bs-table-bg: transparent;
@@ -767,7 +771,10 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     font-size: .66rem; font-weight: 800; border: 2px solid var(--fondo);
 }
 .campanita-menu {
-    width: min(380px, 92vw); padding: 0; overflow: hidden;
+    width: min(380px, 92vw);
+    max-height: calc(100vh - var(--barra-alto) - 1rem);
+    max-height: calc(100dvh - var(--barra-alto) - 1rem);
+    padding: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
     background: var(--capa-baja); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
     box-shadow: var(--sombra);
 }
@@ -842,7 +849,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .seccion-encabezado { margin-bottom: 1rem; }
 .seccion-encabezado h2 { margin: .3rem 0 .2rem; font-size: 1.3rem; font-weight: 800; }
 .seccion-encabezado p { margin: 0; color: var(--texto-suave); font-size: .9rem; }
-.modulos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: .85rem; }
+.modulos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: .85rem; }
 .acceso-rapido {
     position: relative;
     display: flex; align-items: center; gap: 1rem;
@@ -930,7 +937,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 }
 .contenido-seccion-encabezado h2 { margin: .15rem 0 0; font-size: 1.2rem; font-weight: 800; }
 .contenido-listas-encabezado { margin: 0; padding: 1rem 1.25rem; }
-.resumen-contenidos { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: .75rem; }
+.resumen-contenidos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: .75rem; }
 .resumen-contenido {
     display: grid; grid-template-columns: minmax(125px, .8fr) minmax(155px, 1.2fr); gap: .85rem;
     padding: .85rem 1rem; background: var(--capa-baja); border: 1px solid var(--borde); border-radius: 16px;
@@ -1100,7 +1107,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .contadores a { color: inherit; text-decoration: none; }
 .contadores li:has(a:hover) { border-color: var(--celeste-borde); }
 .importacion-config { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .65rem; }
-.importacion-flujo { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: .85rem; align-items: stretch; }
+.importacion-flujo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: .85rem; align-items: stretch; }
 .importacion-paso { margin: 0; }
 .pagina-importacion .contadores li { flex: 1 1 145px; }
 
@@ -1162,7 +1169,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     padding: .05rem .55rem; border-radius: 999px; background: var(--capa-alta);
     font-family: var(--fuente-texto); font-size: .72rem; font-weight: 700; color: var(--texto-suave);
 }
-.grilla-canales { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: .85rem; }
+.grilla-canales { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 1fr)); gap: .85rem; }
 .canal-tarjeta {
     position: relative;
     display: flex; flex-direction: column; gap: .45rem;
@@ -1244,8 +1251,8 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 }
 .espejo-aviso a { color: inherit; font-weight: 700; }
 
-.espejo-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1rem; }
-.espejo-grilla.con-poster { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.espejo-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 1rem; }
+.espejo-grilla.con-poster { grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); }
 .espejo-tarjeta { position: relative; display: flex; flex-direction: column; gap: .4rem; margin: 0; }
 .espejo-seleccionar { display: flex; flex-direction: column; gap: .4rem; min-width: 0; margin: 0; color: inherit; cursor: pointer; }
 .espejo-tarjeta .canal-elegir { top: .55rem; right: .55rem; }
@@ -1311,7 +1318,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .pagina-reventa .reventa-resumen .metricas-bloque + .metricas-bloque { margin-top: 1rem; }
 .pagina-reventa .reventa-resumen .metricas-bloque-titulo { margin-bottom: .5rem; }
 .pagina-reventa .reventa-resumen .resumen-metricas {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); gap: .5rem;
 }
 .pagina-reventa .reventa-resumen .resumen-metricas > div { padding: .7rem .8rem; border-radius: 12px; }
 .pagina-reventa .reventa-resumen .resumen-metricas dd,
@@ -1347,7 +1354,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .tabla-reventa .table-responsive { border: 0; border-radius: 0; }
 .filtros-compactos > div { max-width: 280px; }
 
-.paquetes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: .85rem; }
+.paquetes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 235px), 1fr)); gap: .85rem; }
 .paquete-tarjeta { display: flex; flex-direction: column; min-height: 255px; padding: 1.15rem; }
 .paquete-tarjeta.paquete-inactivo { opacity: .7; }
 .paquete-encabezado { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
@@ -1366,7 +1373,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .saldo-destacado { display: flex; align-items: center; gap: .65rem; padding: .45rem .75rem; border-radius: 12px; background: var(--celeste-fondo); border: 1px solid var(--celeste-borde); }
 .saldo-destacado small { color: var(--texto-suave); }
 .saldo-destacado strong { color: var(--celeste-claro); font-family: var(--fuente-titulos); font-size: 1.2rem; }
-.paquetes-compra-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .65rem; }
+.paquetes-compra-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: .65rem; }
 .paquete-compra {
     display: grid; gap: .45rem; padding: .9rem;
     border: 1px solid var(--borde); border-radius: 14px; background: var(--capa-baja);
@@ -1378,7 +1385,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .reventa-precio { max-width: 720px; }
 .formulario-reventa { max-width: 800px; }
 .formulario-reventa .row > div:has(textarea) { width: 100%; }
-.clientes-por-vencer ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: .5rem; padding: 0; list-style: none; }
+.clientes-por-vencer ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: .5rem; padding: 0; list-style: none; }
 .clientes-por-vencer li { padding: .65rem .75rem; border: 1px solid var(--borde); border-radius: 11px; background: var(--capa-baja); font-size: .82rem; }
 .clientes-por-vencer li a { font-weight: 700; text-decoration: none; }
 
@@ -1427,8 +1434,8 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .pantalla-codigo strong { color: var(--texto); }
 .pantalla-acciones { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .65rem; }
 .pantallas-sin-asignar { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--borde); }
-.pagina-organizar .espejo-grilla { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .75rem; }
-.pagina-organizar .espejo-grilla.con-poster { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); }
+.pagina-organizar .espejo-grilla { grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: .75rem; }
+.pagina-organizar .espejo-grilla.con-poster { grid-template-columns: repeat(auto-fill, minmax(min(100%, 125px), 1fr)); }
 .espejo-categoria.nivel-1 { margin-left: 1.1rem; padding-top: .4rem; padding-bottom: .4rem; font-weight: 500; font-size: .85rem; }
 .espejo-categoria.nivel-1 .bi { color: var(--texto-apagado); margin-right: .2rem; }
 .espejo-nueva { margin-bottom: .9rem; padding: .55rem .7rem; border: 1px dashed var(--borde-fuerte); border-radius: var(--radio); }
@@ -1492,7 +1499,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 }
 .pagina-organizar:has(.espejo-barra.tiene-seleccion) .pagina { padding-bottom: 9rem; }
 
-@media (max-width: 991.98px) {
+@media (max-width: 1199.98px) {
     .espejo, .pagina-organizar .espejo { grid-template-columns: minmax(0, 1fr); }
     .espejo-categorias { position: static; max-height: 18rem; }
     .pagina-organizar .contenido-pestanias { top: calc(var(--barra-alto) + .35rem); }
@@ -1539,7 +1546,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .exportar-paso { margin: 0 0 1.2rem; padding: 0; border: 0; }
 .exportar-paso legend { margin-bottom: .45rem; font-size: .95rem; font-weight: 700; }
 .exportar-secciones {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .6rem;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: .6rem;
     margin: .5rem 0 0 1.5rem;
 }
 .exportar-seccion { padding: .55rem .7rem; background: var(--capa); border: 1px solid var(--borde); border-radius: var(--radio); }
@@ -1552,7 +1559,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 }
 
 /* Series */
-.grilla-series { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .9rem; }
+.grilla-series { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: .9rem; }
 .serie-tarjeta {
     display: grid; grid-template-columns: 112px minmax(0, 1fr);
     background: var(--capa); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
@@ -1585,7 +1592,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     box-shadow: var(--sombra);
 }
 .serie-hero-portada img { width: 100%; height: 100%; object-fit: cover; }
-.temporadas-lista { display: grid; gap: .85rem; }
+.temporadas-lista { display: grid; grid-template-columns: minmax(0, 1fr); gap: .85rem; }
 .temporada { background: var(--capa); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta); overflow: hidden; }
 .temporada summary {
     display: flex; justify-content: space-between; align-items: center; gap: 1rem;
@@ -1708,7 +1715,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
 .descarga-boton { margin: .5rem .75rem .5rem 0; }
 .descarga-link-etiqueta { font-size: .78rem; color: var(--texto-apagado); }
 .descarga-link { font-size: .84rem; color: var(--celeste-claro); word-break: break-all; }
-.instalacion-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .9rem; }
+.instalacion-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: .9rem; }
 .instalacion-opcion { padding: 1.25rem; background: var(--capa-baja); border: 1px solid var(--borde); border-radius: 16px; }
 .instalacion-opcion h3 { margin: .7rem 0 .5rem; font-size: 1rem; font-weight: 700; }
 .instalacion-opcion ol { margin: 0; padding-left: 1.1rem; font-size: .875rem; color: var(--texto-suave); display: grid; gap: .3rem; }
@@ -1759,7 +1766,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     .reventa-metricas > :last-child { grid-column: 1 / -1; }
 }
 
-@media (max-width: 991.98px) {
+@media (max-width: 1199.98px) {
     .app, .app.menu-colapsado { grid-template-columns: minmax(0, 1fr); }
     .menu {
         position: fixed; inset: 0 auto 0 0;
@@ -1770,6 +1777,7 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     }
     .app.menu-abierto .menu { transform: none; }
     .menu-cerrar { display: grid; place-items: center; }
+    .menu-marca { padding-right: 4rem; }
     .app.menu-colapsado .menu-link-texto, .app.menu-colapsado .menu-usuario-datos,
     .app.menu-colapsado .menu-marca > span:not(.marca-isotipo), .app.menu-colapsado .menu-usuario form { display: initial; }
     .fondo-menu {
@@ -1798,6 +1806,15 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     .reventa-metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .reventa-metricas > :last-child { grid-column: 1 / -1; }
     .reventa-gestion-grid, .pantallas-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* En tablet los controles conservan espacio para el dedo, también en horizontal. */
+@media (pointer: coarse) {
+    .btn, .btn-menu, .btn-campanita, .menu-cerrar, .menu-link,
+    .pestanias a, .espejo-categoria { min-height: 44px; }
+    .btn-menu, .btn-campanita, .menu-cerrar { min-width: 44px; flex-shrink: 0; }
+    .btn-close { box-sizing: border-box; width: 44px; height: 44px; flex-shrink: 0; }
+    .form-control, .form-select { min-height: 44px; font-size: 1rem; }
 }
 
 @media (max-width: 575.98px) {

@@ -74,7 +74,7 @@
 			],
 			"sysroot" : 
 			{
-				"path" : "C:/Users/Marcos/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+				"path" : "C:/Users/marki/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
 			}
 		}
 	],
@@ -100,7 +100,7 @@
 		"language" : "C",
 		"sysroot" : 
 		{
-			"path" : "C:/Users/Marcos/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+			"path" : "C:/Users/marki/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
 		}
 	},
 	"name" : "kairos_audio",

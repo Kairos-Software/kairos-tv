@@ -4,14 +4,14 @@
   ],
   "cleanCommandsComponents": [
     [
-      "C:\\Users\\Marcos\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "C:\\Users\\marki\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
       "-C",
       "D:\\Desktop\\migracion\\KAIROS SOFTWARE SISTEMAS\\KAIROS TV\\kairos-tv\\app_movil\\paquetes\\video_player_android\\android\\.cxx\\RelWithDebInfo\\4m3o3a48\\x86_64",
       "clean"
     ]
   ],
   "buildTargetsCommandComponents": [
-    "C:\\Users\\Marcos\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "C:\\Users\\marki\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
     "-C",
     "D:\\Desktop\\migracion\\KAIROS SOFTWARE SISTEMAS\\KAIROS TV\\kairos-tv\\app_movil\\paquetes\\video_player_android\\android\\.cxx\\RelWithDebInfo\\4m3o3a48\\x86_64",
     "{LIST_OF_TARGETS_TO_BUILD}"
@@ -27,8 +27,8 @@
   },
   "toolchains": {
     "toolchain": {
-      "cCompilerExecutable": "C:\\Users\\Marcos\\AppData\\Local\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
-      "cppCompilerExecutable": "C:\\Users\\Marcos\\AppData\\Local\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+      "cCompilerExecutable": "C:\\Users\\marki\\AppData\\Local\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\marki\\AppData\\Local\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
     }
   },
   "cFileExtensions": [

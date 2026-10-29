@@ -373,7 +373,7 @@ class Fuente(models.Model):
     # manda la app (qué pasó, el error del reproductor, a los cuántos segundos):
     # para diagnosticar por qué un canal no conecta. No se borra cuando vuelve
     # a andar (a diferencia de falla_en_aparatos): queda hasta el próximo.
-    problema_en_aparato = models.CharField('último problema en un aparato', max_length=300, blank=True)
+    problema_en_aparato = models.CharField('último problema en un aparato', max_length=600, blank=True)
     problema_en = models.DateTimeField('cuándo fue el último problema', null=True, blank=True)
 
     class Meta:

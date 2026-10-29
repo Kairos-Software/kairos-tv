@@ -158,6 +158,8 @@ class MainActivity : FlutterActivity() {
                             "nombre" to nombre,
                             "esTv" to (modos.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION),
                             "version" to actividad.packageManager.getPackageInfo(actividad.packageName, 0).versionName,
+                            // Para el diagnóstico de las fallas (ej. "Android 10")
+                            "android" to Build.VERSION.RELEASE,
                             "carpetaTemporal" to File(actividad.cacheDir, "actualizaciones").apply { mkdirs() }.absolutePath,
                             "codecs" to codecsDeVideo(),
                             // Con la que dibujan las vistas de Android dentro de la app (YouTube): la de

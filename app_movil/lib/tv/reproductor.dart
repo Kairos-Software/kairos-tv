@@ -1678,7 +1678,8 @@ class _EstadoSenal extends StatelessWidget {
           const SizedBox(width: 64, height: 64, child: CircularProgressIndicator(strokeWidth: 5, color: Tono.celeste)),
           const SizedBox(height: 22),
           Text(
-            control.fuente > 0 ? 'Esta señal no responde. Probando otra señal…' : 'Conectando…',
+            control.avisoDeConexion ??
+                (control.fuente > 0 ? 'Esta señal no responde. Probando otra señal…' : 'Conectando…'),
             style: LetraTv.cuerpo.copyWith(color: Tono.texto),
           ),
           // Si una película tarda: que es el servidor y que la app sigue intentando (no se colgó)

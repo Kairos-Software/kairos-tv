@@ -75,7 +75,9 @@ MOTIVOS = {
     'error': 'da error',
 }
 # Lo que manda la app al avisar una falla (servicios.MOTIVOS_DE_LOS_APARATOS) -> MOTIVOS
-_MOTIVO_DEL_APARATO = {'rechazo': 'rechaza', 'formato': 'formato', 'tiempo': 'tiempo', 'conexion': 'conexion'}
+# "aparato" (app 1.2.40+): el decodificador de ese aparato no pudo; como "formato", no es una falla de la señal
+_MOTIVO_DEL_APARATO = {'rechazo': 'rechaza', 'formato': 'formato', 'aparato': 'formato', 'tiempo': 'tiempo',
+                       'conexion': 'conexion'}
 
 # Cuándo una fuente está muerta: falla sin parar hace estos días, y al menos estas veces
 DIAS_PARA_QUITAR = 7

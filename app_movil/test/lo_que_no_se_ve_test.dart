@@ -101,7 +101,7 @@ void main() {
     final decodificador = Falla.de(
       PlatformException(code: 'VideoError', message: 'MediaCodecVideoRenderer error, Decoder init failed'),
     );
-    expect((decodificador.motivo, decodificador.delAparato), ('formato', true));
+    expect((decodificador.motivo, decodificador.delAparato), ('aparato', true));
     expect(ControlSenal.esconderDespuesDe(decodificador, hayFuentes: true, seVio: false), isTrue);
     // Sin imagen a los 8 segundos: puede ser la TV trabada (pantalla verde) o un momento de la señal
     expect(ControlSenal.esconderDespuesDe(Falla.sinImagen, hayFuentes: true, seVio: false), isFalse);

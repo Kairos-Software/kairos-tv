@@ -46,6 +46,22 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
     exoPlayer.prepare();
   }
 
+  // Kairos TV: si el decodificador del aparato se traba, otro; y el diagnóstico (ver KairosVigia).
+  private final KairosVigia kairosVigia;
+
+  /** Arranca el video de nuevo (ya sin el decodificador trabado): la app lo ve como "cargando". */
+  private void kairosOtroDecodificador() {
+    kairosReconectando = true;
+    exoPlayer.stop();
+    exoPlayer.prepare();
+  }
+
+  @Nullable
+  private static String kairosDireccion(@NonNull ExoPlayer exoPlayer) {
+    androidx.media3.common.MediaItem video = exoPlayer.getCurrentMediaItem();
+    return video == null || video.localConfiguration == null ? null : video.localConfiguration.uri.toString();
+  }
+
   protected enum RotationDegrees {
     ROTATE_0(0),
     ROTATE_90(90),
@@ -76,6 +92,21 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
       @NonNull ExoPlayer exoPlayer, @NonNull VideoPlayerCallbacks events) {
     this.exoPlayer = exoPlayer;
     this.events = events;
+    this.kairosVigia =
+        new KairosVigia(
+            exoPlayer,
+            new KairosVigia.Acciones() {
+              @Override
+              public void otroDecodificador() {
+                kairosOtroDecodificador();
+              }
+
+              @Override
+              public void fallar(@NonNull String detalle) {
+                events.onError("VideoError", kairosError(detalle), null);
+              }
+            },
+            kairosDireccion(exoPlayer));
   }
 
   protected abstract void sendInitialized();
@@ -85,6 +116,7 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
     isWaitingForValidDuration = false;
     mainHandler.removeCallbacks(initializationFallback);
     mainHandler.removeCallbacks(kairosReconectar);
+    kairosVigia.cerrar();
   }
 
   /**
@@ -107,12 +139,14 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
     return true;
   }
 
-  /** Lo que se le cuenta a la app (y al panel) cuando no se pudo seguir. */
+  /** Lo que se le cuenta a la app (y al panel) cuando no se pudo seguir, con el diagnóstico. */
   private String kairosError(@NonNull String detalle) {
     int veces = kairosReconexion.total();
+    String diagnostico = kairosVigia.texto();
     return "Video player had error "
         + detalle
-        + (veces > 0 ? " · se reconectó sola " + veces + (veces == 1 ? " vez" : " veces") : "");
+        + (veces > 0 ? " · se reconectó sola " + veces + (veces == 1 ? " vez" : " veces") : "")
+        + (diagnostico.isEmpty() ? "" : " · " + diagnostico);
   }
 
   /**
@@ -134,6 +168,7 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
   @Override
   public void onRenderedFirstFrame() {
     kairosSeVio = true;
+    kairosVigia.yaSeVio();
   }
 
   private boolean hasValidDuration() {
@@ -215,6 +250,8 @@ public abstract class ExoPlayerEventListener implements Player.Listener {
       exoPlayer.prepare();
     } else if (KairosReconexion.esPasajero(error.errorCode) && kairosReconectarSiSePuede()) {
       // Kairos TV: un corte de conexión en un canal en vivo que se veía: reconecta solo
+    } else if (kairosVigia.otroDecodificadorPorError(error)) {
+      // Kairos TV: el decodificador de video del aparato dio error: sigue con otro
     } else {
       events.onError("VideoError", kairosError(KairosReconexion.describir(error)), null);
     }

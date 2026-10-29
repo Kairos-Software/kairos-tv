@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "kairos_audio::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-kairos_audio-RelWithDebInfo-9fbfe714292454751a61.json",
+					"jsonFile" : "target-kairos_audio-RelWithDebInfo-c72b77e6e58aab8533c7.json",
 					"name" : "kairos_audio",
 					"projectIndex" : 0
 				}
@@ -49,7 +49,7 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/.cxx/RelWithDebInfo/4m3o3a48/x86_64",
+		"build" : "D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/.cxx/RelWithDebInfo/4m3o3a48/arm64-v8a",
 		"source" : "D:/Desktop/migracion/KAIROS SOFTWARE SISTEMAS/KAIROS TV/kairos-tv/app_movil/paquetes/video_player_android/android/src/main/cpp"
 	},
 	"version" : 

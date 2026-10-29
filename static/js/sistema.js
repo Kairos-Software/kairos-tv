@@ -8,16 +8,20 @@
     const menu = document.getElementById('menu-principal');
     const botonesAlternar = document.querySelectorAll('[data-accion="alternar-menu"]');
     const claveMenu = 'kairos.menu.colapsado';
+    const vistaEscritorio = window.matchMedia('(min-width: 1200px)');
+    const contenido = document.querySelector('.contenido');
     let focoAntesDelMenu = null;
 
     function esEscritorio() {
-        return window.matchMedia('(min-width: 992px)').matches;
+        return vistaEscritorio.matches;
     }
 
     function actualizarBotones() {
         if (!app) return;
         const colapsado = app.classList.contains('menu-colapsado');
         const abierto = app.classList.contains('menu-abierto');
+        if (menu) menu.inert = !esEscritorio() && !abierto;
+        if (contenido) contenido.inert = !esEscritorio() && abierto;
         botonesAlternar.forEach(function (btn) {
             const expandido = esEscritorio() ? !colapsado : abierto;
             btn.setAttribute('aria-expanded', String(expandido));
@@ -82,11 +86,19 @@
     });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && app && app.classList.contains('menu-abierto')) cerrarMenu(true);
+        if (e.key === 'Tab' && menu && !esEscritorio() && app.classList.contains('menu-abierto')) {
+            const controles = Array.from(menu.querySelectorAll('a[href], button, input, select, textarea, [tabindex="0"]'))
+                .filter(function (el) { return !el.disabled && el.getClientRects().length; });
+            const primero = controles[0];
+            const ultimo = controles[controles.length - 1];
+            if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+            else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+        }
     });
     if (menu) {
         menu.querySelectorAll('a').forEach(function (enlace) {
             enlace.addEventListener('click', function () {
-                if (window.innerWidth < 992) cerrarMenu(false);
+                if (!esEscritorio()) cerrarMenu(false);
             });
         });
     }
@@ -96,10 +108,13 @@
         app.classList.toggle('menu-colapsado', colapsadoGuardado && esEscritorio());
         actualizarBotones();
     }
-    window.addEventListener('resize', function () {
+    vistaEscritorio.addEventListener('change', function () {
+        if (!app) return;
+        cerrarMenu(false);
         if (esEscritorio()) {
-            cerrarMenu(false);
             try { app.classList.toggle('menu-colapsado', localStorage.getItem(claveMenu) === '1'); } catch (_) { /* sin persistencia */ }
+        } else {
+            app.classList.remove('menu-colapsado');
         }
         actualizarBotones();
     });

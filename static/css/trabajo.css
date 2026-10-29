@@ -105,7 +105,7 @@
 .filtros-compactos .filtros-buscar { flex: 1 1 15rem; max-width: 26rem; position: relative; }
 .filtros-compactos .filtros-buscar i { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--texto-apagado); }
 .filtros-compactos .filtros-buscar input { padding-left: 2rem; }
-.filtros-compactos select { width: auto; max-width: 16rem; }
+.filtros-compactos select { min-width: 0; width: auto; max-width: min(100%, 16rem); }
 .filtros-total { margin-left: auto; color: var(--texto-apagado); font-size: .82rem; }
 
 /* ── Los problemas (Señales): un filtro por chip ───────────────── */
@@ -349,10 +349,10 @@ kbd { padding: .05rem .3rem; border-radius: 4px; background: var(--capa-maxima);
 .serie-vecinas a:hover { border-color: var(--celeste-borde); color: var(--celeste-claro); }
 .serie-hero-datos { flex: 1; min-width: 0; }
 .serie-hero-linea { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .7rem; font-size: .88rem; }
-.serie-hero-categoria { display: inline-flex; align-items: center; gap: .4rem; margin-left: .2rem; }
+.serie-hero-categoria { display: inline-flex; flex-wrap: wrap; min-width: 0; max-width: 100%; align-items: center; gap: .4rem; margin-left: .2rem; }
 .serie-hero-categoria label { margin: 0; font-size: .8rem; color: var(--texto-suave); }
-.serie-hero-categoria .form-select { width: auto; max-width: 15rem; }
-.serie-hero-categoria .form-control { width: 13rem; }
+.serie-hero-categoria .form-select { width: auto; max-width: min(100%, 15rem); }
+.serie-hero-categoria .form-control { width: 13rem; max-width: 100%; }
 .pagina-serie [data-portada] { cursor: pointer; }
 .pagina-serie [data-portada]:focus-visible { outline: 2px solid var(--celeste); outline-offset: 3px; }
 .serie-portada-cambiar {
@@ -464,7 +464,7 @@ kbd { padding: .05rem .3rem; border-radius: 4px; background: var(--capa-maxima);
     line-height: 1;
 }
 .aviso-cerrar:hover, .aviso-cerrar:focus-visible { color: var(--texto); }
-@media (min-width: 992px) {
+@media (min-width: 1200px) {
     .avisos-trabajo { left: calc(var(--menu-ancho, 0px) + 1.5rem); }
     .app.menu-colapsado ~ .avisos-trabajo, body:has(.app.menu-colapsado) .avisos-trabajo { left: calc(var(--menu-ancho-contraido, 0px) + 1.5rem); }
 }
@@ -535,3 +535,9 @@ body:has(.espejo-barra.tiene-seleccion) .avisos-trabajo { bottom: 8rem; }
 
 /* Editar canal: soltar una imagen arriba de la vista previa */
 .canal-logo.soltar-aca { outline: 2px dashed var(--verde); outline-offset: 3px; }
+
+@media (pointer: coarse) {
+    .btn-icono, .vista-botones button, .pagina-organizar .espejo-ver,
+    .pagina-organizar .espejo-editar { min-width: 44px; min-height: 44px; }
+    .barra-contenido a { min-height: 44px; }
+}

@@ -35,15 +35,18 @@ reproducir esa versión de la app (sin `formatos` = solo HLS, como la 1.0.0).
       Si no se puede: 422 {"detalle": "El canal no está transmitiendo en vivo ahora."}
 
     POST /api/v1/canales/fuentes/<id>/falla/   {"motivo": "formato", "detalle": "..."}  (los dos opcionales)
-      "detalle": lo técnico (el error del reproductor, a los cuántos segundos...;
-      hasta 250 letras): queda como "Último problema en un aparato" en el panel.
+      "detalle": lo técnico (el error del reproductor, lo que vio por dentro,
+      a los cuántos segundos... y al final la app, el aparato y su Android;
+      hasta 500 letras): queda como "Último problema en un aparato" en el panel.
       -> {"estado": "funciona" | "caida" | "sin_verificar"}
       La app avisa que no pudo reproducir esa fuente. El servidor la vuelve a
       probar por su cuenta y, si también le falla, deja de mandarla. Si al
       servidor le anda pero varios aparatos avisan que no se reproduce, se
       oculta un rato igual ("caida"): 3 horas la primera vez, más si sigue
-      fallando, y vuelve sola. motivo: formato | rechazo | tiempo |
-      conexion | error (ver servicios.MOTIVOS_DE_LOS_APARATOS).
+      fallando, y vuelve sola. motivo: aparato | formato | rechazo | tiempo |
+      conexion | error (ver servicios.MOTIVOS_DE_LOS_APARATOS). "aparato" (app
+      1.2.40+: el video llegó y el decodificador de ese aparato no lo mostró)
+      solo queda en el diagnóstico: no se vuelve a probar ni cuenta para ocultarla.
 
     POST /api/v1/canales/fuentes/<id>/estabilidad/   {"segundos": 900, "cortes": 2, "proporcion": 1.78}
       -> {"cortes_por_hora": 8.0 | null}
@@ -69,11 +72,11 @@ from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from canales import estadisticas, paginas, secciones
+from canales import estadisticas, paginas, salud, secciones
 from canales.consultas import fuentes_usables, tipos_pedidos
 from canales.models import Contenido, Fuente
-from canales.servicios import (CAMPOS_DEL_PROBLEMA, anotar_problema, registrar_estabilidad,
-                               registrar_falla_en_aparato, reverificar_por_aviso)
+from canales.servicios import (CAMPOS_DEL_PROBLEMA, LARGO_DEL_DETALLE, MOTIVOS_SOLO_DEL_APARATO, anotar_problema,
+                               registrar_estabilidad, registrar_falla_en_aparato, reverificar_por_aviso)
 from canales.verificacion import verificar_url
 
 from . import catalogo
@@ -115,9 +118,15 @@ def secciones_de_la_app(request):
 def avisar_falla(request, pk):
     fuente = get_object_or_404(fuentes_usables().select_related('canal'), pk=pk)
     motivo = str(request.data.get('motivo', ''))[:20]
-    detalle = str(request.data.get('detalle', ''))[:250]
+    detalle = str(request.data.get('detalle', ''))[:LARGO_DEL_DETALLE]
     # El detalle técnico queda siempre (Organizar → Detalles: "Último problema en un aparato")
     anotar_problema(fuente, motivo, detalle)
+    if motivo in MOTIVOS_SOLO_DEL_APARATO:
+        # Es de ese aparato, no de la señal: queda en el historial (sin contar como falla),
+        # sin volver a probarla ni contar el aviso para ocultarla a los demás
+        salud.anotar_del_aparato(fuente, False, motivo)
+        fuente.save(update_fields=[*CAMPOS_DEL_PROBLEMA, *salud.CAMPOS])
+        return Response({'estado': Fuente.Estado.CAIDA if fuente.oculta_por_aparatos else fuente.estado})
     fuente.save(update_fields=CAMPOS_DEL_PROBLEMA)
     estado = reverificar_por_aviso(fuente, verificar_url)
     if estado != Fuente.Estado.CAIDA:

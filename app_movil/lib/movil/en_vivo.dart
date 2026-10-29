@@ -882,7 +882,24 @@ class _PantallaEnVivoCompletaState extends State<PantallaEnVivoCompleta> {
             fit: StackFit.expand,
             children: [
               if (video != null) VideoAjustado(video: video, ajuste: ControlSenal.ajuste),
-              if (_control.cargando) const Center(child: CircularProgressIndicator()),
+              if (_control.cargando)
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      // Con varias señales, cuál se está probando (que no parezca colgada)
+                      if (_control.avisoDeConexion case final aviso?) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          aviso,
+                          textAlign: TextAlign.center,
+                          style: Letra.cuerpo.copyWith(color: Tono.texto),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               if (_control.error != null)
                 Center(
                   child: Column(

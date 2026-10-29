@@ -1725,12 +1725,18 @@ def reverificar_por_aviso(fuente, verificar_url):
 
 # Lo que la app manda al avisar una falla ("motivo"), en palabras del panel.
 MOTIVOS_DE_LOS_APARATOS = {
+    'aparato': 'ese aparato no pudo mostrar el video (su decodificador)',
     'formato': 'el aparato no puede leer el formato del video',
     'rechazo': 'el servidor de la señal rechaza al aparato',
     'tiempo': 'tarda demasiado en arrancar',
     'conexion': 'no se puede conectar con la señal',
     'error': 'da error al reproducir',
 }
+# Lo que es del aparato y no de la señal (desde la app 1.2.40: el video llegó y el
+# decodificador de ESE aparato no lo mostró): queda en el diagnóstico y en el historial,
+# pero no cuenta para ocultarla. Si contara, un aparato con problemas dejaría sin el
+# canal a todos los demás (dos avisos de formato la escondían una semana).
+MOTIVOS_SOLO_DEL_APARATO = {'aparato'}
 # Cuántos avisos (de aparatos distintos, o del mismo pero separados por
 # ESPERA_ENTRE_AVISOS) en un día hacen falta para ocultarla.
 AVISOS_PARA_OCULTAR = 2
@@ -1763,11 +1769,15 @@ def anotar_problema(fuente, motivo, detalle='', ahora=None):
     un canal no conecta. No guarda (los campos cambian en `fuente`).
     """
     texto = MOTIVOS_DE_LOS_APARATOS.get(motivo, MOTIVOS_DE_LOS_APARATOS['error'])
-    fuente.problema_en_aparato = (f'{texto}: {detalle}' if detalle else texto)[:300]
+    fuente.problema_en_aparato = (f'{texto}: {detalle}' if detalle else texto)[:LARGO_DEL_PROBLEMA]
     fuente.problema_en = ahora or timezone.now()
 
 
 CAMPOS_DEL_PROBLEMA = ['problema_en_aparato', 'problema_en']
+# Lo que entra del detalle que manda la app (la 1.2.40 manda hasta 500: el error, lo que vio
+# el reproductor por dentro y, al final, la app, el aparato y su Android) y del problema guardado.
+LARGO_DEL_DETALLE = 500
+LARGO_DEL_PROBLEMA = 600
 
 
 def registrar_falla_en_aparato(fuente, quien, motivo, detalle=''):

@@ -14,6 +14,7 @@ import io.flutter.FlutterInjector;
 import io.flutter.Log;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugins.videoplayer.platformview.PlatformVideoViewFactory;
 import io.flutter.plugins.videoplayer.platformview.PlatformViewVideoPlayer;
 import io.flutter.plugins.videoplayer.texture.TextureVideoPlayer;
@@ -47,7 +48,22 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
         .registerViewFactory(
             "plugins.flutter.dev/video_player_android",
             new PlatformVideoViewFactory(videoPlayers::get));
+
+    // Kairos TV: los decodificadores trabados en este aparato, y el diagnóstico de una señal que
+    // no arrancó (la app lo pide por la dirección del video). Ver KairosVigia.
+    KairosDecodificadores.iniciar(binding.getApplicationContext());
+    kairosCanal = new MethodChannel(binding.getBinaryMessenger(), "kairos/reproductor");
+    kairosCanal.setMethodCallHandler(
+        (llamada, resultado) -> {
+          if ("diagnostico".equals(llamada.method)) {
+            resultado.success(KairosVigia.diagnostico(llamada.<String>argument("url")));
+          } else {
+            resultado.notImplemented();
+          }
+        });
   }
+
+  @Nullable private MethodChannel kairosCanal;
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
@@ -56,6 +72,10 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     }
     flutterState.stopListening(binding.getBinaryMessenger());
     flutterState = null;
+    if (kairosCanal != null) {
+      kairosCanal.setMethodCallHandler(null);
+      kairosCanal = null;
+    }
     onDestroy();
   }
 

@@ -569,15 +569,13 @@
         var caja = boton.getBoundingClientRect();
         var izquierda = Math.min(Math.max(8, caja.left), window.innerWidth - selector.offsetWidth - 8);
         selector.style.left = izquierda + 'px';
-        if (caja.bottom + 4 + selector.offsetHeight > window.innerHeight - 8 && caja.top > window.innerHeight / 2) {
-            // No entra abajo: va arriba, pegado al botón por abajo (así al filtrar se achica hacia él)
-            selector.style.top = 'auto';
-            selector.style.bottom = (window.innerHeight - caja.top + 4) + 'px';
-        } else {
-            selector.style.bottom = 'auto';
-            selector.style.top = (caja.bottom + 4) + 'px';
+        var arriba = caja.bottom + 4;
+        if (arriba + selector.offsetHeight > window.innerHeight - 8 && caja.top > window.innerHeight / 2) {
+            arriba = caja.top - selector.offsetHeight - 4;
         }
-        buscar.focus();
+        selector.style.bottom = 'auto';
+        selector.style.top = Math.max(8, Math.min(arriba, window.innerHeight - selector.offsetHeight - 8)) + 'px';
+        buscar.focus({preventScroll: true});
     }
     function cerrarSelector() {
         if (selector) selector.hidden = true;
@@ -654,6 +652,7 @@
             if (!selector.hidden && !selector.contains(evento.target) && !evento.target.closest('[data-elegir-categoria]')) cerrarSelector();
         });
         window.addEventListener('scroll', function () { if (!selector.hidden) cerrarSelector(); }, {passive: true});
+        window.addEventListener('resize', cerrarSelector);
     }
 
     // ── Arrastrar una imagen arriba de una tarjeta (o del panel) ──────────────

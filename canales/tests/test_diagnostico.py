@@ -61,10 +61,44 @@ class DiagnosticoTests(TestCase):
         self.assertIn('la cortó', self.fuente.problema_en_aparato)   # ...pero el diagnóstico queda
 
     def test_un_detalle_largo_se_recorta(self):
-        self.avisar(Resultado(FUNCIONA, tipo='directo'), detalle='x' * 600)
+        self.avisar(Resultado(FUNCIONA, tipo='directo'), detalle='x' * 900)
         self.fuente.refresh_from_db()
-        # La app manda hasta 250; con el motivo adelante, nunca pasa de lo que entra en la base (300)
-        self.assertEqual(self.fuente.problema_en_aparato, 'no se puede conectar con la señal: ' + 'x' * 250)
+        # La app manda hasta 500; con el motivo adelante, nunca pasa de lo que entra en la base (600)
+        self.assertEqual(self.fuente.problema_en_aparato, 'no se puede conectar con la señal: ' + 'x' * 500)
+
+    def avisar_del_aparato(self, quien):
+        """Un aviso de la app 1.2.40+ desde otra sesión: el video llegó y ese aparato no lo mostró."""
+        app = APIClient()
+        clave, _ = tokens.crear_token(Usuario.objects.create_user(quien, None, 'x'))
+        app.credentials(HTTP_AUTHORIZATION=f'Bearer {clave}')
+        return app.post(reverse('api_v1:fuente_falla', args=[self.fuente.pk]),
+                        {'motivo': 'aparato', 'detalle': 'el video llegó y el decodificador del aparato no lo mostró · '
+                                                         'deco OMX.MTK.VIDEO.DECODER.AVC: entraron 8, salieron 0 · '
+                                                         '[app 1.2.40 · Lenovo TB-X505F · Android 10]'},
+                        format='json')
+
+    def test_lo_que_es_del_aparato_queda_en_el_diagnostico_pero_no_esconde_la_senal(self):
+        with mock.patch('api.v1.canales.verificar_url') as verificar_url:
+            # Aunque avisen muchos aparatos (dos avisos de otra cosa la esconden)
+            estados = [self.avisar_del_aparato(quien).json()['estado'] for quien in ('a', 'b', 'c')]
+        self.assertEqual(estados, [FUNCIONA] * 3)
+        verificar_url.assert_not_called()   # no es la señal: no hace falta volver a probarla
+        self.fuente.refresh_from_db()
+        self.assertIsNone(self.fuente.oculta_desde)
+        self.assertEqual(self.fuente.avisos_de_aparatos, 0)
+        self.assertTrue(self.fuente.problema_en_aparato.startswith('ese aparato no pudo mostrar el video'))
+        self.assertIn('Lenovo TB-X505F · Android 10', self.fuente.problema_en_aparato)
+        # En el historial, como "un aparato no la lee" (no cuenta como falla)
+        self.assertEqual(self.fuente.historial[-1:], 'f')
+        self.assertEqual(self.fuente.fallas_seguidas, 0)
+        self.assertFalse(self.fuente.oculta_por_aparatos)
+
+    def test_el_modo_revision_tambien_entiende_lo_del_aparato(self):
+        recorrido.anotar([{'id': self.fuente.pk, 'anduvo': False, 'motivo': 'aparato',
+                           'detalle': 'entraron 8, salieron 0'}])
+        self.fuente.refresh_from_db()
+        self.assertEqual(self.fuente.historial[-1:], 'f')
+        self.assertEqual(self.fuente.fallas_seguidas, 0)
 
     def test_el_modo_revision_tambien_lo_anota(self):
         recorrido.anotar([{'id': self.fuente.pk, 'anduvo': False, 'motivo': 'rechazo',

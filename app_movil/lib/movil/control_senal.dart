@@ -47,9 +47,11 @@ import 'package:video_player/video_player.dart';
 
 import '../api/cliente.dart';
 import '../api/modelos.dart';
+import '../aparato.dart';
 import '../senales.dart';
 import 'ajustes_video.dart';
 import 'datos.dart';
+import 'diagnostico.dart';
 import 'medidor.dart';
 
 class ControlSenal extends ChangeNotifier {
@@ -69,6 +71,10 @@ class ControlSenal extends ChangeNotifier {
   /// otra: esa conexión suele ser intermitente.
   static const _esperaVivoDirecto = Duration(seconds: 40);
   static const _esperaReintento = Duration(seconds: 1);
+
+  /// Si al vencer la espera el reproductor está probando con otro decodificador
+  /// (el de este aparato se trabó: ver [Diagnostico.cambiando]), se espera esto más.
+  static const _esperaOtroDecodificador = Duration(seconds: 20);
   static const _esperaTrabado = Duration(seconds: 20);
 
   /// Una película o capítulo que se queda cargando (sobre todo después de
@@ -162,8 +168,12 @@ class ControlSenal extends ChangeNotifier {
   /// Cuántos canales seguidos sin andar alcanzan para sugerir reiniciar la TV.
   static const _sinAndarParaSugerir = 2;
 
+  /// También si la última falla fue del aparato o sin imagen ([Falla.formato], [Falla.sinImagen]).
   bool get sugerirReiniciarAparato =>
-      error != null && (canalesSinAndar >= _sinAndarParaSugerir || _ultimaFalla?.motivo == Falla.formato.motivo);
+      error != null &&
+      (canalesSinAndar >= _sinAndarParaSugerir ||
+          _ultimaFalla?.motivo == Falla.formato.motivo ||
+          _ultimaFalla?.motivo == Falla.sinImagen.motivo);
   int _reconexiones = 0;
   int _vueltas = 0;
 
@@ -390,13 +400,34 @@ class ControlSenal extends ChangeNotifier {
       httpHeaders: senal.cabeceras, // como un navegador (o VLC): algunos canales rechazan a ExoPlayer
       viewType: enSuperficie ? VideoViewType.platformView : VideoViewType.textureView,
     );
+    final arranque = nuevo.initialize();
+    Object? problema;
+    Diagnostico? diagnostico;
     try {
-      await nuevo.initialize().timeout(_esperaInicio(elegida));
+      await arranque.timeout(_esperaInicio(elegida));
+    } on TimeoutException catch (e) {
+      // No arrancó a tiempo: ¿no llegó nada del servidor, o llegó y este aparato no lo muestra?
+      problema = e;
+      diagnostico = await Diagnostico.de(senal.url);
+      if (diagnostico?.cambiando ?? false) {
+        // El decodificador del aparato se trabó y el reproductor está probando con otro: un rato más
+        try {
+          await arranque.timeout(_esperaOtroDecodificador);
+          problema = null;
+        } on TimeoutException {
+          diagnostico = await Diagnostico.de(senal.url);
+        } catch (otro) {
+          problema = otro;
+        }
+      }
     } catch (e) {
+      problema = e;
+    }
+    if (problema != null) {
       // Primero se cierra (suelta la conexión: hay cuentas que permiten una sola)
       await nuevo.dispose();
       if (intento != _intento || _cerrado) return;
-      final falla = Falla.de(e);
+      final falla = problema is TimeoutException ? Falla.sinArrancar(diagnostico) : Falla.de(problema);
       if (!reintento && !falla.delAparato && _reintentarArranque(elegida)) {
         // Una vez más la misma, sin contarla como falla (ni avisarle al servidor)
         await Future<void>.delayed(_esperaReintento);
@@ -431,9 +462,12 @@ class ControlSenal extends ChangeNotifier {
 
     // ¿Aparece la imagen? (las radios no tienen: no se controlan)
     if (_deberiaTenerImagen(elegida)) {
-      _vigiaImagen = Timer(_esperaImagen, () {
-        if (_cerrado || video != nuevo || nuevo.value.hasError) return;
-        if (nuevo.value.size.isEmpty) _fallo(nuevo, Falla.sinImagen, reconectar: false);
+      _vigiaImagen = Timer(_esperaImagen, () async {
+        if (_cerrado || video != nuevo || nuevo.value.hasError || !nuevo.value.size.isEmpty) return;
+        // ¿La señal no trae video, o lo trae y este aparato no lo muestra?
+        final diagnostico = await Diagnostico.de(senal.url);
+        if (_cerrado || video != nuevo || nuevo.value.hasError || !nuevo.value.size.isEmpty) return;
+        _fallo(nuevo, Falla.sinImagenSegun(diagnostico), reconectar: false);
       });
     }
     // Si anda bien un rato, "andaba": ante un corte se reconecta a esta misma
@@ -647,12 +681,24 @@ class ControlSenal extends ChangeNotifier {
         .catchError((Object _) => null);
   }
 
+  /// Lo que entra del detalle de una falla en el servidor (`canales/fuentes/<id>/falla/`).
+  static const largoDelDetalle = 500;
+
   /// Lo que se le cuenta al servidor de una falla, para diagnosticar desde el
   /// panel por qué un canal no conecta (Organizar → Detalles → "Último problema
-  /// en un aparato"): qué pasó, el error del reproductor, a los cuántos
-  /// segundos de empezar a conectar, si llegó a verse imagen y si venía andando.
+  /// en un aparato"): qué pasó, el error del reproductor (con lo que vio por
+  /// dentro: ver [Diagnostico]), a los cuántos segundos de empezar a conectar,
+  /// si llegó a verse imagen, si venía andando y, al final, la versión de la
+  /// app, el aparato y su Android (eso nunca se corta).
   /// Lo usa también el modo revisión (lib/revision/).
-  static String detalleDeLaFalla(Falla falla, {DateTime? desde, Size? imagen, bool andaba = false, DateTime? ahora}) {
+  static String detalleDeLaFalla(
+    Falla falla, {
+    DateTime? desde,
+    Size? imagen,
+    bool andaba = false,
+    DateTime? ahora,
+    String? aparato,
+  }) {
     final partes = <String>[
       if (falla.detalle.isNotEmpty) falla.detalle,
       if (desde != null)
@@ -660,8 +706,21 @@ class ControlSenal extends ChangeNotifier {
       if (imagen != null && !imagen.isEmpty) 'llegó imagen ${imagen.width.round()}x${imagen.height.round()}',
       if (andaba) 'venía andando bien',
     ];
-    final texto = partes.join(' · ');
-    return texto.length > 250 ? texto.substring(0, 250) : texto;
+    final cola = ' · [${aparato ?? Aparato.resumen}]';
+    var texto = partes.join(' · ');
+    final lugar = largoDelDetalle - cola.length;
+    if (texto.length > lugar) texto = texto.substring(0, lugar);
+    return '$texto$cola';
+  }
+
+  /// En vivo, mientras conecta un canal con varias señales: cuál se está
+  /// probando, para que una espera larga no parezca la app colgada. null si ya
+  /// se ve, hay una sola señal o no es en vivo.
+  String? get avisoDeConexion {
+    final total = fuentes.length;
+    if (!cargando || !_enVivo || canal == null || total < 2 || fuente >= total) return null;
+    final numero = (fuente - _inicio) % total + 1;
+    return numero == 1 ? 'Conectando…' : 'La señal anterior no respondió. Probando la $numero de $total…';
   }
 
   void alternarPausa() {
@@ -796,8 +855,13 @@ class ControlSenal extends ChangeNotifier {
 }
 
 /// Por qué no se pudo reproducir una fuente: lo que se le muestra a la persona
-/// y lo que se le avisa al servidor ([motivo]: formato, rechazo, tiempo,
-/// conexion, error; ver canales/servicios.py -> MOTIVOS_DE_LOS_APARATOS).
+/// y lo que se le avisa al servidor ([motivo]: aparato, formato, rechazo,
+/// tiempo, conexion, error; ver canales/servicios.py -> MOTIVOS_DE_LOS_APARATOS).
+///
+/// "aparato" (el decodificador de ESTE aparato no puede) y "formato" (la señal
+/// no trae video) son distintos a propósito: el servidor esconde para todos
+/// las fuentes que fallan en los aparatos, y lo que es del aparato no tiene
+/// que dejar sin el canal a los demás.
 class Falla {
   const Falla(this.motivo, this.mensaje, [this.detalle = '', this.delAparato = false]);
 
@@ -811,7 +875,10 @@ class Falla {
   /// señal ni algo pasajero): lo único que lo esconde acá (ver [ControlSenal.esconderDespuesDe]).
   final bool delAparato;
 
-  static const formato = Falla('formato', 'Este aparato no puede reproducir el formato de este video.', '', true);
+  /// Lo que entra del error del reproductor (con su diagnóstico) en [detalle].
+  static const _largo = 400;
+
+  static const formato = Falla('aparato', 'Este aparato no puede reproducir el formato de este video.', '', true);
   static const tiempo = Falla(
     'tiempo',
     'La señal tardó demasiado en arrancar. Probá de nuevo en un rato.',
@@ -834,13 +901,49 @@ class Falla {
   );
   static const sinInternet = Falla('sin_internet', 'Revisá la conexión a internet de este aparato.');
 
+  /// No arrancó a tiempo: según lo que vio el reproductor por dentro
+  /// ([Diagnostico]), es el servidor de la señal (no mandó nada, o mandó y no
+  /// alcanzó) o este aparato (llegó el video y su decodificador no lo mostró).
+  /// Igual no lo esconde acá ([delAparato] = false): el reproductor ya anotó
+  /// el decodificador trabado y al volver a probar usa otro. Lo esconde recién
+  /// cuando el reproductor probó todos y avisó que no puede (ver [Falla.de]).
+  factory Falla.sinArrancar(Diagnostico? diagnostico) {
+    if (diagnostico == null) return tiempo;
+    final visto = diagnostico.texto;
+    if (diagnostico.delAparato || diagnostico.cambiando) {
+      return Falla(
+        formato.motivo,
+        'Este aparato no pudo mostrar este video.',
+        _recortar('el video llegó y el decodificador del aparato no lo mostró · $visto'),
+      );
+    }
+    if (diagnostico.sinDatos) {
+      return Falla(tiempo.motivo, tiempo.mensaje, _recortar('el servidor de la señal no mandó nada · $visto'));
+    }
+    return Falla(tiempo.motivo, tiempo.mensaje, _recortar('${tiempo.detalle} · $visto'));
+  }
+
+  /// Arrancó con sonido y sin imagen: si la señal no trae video, es la señal
+  /// (cuenta para todos); si lo trae, es que este aparato no lo pudo mostrar
+  /// (no cuenta contra la señal). En ningún caso se esconde acá: puede ser la
+  /// TV trabada (pantalla verde) o un momento de la señal.
+  factory Falla.sinImagenSegun(Diagnostico? diagnostico) {
+    if (diagnostico == null) return sinImagen;
+    if (diagnostico.sinVideo) {
+      return Falla(sinImagen.motivo, sinImagen.mensaje, _recortar('la señal no trae video · ${diagnostico.texto}'));
+    }
+    return Falla(formato.motivo, sinImagen.mensaje, _recortar('${sinImagen.detalle} · ${diagnostico.texto}'));
+  }
+
+  static String _recortar(String texto) => texto.length > _largo ? texto.substring(0, _largo) : texto;
+
   /// Lee el error que dio el reproductor (ExoPlayer) o la espera.
   factory Falla.de(Object error) {
     if (error is TimeoutException) return tiempo;
     final texto = error is PlatformException ? '${error.message} ${error.details ?? ''}' : '$error';
     // Sin el "Video player had error" del reproductor (no dice nada y ocupa lugar)
     final detalle = texto.replaceAll(RegExp(r'\s+'), ' ').trim().replaceFirst(RegExp(r'^Video player had error '), '');
-    final corto = detalle.length > 200 ? detalle.substring(0, 200) : detalle;
+    final corto = _recortar(detalle);
     if (RegExp(
       r'UnknownHost|Unable to resolve host|ENETUNREACH|Network is unreachable',
       caseSensitive: false,
@@ -850,6 +953,10 @@ class Falla {
     final codigo = RegExp(r'Response code: (\d{3})').firstMatch(texto)?.group(1);
     if (codigo != null && codigo.startsWith('4')) {
       return Falla('rechazo', 'El servidor de la señal no deja verla (error $codigo).', corto);
+    }
+    // El reproductor vio que el decodificador del aparato no devolvía imagen (ni con el de Android)
+    if (texto.contains('KAIROS_DECODIFICADOR_TRABADO')) {
+      return Falla(formato.motivo, 'Este aparato no pudo mostrar este video.', corto, true);
     }
     if (RegExp(r'Decoder|MediaCodec|NO_UNSUPPORTED|format_supported=NO', caseSensitive: false).hasMatch(texto)) {
       return Falla(formato.motivo, formato.mensaje, corto, true);

@@ -18,7 +18,8 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import java.util.ArrayList;
 
 /**
- * Lo de siempre (los decodificadores de Android) y, al final, los que la app
+ * Lo de siempre (los decodificadores de Android, sin los que se trabaron en este aparato y
+ * probando el siguiente si uno no arranca) y, al final, los que la app
  * trae para el audio que muchos aparatos no saben leer: {@link
  * KairosAudioRenderer} (MP1 / MP2, el de los canales de cable y satélite) y
  * {@link FfmpegAudioRenderer} (Dolby AC3 / E-AC3 / TrueHD y DTS, el de muchas
@@ -44,6 +45,10 @@ public final class KairosRenderersFactory extends DefaultRenderersFactory {
 
   public KairosRenderersFactory(@NonNull Context context) {
     super(context);
+    // Si el decodificador del aparato no arranca, prueba el siguiente (de fábrica se rendía con el
+    // primero); y no ofrece los que se trabaron en este aparato (ver KairosDecodificadores)
+    setEnableDecoderFallback(true);
+    setMediaCodecSelector(new KairosDecodificadores.Selector());
   }
 
   @Override

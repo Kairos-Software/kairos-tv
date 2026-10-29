@@ -6,10 +6,11 @@ en lugar de las originales (sección `dependency_overrides`).
 ## video_player_android/ (2.12.2)
 
 El reproductor de video de Android (ExoPlayer) que usa `video_player`. Es el
-paquete oficial **con nueve cambios**: el buffer, el margen en vivo, el idioma
+paquete oficial **con diez cambios**: el buffer, el margen en vivo, el idioma
 del audio, lo de la tele conectada, la espera de los canales Xtream, el audio
 MP2 (que Android no trae), la reconexión sola de los canales que se cortan, el
-audio Dolby y DTS, y adelantar en las películas MKV sin índice.
+audio Dolby y DTS, adelantar en las películas MKV sin índice, y el decodificador
+de video trabado (con el diagnóstico de por qué una señal no arranca).
 
 ### 1. El buffer
 
@@ -212,9 +213,12 @@ Tests: `android/src/test/.../KairosReconexionTest.java`.
 **Si algún día se actualiza `video_player`** y pide una versión más nueva de
 este paquete: copiar la nueva de `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\video_player_android-X.Y.Z`
 (carpetas `lib/` y `android/`, `pubspec.yaml`, `LICENSE`), volver a aplicar los
-siete cambios (con los archivos nuevos `Kairos*.java`, `src/main/cpp/` y lo de
-`build.gradle.kts`: `externalNativeBuild`, `ndkVersion` y `consumerProguardFiles`)
-y sacar `dev_dependencies` de su `pubspec.yaml`.
+diez cambios (con los archivos nuevos `Kairos*.java`, `src/main/cpp/`,
+`src/main/jniLibs/`, `src/main/java/androidx/media3/decoder/ffmpeg/`,
+`android/ffmpeg/` y lo de `build.gradle.kts`: `externalNativeBuild`,
+`ndkVersion` y `consumerProguardFiles`; buscar "Kairos TV" en los del paquete:
+`ExoPlayerEventListener`, `VideoPlayerPlugin`, `HttpVideoAsset`, los dos
+reproductores) y sacar `dev_dependencies` de su `pubspec.yaml`.
 
 ### 8. El audio Dolby y DTS (desde la app 1.2.39)
 
@@ -250,3 +254,47 @@ y sacar `dev_dependencies` de su `pubspec.yaml`.
 - Test: `android/src/test/.../KairosMkvSinIndiceTest.java`, con
   `src/test/resources/kairos/mkv_sin_indice.mkv` (60 s hechos con ffmpeg y al
   que se le borró el índice) y `mkv_con_indice.mkv`.
+
+### 10. El decodificador de video trabado y el diagnóstico (desde la app 1.2.40)
+
+- Caso: una tablet en la que **ninguna señal arranca** ("se queda intentando
+  conectar") y el mismo canal, en un celular en el mismo WiFi, anda en
+  segundos. Cada aparato trae uno o más decodificadores de video: el del
+  fabricante (por hardware, rápido) y el de Android (por software, más lento,
+  anda en todos). En muchas tablets y TV box baratos el del fabricante **recibe
+  el video y no devuelve ninguna imagen**, sin dar error: ExoPlayer quedaba
+  "cargando" para siempre, la app esperaba hasta 80 s por señal y le avisaba al
+  servidor que la señal "no mandó video" (mentira: era el aparato).
+- `KairosRenderersFactory` ahora **prueba el siguiente decodificador si uno no
+  arranca** (`setEnableDecoderFallback`; de fábrica se rendía con el primero) y
+  usa `KairosDecodificadores.Selector`: los de siempre menos los que se
+  trabaron en este aparato.
+- `KairosVigia.java` (lo crea `ExoPlayerEventListener`, buscar "Kairos TV")
+  mira cada segundo, hasta que aparece la primera imagen, qué llegó y qué hizo
+  el decodificador. Si **entró video y no salió ninguna imagen en 6 s** (con
+  video guardado y dónde dibujarlo), anota ese decodificador como trabado
+  (`KairosDecodificadores.java`: en el aparato, **2 días**) y hace arrancar el
+  video de nuevo, ya con otro (la app solo ve "cargando"). Si ya era el de
+  Android, no hay otro o el decodificador no termina de arrancar en 10 s,
+  avisa el error `KAIROS_DECODIFICADOR_TRABADO` y la app pasa a otra señal
+  enseguida (y se lo cuenta al servidor como **del aparato**, no de la señal).
+  Si el de Android también se trabó con ese video, el del fabricante se
+  "perdona" (era el video). Un error del decodificador del fabricante a mitad
+  de camino (`ERROR_CODE_DECODING_FAILED`) también pasa a otro.
+- **2 días** y no más: hay televisores cuyo decodificador se traba tras días en
+  espera y vuelve a andar al desenchufarlos, y en una tele el de software pesa
+  más. Si sigue trabado, volver a darse cuenta cuesta unos 6 s.
+- **El diagnóstico**: el vigía junta qué video llegó (tipo, tamaño, cuadros por
+  segundo), qué decodificador se usó y cuánto entró y salió, el audio, lo
+  guardado y los reintentos de conexión. Va al final de cada error ("· video
+  h264 1920x1080 25 fps · deco OMX.MTK.VIDEO.DECODER.AVC: entraron 12, salieron
+  0 · ...") y la app lo pide cuando una señal no arranca a tiempo, por el canal
+  `kairos/reproductor` (método `diagnostico` con la dirección del video; lo
+  abre `VideoPlayerPlugin`). Contesta `{texto, causa, cambiando}`: causa
+  `aparato` (llegó y no se mostró), `sin_datos` (no llegó nada del servidor),
+  `sin_video` (la señal no trae video), `cambiando` (está probando otro
+  decodificador: la app espera 20 s más) o `desconocida`.
+- Tests: `android/src/test/.../KairosVigiaTest.java` (las reglas, y con un
+  reproductor de mentira: el del fabricante trabado pasa al de Android; si ese
+  también, se rinde) y `KairosDecodificadoresTest.java` (lo anotado, cuánto
+  dura, que quede aunque se cierre la app).

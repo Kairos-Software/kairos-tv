@@ -431,7 +431,7 @@ ya no la recibe.
 servidor le responden pero en los celulares y TV no se reproducen (un formato
 de video que el aparato no lee, servidores que aceptan una sola conexión,
 otros que rechazan a los reproductores). Por eso la app manda también el
-motivo (`{"motivo": "formato" | "rechazo" | "tiempo" | "conexion" | "error",
+motivo (`{"motivo": "aparato" | "formato" | "rechazo" | "tiempo" | "conexion" | "error",
 "detalle"}`). Si en un día avisan **2 aparatos distintos** (o el mismo, con
 media hora de diferencia), la fuente se **oculta un rato** aunque al servidor
 le ande, y **vuelve sola** (`Fuente.oculta_hasta`, `veces_oculta`,
@@ -440,6 +440,12 @@ le ande, y **vuelve sola** (`Fuente.oculta_hasta`, `veces_oculta`,
 - la primera vez, **3 horas** (casi siempre es un corte pasajero del canal: pasó con Disney);
 - si al volver sigue fallando, **1 día**; desde la tercera, **una semana** (`models.OCULTA_POR`);
 - si los aparatos no pueden leer el formato, directo una semana (no es pasajero);
+- **lo que es de un aparato no cuenta** (motivo `aparato`, desde la app 1.2.40:
+  el video llegó y el decodificador de ESE aparato no lo mostró): queda en el
+  diagnóstico y en el historial como `f`, pero no se vuelve a probar ni la
+  oculta. Antes, una tablet con un decodificador que se traba avisaba
+  "formato" o "tiempo" y con dos avisos dejaba sin el canal a todos
+  (`servicios.MOTIVOS_SOLO_DEL_APARATO`);
 - en cuanto un aparato la **ve bien un minuto**, se olvida todo: si estaba
   oculta vuelve ya, y la próxima falla empieza otra vez por 3 horas
   (`servicios.registrar_estabilidad`, `VISTO_PARA_PERDONAR`).
@@ -572,6 +578,13 @@ aparato). Desde la app 1.2.32 un canal en vivo que ya se veía y se corta se
 reconecta solo hasta 6 veces por minuto (app_movil/paquetes/README.md, punto
 7): si igual falla, el detalle termina en "· se reconectó sola N veces" (suele
 ser internet del aparato, como Starlink, o la regla de una conexión por cuenta).
+Desde la app 1.2.40 el detalle dice también **lo que vio el reproductor por
+dentro** (qué video llegó, qué decodificador del aparato se usó y cuánto entró
+y salió, los reintentos de conexión) y **termina con la app, el aparato y su
+Android**: por ejemplo "el video llegó y el decodificador del aparato no lo
+mostró · video h264 1920x1080 25 fps · deco OMX.MTK.VIDEO.DECODER.AVC: entraron
+12, salieron 0 · [app 1.2.40 · Lenovo TB-X505F · Android 10]". Guarda hasta 600
+letras (migración 0031).
 
 En Organizar, **Mostrar → "Se ve, pero tiene señales que no andan"** lista
 esos canales, y su tarjeta dice "Se ve en la app · 2 de 4 señales". "Volver a

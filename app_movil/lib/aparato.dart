@@ -19,6 +19,14 @@ class Aparato {
   /// La versión instalada (la de pubspec.yaml, ej: "1.1.0"). Vacía = no se sabe.
   static String version = '';
 
+  /// La versión de Android (ej: "10"). Vacía = no se sabe.
+  static String android = '';
+
+  /// Para el diagnóstico de una falla: versión de la app, aparato y Android
+  /// (ej: "app 1.2.40 · Lenovo TB-X505F · Android 10").
+  static String get resumen =>
+      [if (version.isNotEmpty) 'app $version', nombre, if (android.isNotEmpty) 'Android $android'].join(' · ');
+
   /// Dónde se deja la APK nueva que se baja para actualizar (lib/actualizacion.dart).
   static String carpetaTemporal = '';
 
@@ -62,6 +70,7 @@ class Aparato {
       nombre = '${datos?['nombre'] ?? nombre}';
       esTv = datos?['esTv'] == true;
       version = '${datos?['version'] ?? ''}';
+      android = '${datos?['android'] ?? ''}';
       carpetaTemporal = '${datos?['carpetaTemporal'] ?? ''}';
       codecs = {for (final c in datos?['codecs'] as List? ?? const []) '$c'};
       densidadDeVistas = (datos?['densidadDeVistas'] as num?)?.toDouble() ?? 0;

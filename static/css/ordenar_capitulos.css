@@ -12,6 +12,7 @@
 
 .cap-lista { list-style: none; margin: 0; padding: .75rem 1.25rem 1.25rem; display: grid; gap: .5rem; }
 .cap {
+    min-width: 0;
     display: flex; flex-wrap: wrap; align-items: center; gap: .75rem;
     padding: .6rem .75rem;
     background: var(--capa-baja); border: 1px solid var(--borde); border-radius: 14px;
@@ -48,7 +49,7 @@
 .cap-fuera .cap-imagen { opacity: .5; }
 .cap-acciones { display: flex; gap: .35rem; flex: none; }
 
-.cap-fuentes { flex-basis: 100%; }
+.cap-fuentes { flex-basis: 100%; min-width: 0; max-width: 100%; }
 /* «.temporada summary» (kairos.css) es para el título de la temporada, pero también alcanzaba a este:
    le ponía relleno grande, letra de título y una raya abajo. Acá vuelve a ser un desplegable chico */
 .temporada .cap-fuentes > summary {

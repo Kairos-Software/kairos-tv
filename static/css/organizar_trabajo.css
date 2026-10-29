@@ -104,6 +104,15 @@
     .editor-atajos { display: none; }
 }
 
+/* Tablet horizontal con teclado: dejar espacio para los campos, sin tapar las acciones. */
+@media (max-height: 500px) {
+    .editor-contenido { top: .5rem; bottom: .5rem; }
+    .editor-cabeza { padding-block: .5rem; }
+    .editor-vista { width: 64px; }
+    .editor-vista.poster { width: 42px; }
+    .editor-atajos { display: none; }
+}
+
 /* ── Las tarjetas: se tocan para abrirlas ──────────────────────── */
 .pagina-organizar .espejo-tarjeta { cursor: pointer; border-radius: 12px; }
 .pagina-organizar .espejo-tarjeta:focus { outline: none; }
@@ -163,8 +172,9 @@ html.vista-lista .pagina-organizar .espejo-tarjeta:hover [data-nombre-editable] 
 .selector-categoria {
     position: fixed;
     z-index: 1080;
-    width: 17rem;
+    width: min(17rem, calc(100vw - 1rem));
     max-height: min(22rem, calc(100vh - 2rem));
+    max-height: min(22rem, calc(100dvh - 1rem));
     display: flex;
     flex-direction: column;
     gap: .4rem;

@@ -1,12 +1,8 @@
-/*
- * Tablas anchas que se deslizan de costado (.tabla-ancha-con-fija, en Estadísticas): si no entran,
- * aparece arriba "Deslizá de costado para ver todas las columnas →". Sin eso, en el celular o con
- * la ventana mediana la tabla se veía cortada y no se notaba que había más. Se va al llegar al final.
- */
+/* Tablas del panel: avisar cuando quedan columnas por ver hacia la derecha. */
 (function () {
     'use strict';
 
-    document.querySelectorAll('.tabla-ancha-con-fija').forEach(function (caja) {
+    document.querySelectorAll('.table-responsive').forEach(function (caja) {
         var pista = document.createElement('p');
         pista.className = 'tabla-pista';
         pista.textContent = 'Deslizá de costado para ver todas las columnas →';
@@ -19,6 +15,7 @@
         }
         caja.addEventListener('scroll', mirar, {passive: true});
         if (window.ResizeObserver) new ResizeObserver(mirar).observe(caja);
+        else window.addEventListener('resize', mirar);
         mirar();
     });
 })();
