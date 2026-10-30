@@ -149,7 +149,7 @@ class ApiCliente {
     }
 
     if (respuesta.statusCode >= 400 || (datos == null && bytes.isNotEmpty)) {
-      _avisarYFallar(respuesta.statusCode, datos);
+      _avisarYFallar(respuesta, datos);
     }
     return datos;
   }
@@ -193,13 +193,18 @@ class ApiCliente {
     } on FormatException {
       datos = null;
     }
-    _avisarYFallar(respuesta.statusCode, datos);
+    _avisarYFallar(respuesta, datos);
   }
 
   /// Avisa si se perdió la sesión o el servicio, y tira el error.
-  Never _avisarYFallar(int status, Object? datos) {
-    final error = ApiError.desdeRespuesta(status, datos);
-    if (error.sesionVencida && token != null) {
+  Never _avisarYFallar(http.Response respuesta, Object? datos) {
+    final error = ApiError.desdeRespuesta(respuesta.statusCode, datos);
+    // Solo si lo rechazado es el token de ahora: la respuesta de un pedido
+    // hecho con el anterior (llegó tarde, cuando la app ya volvió a entrar)
+    // no tira abajo la sesión nueva
+    final usado = respuesta.request?.headers['Authorization'];
+    final conElDeAhora = usado == null || usado == 'Bearer $token';
+    if (error.sesionVencida && token != null && conElDeAhora) {
       alPerderSesion?.call();
     } else if (error.sinServicio) {
       alPerderServicio?.call(error);

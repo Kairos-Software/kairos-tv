@@ -65,6 +65,14 @@ class Sesion extends ChangeNotifier {
   /// "Volver a intentar" lo vuelve a probar sin tener que escribirlo.
   String? _codigoSinServicio;
 
+  /// Por qué se volvió al login sin que nadie cerrara la sesión: la app quiso
+  /// volver a entrar sola ([_volverAEntrar]) y el servidor no la dejó (ej:
+  /// cuenta en uso). El login lo muestra una vez.
+  ApiError? avisoParaElLogin;
+
+  /// La vuelta a entrar en curso: si fallan varios pedidos juntos, se intenta una sola vez.
+  Future<void>? _volviendo;
+
   Timer? _senal;
 
   /// Se llama al cerrar la sesión, para volver a la primera pantalla (ver main.dart).
@@ -119,9 +127,42 @@ class Sesion extends ChangeNotifier {
         _cambiar(EstadoSesion.sinConexion);
       } else if (error.sinServicio) {
         _servicioPerdido(error);
-      } else {
+      } else if (!error.sesionVencida || !await _volverAEntrar()) {
         await _olvidarSesion();
       }
+    }
+  }
+
+  /// El servidor ya no reconoce el token del cliente (401). Casi siempre es
+  /// porque el aparato pasó más de 2 horas sin dar señales (la TV apagada, la
+  /// app en segundo plano) y el servidor liberó su pantalla. Antes eso mandaba
+  /// al login justo al abrir la app o después de actualizarla, y borraba el
+  /// catálogo guardado (había que bajarlo entero otra vez). Ahora vuelve a
+  /// entrar sola con el último código, como si se tocara "Ingresar": si hay
+  /// una pantalla libre, sigue todo como estaba.
+  ///
+  /// Devuelve false si no se pudo y hay que cerrar la sesión (no hay código,
+  /// o el servidor no lo deja entrar: cuenta en uso, código dado de baja...);
+  /// lo que dijo el servidor queda en [avisoParaElLogin].
+  Future<bool> _volverAEntrar() async {
+    final codigo = ultimoCodigo;
+    if (!esCliente || codigo.length != 8) return false;
+    // El token viejo ya no vale: si se manda, el servidor rechaza también el login
+    api.token = null;
+    try {
+      await ingresarConCodigo(codigo);
+      return true;
+    } on ApiError catch (error) {
+      if (error.sinConexion || error.status >= 500) {
+        // "Reintentar" vuelve a probar el código (_codigoSinServicio)
+        errorConexion = error.detalle;
+        _cambiar(EstadoSesion.sinConexion);
+        return true;
+      }
+      // Vencido o suspendido: ya muestra "Tu servicio venció" (_servicioPerdido)
+      if (error.sinServicio) return true;
+      avisoParaElLogin = error;
+      return false;
     }
   }
 
@@ -192,8 +233,15 @@ class Sesion extends ChangeNotifier {
   }
 
   /// El servidor dijo 401: el token venció o lo cerraron (desde la web, o liberaron el dispositivo).
+  /// Un cliente mirando vuelve a entrar solo (ej: la primera señal al volver de horas en segundo plano).
   void _sesionPerdida() {
-    if (estado == EstadoSesion.conSesion || estado == EstadoSesion.sinServicio) {
+    if (estado == EstadoSesion.conSesion && esCliente) {
+      _volviendo ??= _volverAEntrar()
+          .then((entro) async {
+            if (!entro) await _olvidarSesion();
+          })
+          .whenComplete(() => _volviendo = null);
+    } else if (estado == EstadoSesion.conSesion || estado == EstadoSesion.sinServicio) {
       _olvidarSesion();
     }
   }

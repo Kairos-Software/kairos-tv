@@ -89,8 +89,12 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   @override
   void initState() {
     super.initState();
+    final sesion = SesionScope.leer(context);
     // El último código usado en este aparato, ya escrito (por si el cliente lo olvidó)
-    _codigo = SesionScope.leer(context).ultimoCodigo;
+    _codigo = sesion.ultimoCodigo;
+    // La app quiso volver a entrar sola y el servidor no la dejó: por qué
+    _error = sesion.avisoParaElLogin;
+    sesion.avisoParaElLogin = null;
   }
 
   @override
@@ -176,7 +180,11 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
       );
       return;
     }
-    FocusManager.instance.primaryFocus?.unfocus();
+    // Cierra el teclado de Android (usuario y contraseña en el celular). Con el
+    // código no hay teclado que cerrar, y en la TV sacar el foco dejaba la
+    // pantalla sin nada elegido si el ingreso fallaba: ni las flechas ni los
+    // números del control volvían a escribir.
+    if (!_conCodigo && !Aparato.esTv) FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _enviando = true;
       _error = null;
