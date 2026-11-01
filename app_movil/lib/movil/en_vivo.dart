@@ -34,6 +34,7 @@ import 'componentes.dart';
 import 'control_senal.dart';
 import 'datos.dart';
 import 'estilo.dart';
+import 'reproductor_web.dart';
 import 'guia.dart';
 import 'mi_agenda.dart';
 import 'estructura.dart';
@@ -178,7 +179,7 @@ class _SeccionEnVivoState extends State<SeccionEnVivo> {
     setState(() => _controles = true);
     _ocultar?.cancel();
     _ocultar = Timer(const Duration(seconds: 4), () {
-      if (mounted && _control.video != null) setState(() => _controles = false);
+      if (mounted && (_control.video != null || _control.fuenteWeb != null)) setState(() => _controles = false);
     });
   }
 
@@ -371,7 +372,7 @@ class _Reproductor extends StatelessWidget {
   Widget build(BuildContext context) {
     final canal = control.canal;
     final video = control.video;
-    final visibles = controles || video == null || control.error != null;
+    final visibles = controles || (video == null && control.fuenteWeb == null) || control.error != null;
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: GestureDetector(
@@ -386,7 +387,9 @@ class _Reproductor extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // Sin imagen (una radio): se ve su logo mientras suena
-              if (video != null && video.value.size.height > 0)
+              if (control.fuenteWeb case final web?)
+                ReproductorWeb(key: ValueKey(web.id), fuente: web, silenciado: control.silenciado)
+              else if (video != null && video.value.size.height > 0)
                 Center(
                   child: AspectRatio(aspectRatio: video.value.aspectRatio, child: VideoPlayer(video)),
                 )

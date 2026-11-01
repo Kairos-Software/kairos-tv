@@ -654,6 +654,11 @@ def _probar_video_directo(url, cabeceras, a_fondo=False, intentos=3):
 
 
 def verificar_url(url, tipo='hls', user_agent='', referer='', a_fondo=False):
+    if tipo == 'web':
+        if urlsplit(url).scheme not in ('http', 'https') or not urlsplit(url).hostname:
+            return Resultado(CAIDA, 'El reproductor web necesita una dirección HTTP o HTTPS.', tipo='web')
+        return Resultado(SIN_VERIFICAR, 'Se abre en el navegador integrado de la app actualizada. '
+                         'La reproducción debe comprobarse en el dispositivo.', tipo='web')
     if tipo == 'yt_video':
         from . import youtube
         return youtube.verificar_video(url)

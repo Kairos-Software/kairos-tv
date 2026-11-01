@@ -20,7 +20,7 @@ from .models import (CORTES_POR_HORA_TOLERABLES, MINIMO_VISTO_PARA_JUZGAR, PROPO
 # 1.0.0 no dice nada y solo sabe HLS: a esa se le manda solo HLS (si no,
 # mostraría canales que no puede abrir).
 TIPOS_QUE_REPRODUCE_LA_APP = [Fuente.Tipo.HLS, Fuente.Tipo.DASH, Fuente.Tipo.DIRECTO, Fuente.Tipo.RTSP,
-                              Fuente.Tipo.YOUTUBE, Fuente.Tipo.PAGINA, Fuente.Tipo.YT_VIDEO]
+                              Fuente.Tipo.YOUTUBE, Fuente.Tipo.PAGINA, Fuente.Tipo.YT_VIDEO, Fuente.Tipo.WEB]
 TIPOS_DE_LA_APP_VIEJA = [Fuente.Tipo.HLS]
 
 # El orden de las categorías en la app: por su número de orden y su nombre.

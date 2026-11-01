@@ -155,7 +155,7 @@ class FuenteCanal {
 
   /// Los formatos que este reproductor sabe abrir. Se le mandan al servidor
   /// al pedir los canales (?formatos=...) para que no mande otros.
-  static const formatosQueReproduce = ['hls', 'dash', 'directo', 'rtsp', 'youtube', 'pagina', 'yt_video'];
+  static const formatosQueReproduce = ['hls', 'dash', 'directo', 'rtsp', 'youtube', 'pagina', 'yt_video', 'web'];
 
   bool get esReproducible => formatosQueReproduce.contains(tipo);
 

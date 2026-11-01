@@ -1596,8 +1596,8 @@ def probar(request):
     elif prueba.is_bound and prueba.is_valid():
         datos = prueba.cleaned_data
         ya_cargada = Fuente.objects.filter(url=datos['url'], canal__eliminado_en__isnull=True).select_related('canal').first()
-        resultado = verificar_url(datos['url'], formato(datos['url']) or 'hls', datos['user_agent'], datos['referer'],
-                                  a_fondo=True)
+        tipo = Fuente.Tipo.WEB if datos['reproductor_web'] else formato(datos['url']) or Fuente.Tipo.HLS
+        resultado = verificar_url(datos['url'], tipo, datos['user_agent'], datos['referer'], a_fondo=True)
         causa, motivo = servicios.juzgar(resultado, Importacion(solo_espanol=True))
         # Sugerencias para el canal: lo que dijo YouTube / la página, o lo que se deduce de la dirección
         nombre = limpiar_nombre(resultado.titulo) if resultado.titulo else ''

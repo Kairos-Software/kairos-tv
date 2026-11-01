@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.LocaleList
 import android.view.View
+import android.view.KeyEvent
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.core.content.FileProvider
@@ -52,12 +53,29 @@ import java.io.File
  *     siguientes le llegaban a YouTube y no a la app (no se podía adelantar).
  */
 class MainActivity : FlutterActivity() {
+    private var devolviendoFocoWeb = false
+
+    // Primer Atras: vuelve del reproductor web a los controles de KAIROS.
+    // El siguiente Atras sigue el comportamiento habitual de Flutter.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && esTv() &&
+            (devolviendoFocoWeb || window.currentFocus?.let { esReproductorWeb(it) } == true)) {
+            devolviendoFocoWeb = true
+            if (event.action == KeyEvent.ACTION_UP) {
+                devolviendoFocoWeb = false
+                vistaDeFlutter(window.decorView)?.requestFocus()
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         preferirEspanol()
         super.onCreate(savedInstanceState)
         if (esTv()) {
             window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener { anterior, nuevo ->
-                if (nuevo != null && dentroDeUnWebView(nuevo)) {
+                if (nuevo != null && dentroDeUnWebView(nuevo) && !esReproductorWeb(nuevo)) {
                     nuevo.isFocusable = false
                     nuevo.isFocusableInTouchMode = false
                     (anterior?.takeIf { !dentroDeUnWebView(it) } ?: vistaDeFlutter(window.decorView))?.requestFocus()
@@ -138,6 +156,15 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
+        private fun esReproductorWeb(vista: View): Boolean {
+            var actual: View? = vista
+            while (actual != null) {
+                if (actual is WebView) return actual.getTag(R.id.kairos_web_interactivo) == true
+                actual = actual.parent as? View
+            }
+            return false
+        }
+
         /**
          * El canal "kairos/dispositivo" de [motor]: el del celular y también el
          * de la tele (PantallaTele.kt), que es otro motor de Flutter en el mismo aparato.
@@ -183,6 +210,18 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Exception) {
                             resultado.error("sin_instalador", e.message, null)
                         }
+                    }
+                    "prepararReproductorWeb" -> {
+                        @Suppress("DEPRECATION")
+                        val vista = WebViewFlutterAndroidExternalApi.getWebView(
+                            motor, llamada.argument<Number>("webview")!!.toLong())
+                        if (vista != null) {
+                            vista.setTag(R.id.kairos_web_interactivo, true)
+                            vista.isFocusable = true
+                            vista.isFocusableInTouchMode = true
+                            if (llamada.argument<Boolean>("enfocar") == true) vista.requestFocus()
+                        }
+                        resultado.success(vista != null)
                     }
                     "dentroDeYoutube" -> {
                         @Suppress("DEPRECATION")

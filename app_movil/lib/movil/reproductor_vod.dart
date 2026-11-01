@@ -27,6 +27,7 @@ import 'control_senal.dart';
 import 'datos.dart';
 import 'detalle.dart';
 import 'estilo.dart';
+import 'reproductor_web.dart';
 import 'reproductor_youtube.dart';
 
 /// Reproduce una película (si quedó a medias, sigue desde ahí). Las de
@@ -494,7 +495,9 @@ class _Video extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (video != null)
+            if (control.fuenteWeb case final web?)
+              ReproductorWeb(key: ValueKey(web.id), fuente: web, silenciado: control.silenciado)
+            else if (video != null)
               pantallaCompleta
                   ? VideoAjustado(video: video, ajuste: ControlSenal.ajuste)
                   : Center(

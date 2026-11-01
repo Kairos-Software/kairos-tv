@@ -129,6 +129,14 @@ class ControlSenal extends ChangeNotifier {
 
   Canal? canal;
   VideoPlayerController? video;
+  FuenteCanal? fuenteWeb;
+  int focoWeb = 0;
+
+  void enfocarWeb() {
+    focoWeb++;
+    _avisar();
+  }
+
   String? error;
   int fuente = 0;
   bool _cerrado = false;
@@ -248,7 +256,7 @@ class ControlSenal extends ChangeNotifier {
       if (fuente.tipo != 'yt_video') fuente,
   ];
 
-  bool get cargando => error == null && (video == null || video!.value.isBuffering);
+  bool get cargando => error == null && fuenteWeb == null && (video == null || video!.value.isBuffering);
 
   /// Una película o capítulo que tarda en arrancar: el texto para mostrar debajo de la
   /// ruedita (que no parezca colgada), con los segundos que van. Pasa con servidores
@@ -337,6 +345,7 @@ class ControlSenal extends ChangeNotifier {
     _cerrarFuente();
     final anterior = video;
     video = null;
+    fuenteWeb = null;
     if (indice != fuente) _cortesRecientes.clear(); // reconectar a la misma no borra sus cortes
     fuente = indice;
     error = null;
@@ -382,6 +391,11 @@ class ControlSenal extends ChangeNotifier {
     }
 
     final elegida = fuentes[indice];
+    if (elegida.tipo == 'web') {
+      fuenteWeb = elegida;
+      _avisar();
+      return;
+    }
     final Senal senal;
     try {
       // YouTube, Twitch...: primero hay que averiguar dónde está el video (ver senales.dart)
@@ -892,6 +906,7 @@ class ControlSenal extends ChangeNotifier {
     _cerrarFuente();
     final actual = video;
     video = null;
+    fuenteWeb = null;
     _avisar();
     await actual?.dispose();
   }

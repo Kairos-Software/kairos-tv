@@ -35,6 +35,7 @@
             <input type="hidden" name="paso" value="probar">
             {% if prueba.non_field_errors %}<div class="col-12 alert alert-danger">{{ prueba.non_field_errors }}</div>{% endif %}
             {% include "parciales/_campo.html" with campo=prueba.url ancho="col-12" %}
+            {% include "parciales/_campo.html" with campo=prueba.reproductor_web ancho="col-12" %}
             <div class="col-12">
                 <details class="importar-opciones" {% if prueba.user_agent.value or prueba.referer.value or prueba.user_agent.errors or prueba.referer.errors %}open{% endif %}>
                     <summary>
@@ -112,6 +113,7 @@
             <input type="hidden" name="estado" value="{{ resultado.estado }}">
             <input type="hidden" name="error" value="{{ resultado.error }}">
             <input type="hidden" name="tipo" value="{{ resultado.tipo }}">
+            {% if prueba.reproductor_web.value %}<input type="hidden" name="reproductor_web" value="on">{% endif %}
             <input type="hidden" name="ua_que_anduvo" value="{{ resultado.user_agent }}">
             {% if canal_form.non_field_errors %}<div class="col-12 alert alert-danger">{{ canal_form.non_field_errors }}</div>{% endif %}
             {% include "parciales/_campo.html" with campo=canal_form.nombre ancho="col-md-8" %}

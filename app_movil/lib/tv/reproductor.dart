@@ -46,6 +46,7 @@ import '../movil/datos.dart';
 import '../movil/detalle.dart' show proximoEpisodio;
 import '../movil/estilo.dart';
 import '../movil/reproductor_youtube.dart';
+import '../movil/reproductor_web.dart';
 import '../sesion.dart';
 import '../widgets/espera_larga.dart';
 import 'estructura.dart' show DialogoTv;
@@ -399,6 +400,15 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
                     ayuda: '← → elegir  ·  OK: confirmar  ·  Atrás: cerrar',
                     alMoverse: _esperarParaCerrar,
                     fila: [
+                      if (_control.fuenteWeb != null)
+                        _BotonCuadrado(
+                          icono: Icons.web,
+                          etiqueta: 'Reproductor web',
+                          alOk: () {
+                            _cerrar();
+                            _control.enfocarWeb();
+                          },
+                        ),
                       _BotonCuadrado(
                         icono: Icons.view_list_rounded,
                         etiqueta: 'Guía',
@@ -1588,6 +1598,15 @@ class _Video extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final web = control.fuenteWeb;
+    if (web != null) {
+      return ReproductorWeb(
+        key: ValueKey(web.id),
+        fuente: web,
+        silenciado: control.silenciado,
+        solicitudFoco: control.focoWeb,
+      );
+    }
     final video = control.video;
     if (video == null || !video.value.isInitialized) return const SizedBox.expand();
     final canal = control.canal;

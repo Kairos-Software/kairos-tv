@@ -313,6 +313,8 @@ class QuitarCanalesForm(forms.Form):
 
 class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
     """Editar un canal desde el panel. La categoría se elige o se crea escribiéndola."""
+    reproductor_web = forms.BooleanField(label='Abrir la fuente nueva como reproductor web', required=False,
+                                         help_text='Para páginas con reproductor. Requiere la app actualizada.')
     nueva_categoria = forms.CharField(
         label='O una categoría nueva', max_length=80, required=False,
         help_text='Si escribís acá, se crea (o se usa la que ya se llame así) en vez de la de arriba.',
@@ -371,6 +373,8 @@ FuentesFormSet = forms.modelformset_factory(
 
 class ProbarLinkForm(EstiloBootstrapMixin, forms.Form):
     """Una dirección para ver si anda (y, opcionalmente, cómo pedirla)."""
+    reproductor_web = forms.BooleanField(label='Abrir como reproductor web', required=False,
+                                         help_text='Abre la página en la app; se comprueba en la TV o el celular.')
     url = forms.CharField(
         label='Dirección', max_length=1000,
         validators=[URLValidator(schemes=['http', 'https', 'rtsp', 'rtsps'])],

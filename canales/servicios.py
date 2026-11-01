@@ -1580,14 +1580,15 @@ def guardar_canal(form, fuentes, usuario=None, verificar_url=None):
         fuentes.save()
     nueva = None
     if form.cleaned_data.get('nueva_fuente'):
-        nueva = agregar_fuente(canal, form.cleaned_data['nueva_fuente'], verificar_url, usuario)
+        nueva = agregar_fuente(canal, form.cleaned_data['nueva_fuente'], verificar_url, usuario,
+                               tipo=Fuente.Tipo.WEB if form.cleaned_data.get('reproductor_web') else None)
     registrar(usuario, Accion.EDITAR, f'Editó el canal "{canal.nombre}".', modulo='canales')
     return canal, nueva
 
 
-def agregar_fuente(canal, url, verificar_url=None, usuario=None):
+def agregar_fuente(canal, url, verificar_url=None, usuario=None, *, tipo=None):
     """Suma una dirección al canal (al final de la lista) y, si se puede, la prueba."""
-    tipo = clasificar.formato(url) or Fuente.Tipo.HLS
+    tipo = tipo or clasificar.formato(url) or Fuente.Tipo.HLS
     prioridad = (canal.fuentes.aggregate(maximo=Max('prioridad'))['maximo'] or 0) + 1
     fuente = Fuente(canal=canal, url=url[:1000], tipo=tipo, prioridad=prioridad, origen='Agregada a mano')
     if verificar_url:
