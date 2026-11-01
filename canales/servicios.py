@@ -1567,34 +1567,83 @@ def probar_fuente(fuente, verificar_url):
 
 # ── Editar un canal desde el panel ───────────────────────────────────
 
-def guardar_canal(form, fuentes, usuario=None, verificar_url=None):
+# Probar las fuentes nuevas al guardar no puede tardar más que esto: las que no
+# llegan a probarse quedan "sin verificar" y las prueba la verificación programada
+ESPERA_AL_AGREGAR = 25
+
+
+def guardar_canal(form, fuentes, nuevas=(), usuario=None, verificar_varias=None):
     """
-    Guarda el formulario del canal (CanalForm) y el de sus fuentes
-    (FuentesFormSet: prioridad, apagar o borrar). Si se escribió una fuente
-    nueva, se crea y se prueba en el momento. Devuelve (canal, fuente_nueva o None).
+    Guarda el formulario del canal (CanalForm), el de sus fuentes
+    (FuentesFormSet: número, apagar o borrar) y las fuentes nuevas
+    (NuevasFuentesFormSet.nuevas(): dirección, número y si es reproductor
+    web), que se prueban en el momento, todas a la vez. Después deja las
+    fuentes numeradas 1, 2, 3... (numerar_fuentes). Devuelve (canal, [fuentes nuevas]).
     """
     with transaction.atomic():
         canal = form.save(commit=False)
         canal.marcar_autor(usuario)
         canal.save()
         fuentes.save()
-    nueva = None
-    if form.cleaned_data.get('nueva_fuente'):
-        nueva = agregar_fuente(canal, form.cleaned_data['nueva_fuente'], verificar_url, usuario,
-                               tipo=Fuente.Tipo.WEB if form.cleaned_data.get('reproductor_web') else None)
+    # Las que ya estaban y se les cambió el número: van a ese lugar, igual que las nuevas
+    movidas = [(f.instance, f.cleaned_data['prioridad']) for f in fuentes.forms
+               if 'prioridad' in f.changed_data and f not in fuentes.deleted_forms]
+    tipos = {n['url']: _tipo_nuevo(n['url'], n.get('reproductor_web')) for n in nuevas}
+    resultados = (verificar_varias(tipos, hasta=time.monotonic() + ESPERA_AL_AGREGAR)
+                  if verificar_varias and tipos else {})
+    agregadas = []
+    with transaction.atomic():
+        for nueva in nuevas:
+            fuente = agregar_fuente(canal, nueva['url'], usuario=usuario, tipo=tipos[nueva['url']],
+                                    resultado=resultados.get(nueva['url']))
+            agregadas.append((fuente, nueva.get('numero')))
+        numerar_fuentes(canal, movidas + [(fuente, numero) for fuente, numero in agregadas if numero])
+    for fuente, _ in agregadas:
+        fuente.refresh_from_db(fields=['prioridad'])   # el número con que quedó, para el aviso
     registrar(usuario, Accion.EDITAR, f'Editó el canal "{canal.nombre}".', modulo='canales')
-    return canal, nueva
+    return canal, [fuente for fuente, _ in agregadas]
 
 
-def agregar_fuente(canal, url, verificar_url=None, usuario=None, *, tipo=None):
-    """Suma una dirección al canal (al final de la lista) y, si se puede, la prueba."""
-    tipo = tipo or clasificar.formato(url) or Fuente.Tipo.HLS
+def _tipo_nuevo(url, reproductor_web=False):
+    return Fuente.Tipo.WEB if reproductor_web else clasificar.formato(url) or Fuente.Tipo.HLS
+
+
+def agregar_fuente(canal, url, verificar_url=None, usuario=None, *, tipo=None, resultado=None):
+    """
+    Suma una dirección al canal (al final de la lista) y, si se puede, la
+    prueba. `resultado`: el de una prueba ya hecha (guardar_canal prueba varias a la vez).
+    """
+    tipo = tipo or _tipo_nuevo(url)
     prioridad = (canal.fuentes.aggregate(maximo=Max('prioridad'))['maximo'] or 0) + 1
     fuente = Fuente(canal=canal, url=url[:1000], tipo=tipo, prioridad=prioridad, origen='Agregada a mano')
-    if verificar_url:
-        aplicar_resultado(fuente, verificar_url(url, tipo), timezone.now())
+    if resultado is None and verificar_url:
+        resultado = verificar_url(url, tipo)
+    if resultado is not None:
+        aplicar_resultado(fuente, resultado, timezone.now())
     fuente.save()
     return fuente
+
+
+def numerar_fuentes(canal, en_su_lugar=()):
+    """
+    Deja las fuentes del canal numeradas 1, 2, 3... en el orden de su número
+    (Fuente.prioridad; si dos tienen el mismo, primero la más vieja), sin
+    repetidos ni huecos: así el número del panel es el de la app ("Fuente 2")
+    cuando el canal usa ese orden (Canal.orden_fuentes_a_mano).
+    `en_su_lugar`: [(fuente, número)] las que van en ese lugar (las nuevas y
+    las que se cambiaron de número); las otras de ahí para abajo se corren una.
+    """
+    lugares = {fuente.pk: numero for fuente, numero in en_su_lugar}
+    orden = [fuente for fuente in canal.fuentes.order_by('prioridad', 'pk') if fuente.pk not in lugares]
+    # De la de número más chico a la más grande; con el mismo número, quedan en el orden de la lista
+    for fuente, numero in sorted(reversed(en_su_lugar), key=lambda par: par[1]):
+        orden.insert(max(1, min(numero, len(orden) + 1)) - 1, fuente)
+    cambiadas = []
+    for numero, fuente in enumerate(orden, 1):
+        if fuente.prioridad != numero:
+            fuente.prioridad = numero
+            cambiadas.append(fuente)
+    Fuente.objects.bulk_update(cambiadas, ['prioridad'])
 
 
 def borrar_fuente(fuente, usuario=None):

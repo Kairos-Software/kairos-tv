@@ -312,18 +312,13 @@ class QuitarCanalesForm(forms.Form):
 
 
 class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
-    """Editar un canal desde el panel. La categoría se elige o se crea escribiéndola."""
-    reproductor_web = forms.BooleanField(label='Abrir la fuente nueva como reproductor web', required=False,
-                                         help_text='Para páginas con reproductor. Requiere la app actualizada.')
+    """
+    Editar un canal desde el panel. La categoría se elige o se crea escribiéndola.
+    Las fuentes nuevas van aparte: NuevasFuentesFormSet.
+    """
     nueva_categoria = forms.CharField(
         label='O una categoría nueva', max_length=80, required=False,
         help_text='Si escribís acá, se crea (o se usa la que ya se llame así) en vez de la de arriba.',
-    )
-    nueva_fuente = forms.CharField(
-        label='Agregar una fuente', max_length=1000, required=False,
-        validators=[URLValidator(schemes=['http', 'https', 'rtsp', 'rtsps'])],
-        help_text='Una dirección más para este canal (.m3u8, video directo, YouTube, Twitch...). '
-                  'Se prueba al guardar.',
     )
     imagen = forms.FileField(
         label='O subí la imagen desde la compu', required=False,
@@ -335,9 +330,11 @@ class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
     class Meta:
         model = Canal
         fields = ['nombre', 'logo', 'numero', 'categoria', 'contenido', 'idioma', 'pais', 'orden',
-                  'activo', 'motivo_quitado', 'destacado']
+                  'activo', 'motivo_quitado', 'destacado', 'orden_fuentes_a_mano']
         labels = {'activo': 'Se muestra en la app', 'motivo_quitado': 'Si no se muestra, por qué',
-                  'destacado': '★ Destacado en la TV'}
+                  'destacado': '★ Destacado en la TV', 'orden_fuentes_a_mano': 'La app usa este orden'}
+        help_texts = {'orden_fuentes_a_mano': 'Se marca sola al elegir un número. Sin marcar, la app pone primero '
+                                              'la que mejor anda y el número solo desempata.'}
         widgets = {'logo': forms.URLInput(attrs={'placeholder': 'https://.../logo.png'})}
 
     def __init__(self, *args, **kwargs):
@@ -348,12 +345,6 @@ class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
 
     def clean_pais(self):
         return self.cleaned_data['pais'].strip().upper()
-
-    def clean_nueva_fuente(self):
-        url = self.cleaned_data['nueva_fuente'].strip()
-        if url and Fuente.objects.filter(canal=self.instance, url=url).exists():
-            raise forms.ValidationError('Este canal ya tiene esa dirección.')
-        return url
 
     def clean(self):
         datos = super().clean()
@@ -366,9 +357,60 @@ class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
 FuentesFormSet = forms.modelformset_factory(
     Fuente, fields=['prioridad', 'activa'], extra=0, can_delete=True,
     widgets={'prioridad': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'style': 'width:5rem',
-                                                   'min': 0, 'aria-label': 'Orden'}),
+                                                   'min': 1, 'aria-label': 'Número'}),
              'activa': forms.CheckboxInput(attrs={'class': 'form-check-input', 'aria-label': 'Activa'})},
 )
+
+
+class NuevaFuenteForm(forms.Form):
+    """Una fila de "Agregar fuentes" en Editar canal. Vacía = no se agrega nada."""
+    numero = forms.IntegerField(
+        min_value=1, max_value=999, required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'aria-label': 'Número'}),
+    )
+    url = forms.CharField(
+        max_length=1000, required=False, validators=[URLValidator(schemes=['http', 'https', 'rtsp', 'rtsps'])],
+        widget=forms.TextInput(attrs={'class': 'form-control', 'aria-label': 'Dirección', 'inputmode': 'url',
+                                      'placeholder': 'https://... (.m3u8, video directo, YouTube, Twitch...)'}),
+    )
+    reproductor_web = forms.BooleanField(
+        required=False, widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+    )
+
+    def clean(self):
+        datos = super().clean()
+        datos['url'] = (datos.get('url') or '').strip()
+        if not datos['url'] and datos.get('numero'):
+            self.add_error('url', 'Falta la dirección.')
+        return datos
+
+
+class BaseNuevasFuentes(forms.BaseFormSet):
+    """Las filas con dirección, sin repetir las del canal ni entre ellas."""
+
+    def __init__(self, *args, canal=None, **kwargs):
+        self.canal = canal
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        if any(self.errors):
+            return
+        ya = set(self.canal.fuentes.values_list('url', flat=True)) if self.canal else set()
+        for form in self.forms:
+            url = form.cleaned_data.get('url')
+            if not url:
+                continue
+            if url in ya:
+                form.add_error('url', 'Este canal ya tiene esa dirección.')
+            ya.add(url)
+
+    def nuevas(self):
+        """Las filas con dirección, en el orden en que se escribieron: [{url, numero, reproductor_web}]."""
+        return [form.cleaned_data for form in self.forms if form.cleaned_data.get('url')]
+
+
+NuevasFuentesFormSet = forms.formset_factory(NuevaFuenteForm, formset=BaseNuevasFuentes, extra=1, max_num=20,
+                                             validate_max=True)
 
 
 class ProbarLinkForm(EstiloBootstrapMixin, forms.Form):

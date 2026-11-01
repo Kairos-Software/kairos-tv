@@ -1,0 +1,23 @@
+{% comment %}
+    Una fila de "Agregar fuentes" en Editar canal (NuevaFuenteForm): número, dirección y si se abre
+    como reproductor web. La usa también el <template> de "Otra fuente" (con __prefix__).
+{% endcomment %}
+<div class="fila-nueva row g-2 align-items-start mb-2">
+    <div class="col-3 col-sm-2 col-lg-1">
+        {{ f.numero }}
+        {% for error in f.numero.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    <div class="col-9 col-sm-10 col-lg">
+        {{ f.url }}
+        {% for error in f.url.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    <div class="col col-lg-auto">
+        <div class="form-check mb-0 mt-lg-2">
+            {{ f.reproductor_web }}
+            <label class="form-check-label" for="{{ f.reproductor_web.id_for_label }}">Abrir como reproductor web</label>
+        </div>
+    </div>
+    <div class="col-auto">
+        <button type="button" class="btn-icono btn-icono-peligro quitar-fila mt-lg-1" aria-label="Quitar esta fila"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+</div>

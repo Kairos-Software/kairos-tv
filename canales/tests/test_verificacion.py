@@ -893,7 +893,8 @@ class EditarCanalTests(TestCase):
         datos = {
             'nombre': 'Canal 26', 'logo': '', 'numero': '26', 'categoria': self.canal.categoria_id or '',
             'nueva_categoria': '', 'contenido': 'vivo', 'idioma': 'es', 'pais': 'ar', 'orden': 0, 'activo': 'on',
-            'motivo_quitado': '', 'nueva_fuente': '',
+            'motivo_quitado': '',
+            'nuevas-TOTAL_FORMS': 1, 'nuevas-INITIAL_FORMS': 0, 'nuevas-0-numero': '', 'nuevas-0-url': '',
             'fuentes-TOTAL_FORMS': 1, 'fuentes-INITIAL_FORMS': 1, 'fuentes-MIN_NUM_FORMS': 0,
             'fuentes-MAX_NUM_FORMS': 1000,
             'fuentes-0-id': fuente.pk, 'fuentes-0-prioridad': 1, 'fuentes-0-activa': 'on',
@@ -914,9 +915,9 @@ class EditarCanalTests(TestCase):
         self.assertEqual((self.canal.nombre, self.canal.logo, self.canal.categoria.nombre, self.canal.pais),
                          ('Canal 26 Noticias', 'https://logos.ejemplo.com/nuevo.png', 'Argentina', 'AR'))
 
-    @mock.patch('canales.views.verificar_url', return_value=Resultado(FUNCIONA, tipo='directo'))
+    @mock.patch('canales.verificacion.verificar_url', return_value=Resultado(FUNCIONA, tipo='directo'))
     def test_agregar_una_fuente_y_borrar_otra(self, verificar_url):
-        self.client.post(self.url, self.datos(**{'nueva_fuente': 'http://iptv.ejemplo.com:8080/u/p/9', 'fuentes-0-DELETE': 'on'}))
+        self.client.post(self.url, self.datos(**{'nuevas-0-url': 'http://iptv.ejemplo.com:8080/u/p/9', 'fuentes-0-DELETE': 'on'}))
         fuente = self.canal.fuentes.get()
         self.assertEqual((fuente.url, fuente.tipo, fuente.estado), ('http://iptv.ejemplo.com:8080/u/p/9', 'directo', 'funciona'))
 

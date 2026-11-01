@@ -4,9 +4,9 @@ from django.test import TestCase
 from django.urls import reverse
 
 from canales import consultas, servicios
-from canales.forms import CanalForm, FuentesFormSet
+from canales.forms import CanalForm, FuentesFormSet, NuevasFuentesFormSet
 from canales.models import Canal, Fuente
-from canales.verificacion import verificar_url
+from canales.verificacion import verificar_url, verificar_varias
 from usuarios.models import Usuario, Rol
 
 
@@ -46,11 +46,13 @@ class ReproductorWebTests(TestCase):
 
     def test_agregar_web_a_un_canal_existente(self):
         form = CanalForm({'nombre': self.canal.nombre, 'contenido': 'vivo', 'idioma': 'es',
-            'pais': 'AR', 'orden': 0, 'activo': 'on', 'nueva_fuente': self.url_web,
-            'reproductor_web': 'on'}, instance=self.canal)
+            'pais': 'AR', 'orden': 0, 'activo': 'on'}, instance=self.canal)
         fuentes = FuentesFormSet({'fuentes-TOTAL_FORMS': 0, 'fuentes-INITIAL_FORMS': 0},
             queryset=Fuente.objects.none(), prefix='fuentes')
+        nuevas = NuevasFuentesFormSet({'nuevas-TOTAL_FORMS': 1, 'nuevas-INITIAL_FORMS': 0,
+            'nuevas-0-url': self.url_web, 'nuevas-0-reproductor_web': 'on'}, canal=self.canal, prefix='nuevas')
         self.assertTrue(form.is_valid(), form.errors)
         self.assertTrue(fuentes.is_valid(), fuentes.errors)
-        _, nueva = servicios.guardar_canal(form, fuentes, verificar_url=verificar_url)
+        self.assertTrue(nuevas.is_valid(), nuevas.errors)
+        _, [nueva] = servicios.guardar_canal(form, fuentes, nuevas.nuevas(), verificar_varias=verificar_varias)
         self.assertEqual((nueva.tipo, nueva.estado), ('web', 'sin_verificar'))

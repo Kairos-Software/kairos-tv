@@ -105,7 +105,8 @@ class SubirImagenTests(TestCase):
     def _editar_en_su_pagina(self, **datos):
         return self.client.post(reverse('canales:canal_editar', args=[self.pelicula.pk]), {
             'nombre': self.pelicula.nombre, 'logo': self.pelicula.logo, 'contenido': 'pelicula', 'orden': 0,
-            'activo': 'on', 'fuentes-TOTAL_FORMS': 0, 'fuentes-INITIAL_FORMS': 0, **datos})
+            'activo': 'on', 'fuentes-TOTAL_FORMS': 0, 'fuentes-INITIAL_FORMS': 0,
+            'nuevas-TOTAL_FORMS': 0, 'nuevas-INITIAL_FORMS': 0, **datos})
 
     def test_tambien_desde_editar_del_catalogo(self):
         self.assertContains(self.client.get(reverse('canales:canal_editar', args=[self.pelicula.pk])), 'name="imagen"')

@@ -470,6 +470,12 @@ TV (★)" lista lo marcado, y la tarjeta lleva una ★.
 **La mejor fuente, primera:** la app arranca por la primera fuente de cada
 canal, así que el servidor las manda ordenadas (`consultas.ordenadas_por_estabilidad`):
 
+0. **Si en el panel se eligió el orden, manda ese.** En Editar canal, la
+   casilla «La app usa este orden» (`Canal.orden_fuentes_a_mano`, migración
+   0033) se marca sola al elegir un número: entonces la fuente 1 del panel es
+   la "Fuente 1" de la app, aunque se corte (solo se saltean las caídas, las
+   ocultas y las apagadas). Lo de abajo solo desempata. Sin marcar, el orden
+   lo arma el servidor como sigue.
 1. **Al final, las que se cortan** en los aparatos. Al dejar de ver una
    fuente, la app cuenta cuánto la vio y cuántas veces se cortó (se frenó a
    cargar, o se cayó y se reconectó): `POST /api/v1/canales/fuentes/<id>/estabilidad/`
@@ -679,6 +685,14 @@ está en `static/js/trabajo.js` y `static/css/trabajo.css`.
   pasos en una fila y cada entrada en una línea.
 - **Editar canal** («Más opciones») tiene la misma búsqueda de imágenes, y se
   le arrastra o pega una imagen.
+- **Editar canal → Fuentes** (2026-11-01): se agregan **varias a la vez**, cada
+  una con su número («Otra fuente» suma una fila: `NuevasFuentesFormSet`,
+  `_fuente_nueva.html`). Sin número va al final; con un número que ya existe
+  va en ese lugar y las demás se corren. Lo mismo al cambiarle el número a
+  una que ya estaba. Al guardar se prueban todas juntas
+  (`verificacion.verificar_varias`, como mucho `servicios.ESPERA_AL_AGREGAR`
+  segundos: las que no llegan quedan sin verificar) y las fuentes quedan
+  numeradas 1, 2, 3... (`servicios.numerar_fuentes`).
 
 ### Para revisar (la bandeja del panel)
 

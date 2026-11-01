@@ -32,11 +32,10 @@ class _ReproductorWebState extends State<ReproductorWeb> {
   WebViewController? _web;
   AppLifecycleListener? _ciclo;
   Timer? _limite;
+  bool _cargando = true;
   bool _suspendido = false;
   String? _error;
   bool _listo = false;
-  bool _aislado = false;
-  bool _videoListo = false;
   bool _reproduciendo = false;
   bool _vio403 = false;
   int _generacion = 0;
@@ -124,10 +123,9 @@ class _ReproductorWebState extends State<ReproductorWeb> {
   Future<void> _cargar() async {
     if (!mounted || _web == null) return;
     setState(() {
+      _cargando = true;
       _error = null;
       _listo = false;
-      _aislado = false;
-      _videoListo = false;
       _reproduciendo = false;
       _vio403 = false;
     });
@@ -151,7 +149,7 @@ class _ReproductorWebState extends State<ReproductorWeb> {
         _fallo('Actualizá Android System WebView para usar el reproductor integrado.');
         return;
       }
-      if (!mounted || _suspendido || _error != null) return;
+      if (!mounted || _suspendido) return;
       await _web!.loadRequest(_direccion, headers: widget.fuente.cabeceras);
     } catch (_) {
       _fallo('No se pudo abrir el reproductor web.');
@@ -170,21 +168,16 @@ class _ReproductorWebState extends State<ReproductorWeb> {
         case 'video_error':
           if (_listo) _fallo('El reproductor informó un error de video. Probá otra fuente.');
           return;
-        case 'isolated':
         case 'ready':
         case 'playing':
           final primero = !_listo;
           setState(() {
-            if (message['event'] == 'isolated') {
-              _aislado = true;
-            } else {
-              _videoListo = true;
-            }
-            _listo = _aislado && _videoListo;
+            _listo = true;
+            _cargando = false;
             if (message['event'] == 'playing') _reproduciendo = true;
           });
-          if (_listo && _reproduciendo) _limite?.cancel();
-          if (primero && _listo) {
+          if (_reproduciendo) _limite?.cancel();
+          if (primero) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _enfocar();
             });
@@ -201,9 +194,9 @@ class _ReproductorWebState extends State<ReproductorWeb> {
     _limite?.cancel();
     setState(() {
       _error = mensaje;
+      _cargando = false;
       _listo = false;
     });
-    unawaited(_web?.loadRequest(Uri.parse('about:blank')).catchError((Object _) {}));
   }
 
   void _enfocar() {

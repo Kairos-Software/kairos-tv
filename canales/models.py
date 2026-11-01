@@ -148,6 +148,10 @@ class Canal(ModeloBase):
     # serie se marcan todos sus capítulos (ver organizar.editar_serie).
     destacado = models.BooleanField('destacado en la TV', default=False,
                                     help_text='Sale más seguido en el modo reposo de la TV.')
+    # Las fuentes van en el orden que se eligió en el panel (Fuente.prioridad: la 1 es la
+    # "Fuente 1" de la app), aunque alguna se corte. Sin marcar, el servidor pone primero la
+    # que mejor anda (consultas.ordenadas_por_estabilidad). Se marca al elegir un número.
+    orden_fuentes_a_mano = models.BooleanField('la app usa este orden', default=False)
     # "Dejar así" en Para revisar (bandeja.py): el estado de salud en que se
     # dejó (salud.Salud). No vuelve a aparecer en la bandeja mientras siga así.
     revisado = models.CharField('dejado así en', max_length=10, blank=True)

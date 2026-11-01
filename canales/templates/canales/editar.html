@@ -2,13 +2,14 @@
 {% load static canales_extras %}
 {% comment %}
     Editar un canal: nombre, logo, categoría (o una nueva), contenido,
-    idioma, país, orden, si se muestra; sus fuentes (orden, apagar, borrar)
-    y agregar una fuente a mano. A la derecha, cómo se ve en la app, con las herramientas de imagen (buscar una
+    idioma, país, orden, si se muestra; sus fuentes (número, apagar, borrar,
+    y si la app usa ese orden) y agregar fuentes a mano, varias a la vez y
+    cada una con su número (_fuente_nueva.html). A la derecha, cómo se ve en la app, con las herramientas de imagen (buscar una
     con ese nombre, arrastrarla o pegarla con Ctrl+V: static/js/imagenes_contenido.js).
 {% endcomment %}
 
 {% block titulo %}Editar {{ canal.nombre }}{% endblock %}
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261101">{% endblock %}
 
 {% block encabezado %}
 {% barra_contenido 'organizar' %}
@@ -22,7 +23,7 @@
 {% endblock %}
 
 {% block contenido %}
-<form method="post" novalidate enctype="multipart/form-data">
+<form method="post" novalidate enctype="multipart/form-data" id="form-canal">
     {% csrf_token %}
     <input type="hidden" name="volver" value="{{ volver }}">
     {{ fuentes.management_form }}
@@ -69,11 +70,14 @@
 
     <section class="tarjeta p-0 mb-4">
         <h2 class="tarjeta-titulo px-4 pt-4">Fuentes</h2>
-        <p class="texto-suave small px-4">La app prueba primero la de número más chico y, si falla, pasa a la siguiente. "Activa" sin marcar = la app no la usa aunque funcione. "Borrar" borra esa señal en el momento (las otras quedan).</p>
+        <div class="row px-4">
+            {% include "parciales/_campo.html" with campo=form.orden_fuentes_a_mano ancho="col-12" %}
+        </div>
+        <p class="texto-suave small px-4 mt-2">La app prueba la 1 y, si no anda, pasa a la siguiente (las caídas y las que no están activas se saltean). Para cambiar el orden, cambiá el número: la fuente va a ese lugar y las demás se corren. "Borrar" borra esa señal en el momento.</p>
         {% if fuentes.forms %}
         <div class="table-responsive">
             <table class="table tabla mb-0">
-                <thead><tr><th scope="col">Orden</th><th scope="col">Activa</th><th scope="col">Formato y estado</th><th scope="col">Dirección</th><th scope="col">Borrar</th></tr></thead>
+                <thead><tr><th scope="col">N.º</th><th scope="col">Activa</th><th scope="col">Formato y estado</th><th scope="col">Dirección</th><th scope="col">Borrar</th></tr></thead>
                 <tbody>
                 {% for f in fuentes %}
                     {% with fuente=f.instance %}
@@ -98,9 +102,18 @@
         {% else %}
         <p class="texto-suave px-4">Este canal no tiene fuentes.</p>
         {% endif %}
-        <div class="row g-3 p-4">
-            {% include "parciales/_campo.html" with campo=form.nueva_fuente ancho="col-12" %}
-            {% include "parciales/_campo.html" with campo=form.reproductor_web ancho="col-12" %}
+        <div class="p-4 nuevas-fuentes">
+            <h3 class="h6 mb-1">Agregar fuentes</h3>
+            <p class="form-text mt-0 mb-3">Sin número, va al final. Con un número que ya existe, va en ese lugar y las demás se corren. Se prueban al guardar.</p>
+            {{ nuevas.management_form }}
+            {% if nuevas.non_form_errors %}<div class="alert alert-danger">{{ nuevas.non_form_errors }}</div>{% endif %}
+            <div id="filas-nuevas" data-siguiente="{{ siguiente_numero }}">
+            {% for f in nuevas %}
+                {% include "canales/_fuente_nueva.html" with f=f %}
+            {% endfor %}
+            </div>
+            <template id="fila-nueva">{% include "canales/_fuente_nueva.html" with f=nuevas.empty_form %}</template>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="otra-fuente"><i class="bi bi-plus-lg" aria-hidden="true"></i> Otra fuente</button>
         </div>
     </section>
 
@@ -193,19 +206,73 @@
     }
     numero.addEventListener('input', function () { vistaNumero.textContent = numero.value; vistaNumero.hidden = !numero.value; });
 
-    // Probar la fuente nueva tarda unos segundos
-    document.querySelector('form').addEventListener('submit', function (evento) {
+    // Fuentes nuevas: "Otra fuente" suma una fila; la ✕ la vacía (y la esconde si hay otras)
+    var filas = document.getElementById('filas-nuevas');
+    var molde = document.getElementById('fila-nueva');
+    var total = document.getElementById('id_nuevas-TOTAL_FORMS');
+    var maximo = parseInt(document.getElementById('id_nuevas-MAX_NUM_FORMS').value, 10);
+    var otra = document.getElementById('otra-fuente');
+    var ordenAMano = document.getElementById('{{ form.orden_fuentes_a_mano.id_for_label }}');
+    function visibles() {
+        return Array.prototype.filter.call(filas.querySelectorAll('.fila-nueva'), function (fila) { return !fila.hidden; });
+    }
+    // Sin número va al final (después de las que lo tienen): lo dice el lugar vacío. Las filas
+    // sin dirección no se agregan: toman el número que les tocaría si se completan
+    function numerarVacias() {
+        var siguiente = parseInt(filas.dataset.siguiente, 10);
+        var conDireccion = [], sinDireccion = [];
+        visibles().forEach(function (fila) {
+            var campo = fila.querySelector('input[name$="-numero"]');
+            var direccion = fila.querySelector('input[name$="-url"]').value.trim();
+            if (campo.value) {
+                campo.placeholder = '';
+                if (direccion) siguiente++;
+            } else {
+                (direccion ? conDireccion : sinDireccion).push(campo);
+            }
+        });
+        conDireccion.concat(sinDireccion).forEach(function (campo) { campo.placeholder = siguiente++; });
+        otra.hidden = parseInt(total.value, 10) >= maximo;
+    }
+    otra.addEventListener('click', function () {
+        var numeroFila = parseInt(total.value, 10);
+        filas.insertAdjacentHTML('beforeend', molde.innerHTML.replace(/__prefix__/g, numeroFila));
+        total.value = numeroFila + 1;
+        numerarVacias();
+        filas.lastElementChild.querySelector('input[name$="-url"]').focus();
+    });
+    filas.addEventListener('click', function (evento) {
+        var quitar = evento.target.closest('.quitar-fila');
+        if (!quitar) return;
+        var fila = quitar.closest('.fila-nueva');
+        fila.querySelectorAll('input').forEach(function (campo) { if (campo.type === 'checkbox') campo.checked = false; else campo.value = ''; });
+        fila.querySelectorAll('.invalid-feedback').forEach(function (error) { error.remove(); });
+        if (visibles().length > 1) fila.hidden = true;
+        numerarVacias();
+    });
+    // Elegir un número (en una nueva o cambiar el de una que ya estaba) = la app usa este orden
+    var formulario = document.getElementById('form-canal');
+    formulario.addEventListener('input', function (evento) {
+        if (/^nuevas-\d+-url$/.test(evento.target.name)) numerarVacias();
+        if (!/^(fuentes-\d+-prioridad|nuevas-\d+-numero)$/.test(evento.target.name)) return;
+        if (evento.target.value) ordenAMano.checked = true;
+        numerarVacias();
+    });
+    numerarVacias();
+
+    // Probar las fuentes nuevas tarda unos segundos
+    formulario.addEventListener('submit', function (evento) {
         // "Borrar" una señal: se pregunta antes (no se deshace)
         var boton = evento.submitter;
         if (boton && boton.dataset.confirmar) {
             if (!window.confirm(boton.dataset.confirmar)) evento.preventDefault();
             return;
         }
-        var nueva = document.getElementById('{{ form.nueva_fuente.id_for_label }}');
-        if (nueva.value.trim()) {
-            var boton = evento.target.querySelector('button[type=submit]');
-            boton.disabled = true;
-            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando y probando la fuente…';
+        var conFuentes = Array.prototype.some.call(filas.querySelectorAll('input[name$="-url"]'), function (campo) { return campo.value.trim(); });
+        if (conFuentes) {
+            var guardar = evento.target.querySelector('.formulario-acciones button[type=submit]');
+            guardar.disabled = true;
+            guardar.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando y probando las fuentes…';
         }
     });
 })();

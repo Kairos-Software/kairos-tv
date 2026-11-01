@@ -54,6 +54,9 @@ def ordenadas_por_estabilidad(fuentes):
     Las fuentes de un canal en el orden en que conviene probarlas (la app
     arranca por la primera):
 
+      0. Si en el panel se eligió el orden (Canal.orden_fuentes_a_mano),
+         manda ese: la de número más chico primero, aunque se corte. Lo
+         que sigue solo desempata.
       1. Al final, las que en los APARATOS se cortan seguido
          (CORTES_POR_HORA_TOLERABLES o más). Ej: si en HBO la 1 se traba, en
          poco tiempo deja de ser la primera en todos los aparatos.
@@ -75,6 +78,7 @@ def ordenadas_por_estabilidad(fuentes):
     # cortes por hora >= tolerables  <=>  segundos <= cortes * (3600 / tolerables)
     se_corta = Q(segundos_en_aparatos__lte=F('cortes_en_aparatos') * (3600 // CORTES_POR_HORA_TOLERABLES))
     return fuentes.annotate(
+        a_mano=Case(When(canal__orden_fuentes_a_mano=True, then=F('prioridad')), default=Value(0)),
         estabilidad=Case(
             When(segundos_en_aparatos__lt=MINIMO_VISTO_PARA_JUZGAR, then=Value(SIN_DATOS)),
             When(se_corta, then=Value(SE_CORTA)),
@@ -94,7 +98,8 @@ def ordenadas_por_estabilidad(fuentes):
             When(velocidad=0, then=Value(1)),
             default=Value(2),
         ),
-    ).order_by('se_corta', 'cuadrada', 'verificada_que_anda', 'fluidez', '-alto', 'estabilidad', 'prioridad', 'pk')
+    ).order_by('a_mano', 'se_corta', 'cuadrada', 'verificada_que_anda', 'fluidez', '-alto', 'estabilidad',
+               'prioridad', 'pk')
 
 
 def canales_disponibles(tipos=None, contenido=Contenido.VIVO):

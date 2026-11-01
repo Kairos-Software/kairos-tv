@@ -50,7 +50,7 @@ from . import (consultas, estadisticas, exportar, imagenes, organizar, salud, se
                views_organizar, youtube)
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
 from .forms import (CanalForm, CanalNuevoForm, EditarDesdeOrganizarForm, FuentesFormSet, ImportarListaForm,
-                    ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
+                    NuevasFuentesFormSet, ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
 from .models import (PROPORCION_PANTALLA_COMPLETA, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
                      Seccion)
 from .verificacion import NOMBRES_DE_CODECS, Resultado, verificar_url, verificar_varias
@@ -1506,18 +1506,20 @@ def canal_editar(request, pk):
     logo_viejo = canal.logo
     form = CanalForm(request.POST or None, request.FILES or None, instance=canal)
     fuentes = FuentesFormSet(request.POST or None, queryset=canal.fuentes.all(), prefix='fuentes')
-    if request.method == 'POST' and form.is_valid() and fuentes.is_valid() and _subir_logo(request, form):
-        canal, nueva = servicios.guardar_canal(form, fuentes, request.user, verificar_url)
+    nuevas = NuevasFuentesFormSet(request.POST or None, canal=canal, prefix='nuevas')
+    if (request.method == 'POST' and form.is_valid() and fuentes.is_valid() and nuevas.is_valid()
+            and _subir_logo(request, form)):
+        canal, agregadas = servicios.guardar_canal(form, fuentes, nuevas.nuevas(), request.user, verificar_varias)
         if canal.logo != logo_viejo:
             imagenes.soltar(logo_viejo)   # si era una subida y nadie más la usa, se borra
         imagenes.emparejar_logo_al_guardar(canal)   # si ya la tiene, no hace nada
         messages.success(request, f'Se guardó "{canal.nombre}".')
         volver = _volver(request, canal.contenido)
-        if nueva is not None:
+        for nueva in agregadas:
             if nueva.estado == nueva.Estado.CAIDA:
-                messages.warning(request, f'La fuente nueva se agregó, pero no funciona: {nueva.error}')
+                messages.warning(request, f'La fuente {nueva.prioridad} se agregó, pero no funciona: {nueva.error}')
             else:
-                messages.success(request, f'Fuente nueva agregada ({nueva.get_tipo_display()}, '
+                messages.success(request, f'Fuente {nueva.prioridad} agregada ({nueva.get_tipo_display()}, '
                                           f'{nueva.get_estado_display().lower()}).')
         return redirect(volver)
     return render(request, 'canales/editar.html', {
@@ -1525,6 +1527,8 @@ def canal_editar(request, pk):
         'logo_ver': imagenes.logo_para_mostrar(canal.logo, imagenes.logos_parejos([canal.logo])),
         'form': form,
         'fuentes': fuentes,
+        'nuevas': nuevas,
+        'siguiente_numero': len(fuentes.forms) + 1,
         'volver': _volver(request, canal.contenido),
     })
 
