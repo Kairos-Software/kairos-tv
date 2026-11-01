@@ -1,6 +1,7 @@
 import 'package:app_movil/api/cliente.dart';
 import 'package:app_movil/api/modelos.dart';
 import 'package:app_movil/movil/control_senal.dart';
+import 'package:app_movil/movil/reproductor_web.dart';
 import 'package:app_movil/movil/datos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +27,22 @@ Canal canal(int id) => Canal({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(FuentePreferida.olvidarTodo);
+
+  test('el reproductor no puede navegar ni a otras paginas del mismo sitio', () {
+    final source = Uri.parse('https://player.example/watch?r=canal');
+    expect(esDestinoDelReproductorWeb(source, source.replace(fragment: 'player')), isTrue);
+    for (final other in [
+      'https://player.example/',
+      'https://player.example/eventos',
+      'https://player.example/watch?r=otro',
+      'https://ads.example/watch?r=canal',
+      'http://player.example/watch?r=canal',
+      'intent://player',
+      'javascript:alert(1)',
+    ]) {
+      expect(esDestinoDelReproductorWeb(source, Uri.parse(other)), isFalse, reason: other);
+    }
+  });
 
   test('cambiar de fuente y canal reemplaza la pagina sin resolverla como video', () async {
     final api = _Api();

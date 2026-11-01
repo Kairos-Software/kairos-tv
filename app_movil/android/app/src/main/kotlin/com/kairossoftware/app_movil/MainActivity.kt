@@ -16,6 +16,7 @@ import android.view.KeyEvent
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.core.content.FileProvider
+import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
@@ -215,6 +216,17 @@ class MainActivity : FlutterActivity() {
                         @Suppress("DEPRECATION")
                         val vista = WebViewFlutterAndroidExternalApi.getWebView(
                             motor, llamada.argument<Number>("webview")!!.toLong())
+                        val script = llamada.argument<String>("script")
+                        if (vista != null && script != null) {
+                            if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                                resultado.success(false)
+                                return@setMethodCallHandler
+                            }
+                            (vista.getTag(R.id.kairos_web_script) as? ScriptHandler)?.remove()
+                            // Only layout, player commands and playback state; no device access.
+                            val handler = WebViewCompat.addDocumentStartJavaScript(vista, script, setOf("*"))
+                            vista.setTag(R.id.kairos_web_script, handler)
+                        }
                         if (vista != null) {
                             vista.setTag(R.id.kairos_web_interactivo, true)
                             vista.isFocusable = true

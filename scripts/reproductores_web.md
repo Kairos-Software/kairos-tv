@@ -1,13 +1,14 @@
-# Reproductores web (app 1.2.43+46)
+# Reproductores web (app 1.2.44+47)
 
-El tipo de fuente `web` abre la pagina en un WebView del dispositivo. No extrae
+El tipo de fuente `web` aisla el reproductor en un WebView del dispositivo.
+Oculta menus y enlaces, y no muestra la web mientras no detecta un video real. No extrae
 ni guarda una URL temporal de video. YouTube y las fuentes directas conservan
 sus reproductores actuales.
 
 ## Activar
 
 1. Publicar los cambios del servidor y ejecutar `python manage.py migrate`.
-2. Instalar la APK 1.2.43 o posterior en la TV o el celular.
+2. Instalar la APK 1.2.44 o posterior en la TV o el celular.
 3. Editar ESPN Premium: pegar la URL completa en **Agregar una fuente** y marcar
    **Abrir la fuente nueva como reproductor web**. Guardar.
 4. Elegir esa fuente en los ajustes del reproductor; o cambiar su prioridad en
@@ -27,22 +28,42 @@ formato porque no lo incluyen al pedir el catalogo.
 - Cambiar de fuente, cambiar de canal y salir: el WebView se desmonta y carga
   una pagina vacia para detener tambien los videos en marcos externos.
 - Mandar la app al fondo y volver: se vuelve a cargar la pagina.
-- Si la pagina pide iniciar el video, usar sus controles. La calidad y los
-  controles del video dependen del sitio; el silencio de KAIROS solo alcanza
-  los videos accesibles del documento principal, no los iframes externos.
+- La app intenta iniciar el video y muestra sus controles cuando esta listo.
+  La calidad depende del sitio. El silencio se propaga a los reproductores en
+  iframes mediante un comando limitado al reproductor.
+- Android System WebView necesita soportar scripts al inicio del documento.
+  Si no los soporta, se muestra un error en lugar de abrir la web completa.
 
 No se marca como reproduccion exitosa ni se envia estabilidad de un video solo
 porque se haya cargado la pagina. Los errores web tienen un boton Reintentar;
 se puede elegir otra fuente desde los ajustes de KAIROS.
 
-El navegador integrado deniega permisos de camara/microfono y navegaciones a
-otros dominios en la ventana principal. Permite marcos HTTP(S), necesarios para
-reproductores incrustados. No agrega canales JavaScript hacia funciones nativas.
+El navegador integrado deniega permisos de camara/microfono. La ventana
+principal solo puede conservar la URL de la fuente (con cambios de fragmento);
+no puede navegar ni a otras paginas del mismo dominio. El script bloquea enlaces,
+formularios y popups en los marcos. Tras comenzar el video se bloquean nuevas
+navegaciones de marcos; las solicitudes de medios no son navegaciones.
+
+Un canal JavaScript acepta solo estados pequenos del reproductor (listo, reproduciendo,
+error y rechazo HTTP), con identificador por carga. No ejecuta instrucciones
+arbitrarias ni ofrece acceso a funciones del dispositivo. La carga de HTML no
+cancela el plazo de espera: debe detectarse reproduccion real. Si falla, se
+oculta y descarga la pagina para que no quede audio en segundo plano.
 
 ## Estado de la prueba del enlace proporcionado
 
 La pagina original de Pelota Libre responde y carga marcos de reproductores.
-El extractor existente no la reconoce. En una prueba aislada de escritorio no
-se observo video reproduciendose; esto no certifica compatibilidad con el sitio.
+El extractor existente no la reconoce. La prueba aislada de escritorio llega a un marco final que devuelve HTTP 403
+Forbidden, sin video. Esto no certifica compatibilidad con el sitio ni puede
+resolverse simplemente ocultando el resto de la pagina.
 Queda pendiente probar esa transmision en el WebView de la TV real. La prueba
 puede variar por sitio, red, publicidad, restricciones y version de Android WebView.
+
+## Pruebas sin depender del proveedor
+
+`python scripts/test_reproductor_web.py` ejecuta cuatro pruebas en un navegador
+aislado con todas las solicitudes interceptadas y un MP4 existente como fixture:
+video real en iframe de otro origen, pantalla completa sin menus, bloqueo de
+enlaces y popups, propagacion del silencio y diagnostico de un marco con HTTP 403.
+Una pagina sin video no genera eventos de reproduccion. Requiere Playwright y
+un navegador compatible; KAIROS_TEST_BROWSER permite indicar su ejecutable.

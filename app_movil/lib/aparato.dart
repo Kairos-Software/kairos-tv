@@ -65,9 +65,13 @@ class Aparato {
   }
 
   /// Permite manejar una fuente web con el control remoto de Android TV.
-  static Future<bool> prepararReproductorWeb(int webview, {bool enfocar = false}) async {
+  static Future<bool> prepararReproductorWeb(int webview, {bool enfocar = false, String? script}) async {
     try {
-      return await _canal.invokeMethod<bool>('prepararReproductorWeb', {'webview': webview, 'enfocar': enfocar}) ??
+      return await _canal.invokeMethod<bool>('prepararReproductorWeb', {
+            'webview': webview,
+            'enfocar': enfocar,
+            'script': ?script,
+          }) ??
           false;
     } on MissingPluginException {
       return false;
