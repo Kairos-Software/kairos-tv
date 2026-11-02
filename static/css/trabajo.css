@@ -541,8 +541,3 @@ body:has(.espejo-barra.tiene-seleccion) .avisos-trabajo { bottom: 8rem; }
     .pagina-organizar .espejo-editar { min-width: 44px; min-height: 44px; }
     .barra-contenido a { min-height: 44px; }
 }
-
-/* Editar canal → Agregar fuentes: en celular y tablet cada fila ocupa dos renglones; una línea las separa */
-@media (max-width: 991.98px) {
-    .fila-nueva:not([hidden]) ~ .fila-nueva { border-top: 1px solid var(--borde); padding-top: .5rem; }
-}

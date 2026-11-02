@@ -1,11 +1,15 @@
 /*
  * Kairos TV · Organizar contenido para trabajar rápido (canales/organizar.html). Estilos: css/organizar_trabajo.css.
  *
- *   - Tocar una tarjeta abre el PANEL DE EDICIÓN al costado (#editor): nombre, imagen (buscar, subir, pegar o
- *     arrastrar), categoría, sección, número, si se muestra, destacado, sus señales y sus datos. «Guardar» guarda
+ *   - Tocar una tarjeta abre el PANEL DE EDICIÓN al costado (#editor), el ÚNICO lugar donde se edita un canal:
+ *     nombre, imagen (buscar, subir, pegar o arrastrar), categoría, sección, número, si se muestra (y por qué
+ *     no), destacado, sus señales (su número = su orden, si la app usa ese orden, y «Agregar una fuente»: varias,
+ *     con su número) y «Datos» (idioma, país, orden en la categoría; lo demás, para leer). «Guardar» guarda
  *     SIN recargar (la tarjeta se redibuja con lo que contesta views_organizar.tarjeta_json); «Siguiente» y
  *     «Anterior» pasan a la vecina guardando antes lo que cambió (Ctrl+Enter = guardar y seguir). Al terminar la
  *     página sigue en la próxima (?abrir=primera). Esc cierra.
+ *   - Desde otras pantallas (Señales, Lo más visto, una serie...) se llega con ?canal=<id>&abrir=c<id> (lo arma
+ *     views.canal_editar): Organizar muestra ese solo, con el panel abierto y «Volver».
  *   - Vista Lista: el nombre se cambia ahí mismo (Enter guarda, Tab pasa al siguiente, Esc cancela), la
  *     categoría con su botón (con buscador; también crea una nueva) y ★ / «se muestra» con un toque.
  *   - Arrastrar una imagen (un archivo, una imagen de otra página o un resultado de Google Imágenes) arriba de
@@ -140,6 +144,60 @@
     var campoArchivo = editor && editor.querySelector('[data-imagen-archivo]');
     var sugerencias = editor && editor.querySelector('[data-sugerencias]');
     var nuevaCategoria = editor && editor.querySelector('[data-editor-nueva]');
+    // Lo que en «Datos» ya se cambia arriba: no se repite en la lista de abajo
+    var YA_SE_EDITAN = {'Categoría': true, 'Idioma': true, 'País': true, 'Por qué se quitó': true};
+
+    /** «Por qué no se muestra»: solo cuando no se muestra en la app (un canal). */
+    function mostrarMotivo() {
+        var motivo = editor.querySelector('[data-editor-motivo]');
+        motivo.hidden = campos.activo.checked || (datosActuales && datosActuales.tipo === 'serie');
+    }
+
+    // ── Agregar fuentes (un canal): filas con número y dirección; se guardan con «Guardar» ──
+    var filasNuevas = editor && editor.querySelector('[data-filas-nuevas]');
+    var moldeFila = editor && editor.querySelector('[data-fila-nueva]');
+    var otraFuente = editor && editor.querySelector('[data-otra-fuente]');
+    var totalNuevas = document.getElementById('id_nuevas-TOTAL_FORMS');
+    var maximoNuevas = totalNuevas ? parseInt(document.getElementById('id_nuevas-MAX_NUM_FORMS').value, 10) : 0;
+
+    function filasVisibles() {
+        return Array.prototype.filter.call(filasNuevas.children, function (fila) { return !fila.hidden; });
+    }
+    /** Sin número va al final (después de las que lo tienen): el lugar vacío muestra el número que le toca. */
+    function numerarFilasNuevas() {
+        if (!filasNuevas) return;
+        var siguiente = (datosActuales ? datosActuales.fuentes.length : 0) + 1;
+        var conDireccion = [], sinDireccion = [];
+        filasVisibles().forEach(function (fila) {
+            var numero = fila.querySelector('input[name$="-numero"]');
+            var direccion = fila.querySelector('input[name$="-url"]').value.trim();
+            if (numero.value) {
+                numero.placeholder = '';
+                if (direccion) siguiente++;
+            } else {
+                (direccion ? conDireccion : sinDireccion).push(numero);
+            }
+        });
+        conDireccion.concat(sinDireccion).forEach(function (numero) { numero.placeholder = siguiente++; });
+        editor.querySelector('[data-ayuda-nuevas]').hidden = !filasVisibles().length;
+        otraFuente.hidden = parseInt(totalNuevas.value, 10) >= maximoNuevas;
+    }
+    function vaciarFilasNuevas() {
+        if (!filasNuevas) return;
+        filasNuevas.textContent = '';
+        totalNuevas.value = 0;
+        numerarFilasNuevas();
+    }
+    function agregarFilaNueva() {
+        var numeroFila = parseInt(totalNuevas.value, 10);
+        filasNuevas.insertAdjacentHTML('beforeend', moldeFila.innerHTML.replace(/__prefix__/g, numeroFila));
+        totalNuevas.value = numeroFila + 1;
+        numerarFilasNuevas();
+        filasNuevas.lastElementChild.querySelector('input[name$="-url"]').focus();
+    }
+    function hayFuentesNuevas() {
+        return !!filasNuevas && filasVisibles().some(function (fila) { return fila.querySelector('input[name$="-url"]').value.trim(); });
+    }
 
     function iniciales(texto) {
         return (texto || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (p) { return p[0]; }).join('').toUpperCase() || '?';
@@ -169,13 +227,21 @@
         }
     }
 
+    /** Todo lo que manda «Guardar» (también los números de las señales y las fuentes nuevas), para saber si cambió algo. */
     function estadoDelFormulario() {
         if (!campos) return '';
-        return JSON.stringify([campos.nombre.value, campos.logo.value, campos.numero ? campos.numero.value : '',
-            campos.categoria.value, campos.nueva_categoria.value, campos.contenido ? campos.contenido.value : '',
-            campos.activo.checked, campos.destacado.checked, archivo ? archivo.name + archivo.size : '']);
+        var partes = [];
+        new FormData(form).forEach(function (valor, nombre) {
+            if (typeof valor !== 'string' || nombre === 'csrfmiddlewaretoken') return;
+            // Una fila de fuente nueva vacía (o cuántas filas hay) no es un cambio
+            if (/^nuevas-/.test(nombre) && (valor === '' || /^nuevas-[A-Z_]+$/.test(nombre))) return;
+            partes.push(nombre + '=' + valor);
+        });
+        return partes.join('&') + (archivo ? '&archivo=' + archivo.name + archivo.size : '');
     }
     function sucio() { return !!actual && !!campos && foto !== null && estadoDelFormulario() !== foto; }
+    // Los botones de cada señal recargan la página: preguntan antes si hay cambios sin guardar (organizar_detalle.js)
+    window.KairosEditor = {sucio: sucio};
 
     function actualizarBotones() {
         if (!editor || !actual) return;
@@ -211,6 +277,16 @@
             if (campos.contenido) campos.contenido.value = datos.contenido;
             campos.activo.checked = !!datos.activo;
             campos.destacado.checked = !!datos.destacado;
+            // Lo de un canal que antes estaba en «Más opciones»: «Datos», por qué no se muestra y sus señales
+            campos.completo.value = esSerie ? '' : '1';
+            editor.querySelectorAll('[data-solo-canal]').forEach(function (parte) { parte.hidden = esSerie; });
+            campos.idioma.value = datos.idioma || '';
+            campos.pais.value = datos.pais || '';
+            campos.orden.value = datos.orden == null ? '' : datos.orden;
+            campos.motivo_quitado.value = datos.motivo_quitado || '';
+            mostrarMotivo();
+            campos.orden_fuentes_a_mano.checked = !!datos.orden_a_mano;
+            vaciarFilasNuevas();
             archivo = null;
             if (campoArchivo) campoArchivo.value = '';
             editor.querySelector('[data-editor-imagen-titulo]').textContent = esSerie ? 'Portada de la serie' : (esPoster ? 'Póster' : 'Logo');
@@ -228,7 +304,9 @@
         editor.querySelector('[data-editor-cuantas]').textContent = datos.fuentes.length;
         editor.querySelector('[data-editor-senales-ayuda]').textContent = esSerie
             ? 'Una por cada lista o canal de donde salieron sus capítulos. Las de cada capítulo, en «Capítulos y temporadas».'
-            : 'La app prueba la 1 y, si no anda, pasa a la siguiente. Si una no anda, quitala (la podés volver a mostrar) o borrala: las otras quedan.';
+            : puedeEditar
+                ? 'Para cambiar el orden, cambiá el número: la señal va a ese lugar y las demás se corren. Si una no anda, quitala (la podés volver a mostrar) o borrala.'
+                : 'La app prueba la 1 y, si no anda, pasa a la siguiente.';
         window.KairosSenales.pintar(editor.querySelector('[data-editor-senales]'), datos);
         var conProblemas = datos.fuentes.some(function (f) { return f.caida || f.oculta || !f.activa || f.salud_mal; });
         if (!recienGuardado) bloque.open = !puedeEditar || !datos.en_app || conProblemas;
@@ -236,13 +314,15 @@
         var filas = editor.querySelector('[data-editor-datos]');
         filas.textContent = '';
         (datos.datos || []).forEach(function (fila) {
+            if (campos && !esSerie && YA_SE_EDITAN[fila[0]]) return;   // están arriba, para cambiarlos
             filas.appendChild(crear('dt', '', fila[0]));
             filas.appendChild(crear('dd', '', fila[1]));
         });
 
+        // Una serie tiene su página (capítulos y temporadas); un canal se edita entero acá
         var mas = editor.querySelector('[data-editor-mas]');
-        mas.textContent = esSerie ? 'Capítulos y temporadas' : 'Más opciones (señales, idioma…)';
-        mas.href = esSerie ? datos.mas : datos.mas + '?volver=' + encodeURIComponent(aca('abrir', claveDe(datos)));
+        mas.hidden = !esSerie;
+        if (esSerie) mas.href = datos.mas;
         var enSenales = editor.querySelector('[data-editor-senales-link]');
         enSenales.hidden = esSerie;
         if (!esSerie) enSenales.href = enSenales.dataset.base + '?problema=cualquiera&canal=' + datos.pk;
@@ -301,6 +381,7 @@
         else datos.delete('imagen');
         var tarjeta = actual;
         guardando(true);
+        if (hayFuentesNuevas()) mostrarAviso('Guardando y probando las fuentes nuevas (puede tardar unos segundos)…');
         return pedir(form.action, datos).then(function (r) {
             guardando(false);
             var nueva = reemplazar(tarjeta, r.tarjeta);
@@ -378,6 +459,33 @@
             campos.categoria.addEventListener('change', function () {
                 nuevaCategoria.hidden = campos.categoria.value !== '+nueva';
                 if (!nuevaCategoria.hidden) nuevaCategoria.focus();
+            });
+            campos.activo.addEventListener('change', mostrarMotivo);
+            otraFuente.addEventListener('click', function () {
+                agregarFilaNueva();
+                actualizarBotones();
+            });
+            // La ✕ de una fila nueva: se vacía y se va (no se manda nada de ella)
+            filasNuevas.addEventListener('click', function (evento) {
+                var quitar = evento.target.closest('[data-quitar-fila]');
+                if (!quitar) return;
+                var fila = quitar.closest('.fuente-nueva');
+                fila.querySelectorAll('input').forEach(function (campo) {
+                    if (campo.type === 'checkbox') campo.checked = false;
+                    else campo.value = '';
+                });
+                fila.hidden = true;
+                numerarFilasNuevas();
+                actualizarBotones();
+            });
+            // Elegir un número (de una señal o de una fuente nueva) = la app usa este orden
+            form.addEventListener('input', function (evento) {
+                var nombre = evento.target.name || '';
+                if (/^nuevas-\d+-url$/.test(nombre)) numerarFilasNuevas();
+                if (!/^(numero-\d+|nuevas-\d+-numero)$/.test(nombre)) return;
+                if (evento.target.value) campos.orden_fuentes_a_mano.checked = true;
+                numerarFilasNuevas();
+                actualizarBotones();
             });
             campos.logo.addEventListener('input', function () {
                 archivo = null;

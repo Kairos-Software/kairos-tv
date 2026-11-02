@@ -9,8 +9,9 @@ Pantallas de canales del panel:
   /canales/catalogo/ y /series/     las pantallas viejas: llevan a Organizar contenido con los mismos filtros
   /canales/series/detalle/          temporadas, capítulos, disponibilidad y fuentes de una serie; su categoría y
                                     nombre (series/editar/) y pasar capítulos de una temporada a otra (series/temporada/)
-  /canales/canal/<id>/editar/       nombre, logo, categoría... de un canal, y sus fuentes
-  /canales/fuentes/<id>/borrar/     borra UNA fuente (POST), desde Organizar o la página del canal
+  /canales/canal/<id>/editar/       lleva a Organizar con ese canal solo y su panel de edición abierto (todo se
+                                    edita ahí: datos, imagen, señales, ordenarlas y agregar varias)
+  /canales/fuentes/<id>/borrar/     borra UNA fuente (POST), desde el panel de edición o Señales
   /canales/youtube/                 traer las películas de un canal oficial de YouTube (se prueban y cargan como una lista)
   /canales/probar/                  probar una dirección suelta y, si anda, agregarla como canal
   /canales/lo-mas-visto/            lo más visto (canales, películas y series), sin datos de clientes
@@ -49,10 +50,10 @@ from usuarios.permisos import chequear_permiso
 from . import (consultas, estadisticas, exportar, imagenes, organizar, salud, secciones, servicios, views_importacion,
                views_organizar, youtube)
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
-from .forms import (CanalForm, CanalNuevoForm, EditarDesdeOrganizarForm, FuentesFormSet, ImportarListaForm,
-                    NuevasFuentesFormSet, ProbarLinkForm, QuitarCanalesForm, TraerDeYoutubeForm)
-from .models import (PROPORCION_PANTALLA_COMPLETA, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
-                     Seccion)
+from .forms import (CanalNuevoForm, EditarDesdeOrganizarForm, ImportarListaForm, NuevasFuentesFormSet, ProbarLinkForm,
+                    QuitarCanalesForm, TraerDeYoutubeForm)
+from .models import (PROPORCION_PANTALLA_COMPLETA, Canal, Categoria, Contenido, EntradaImportada, Fuente, Idioma,
+                     Importacion, Seccion)
 from .verificacion import NOMBRES_DE_CODECS, Resultado, verificar_url, verificar_varias
 
 ENTRADAS_POR_PAGINA = 100
@@ -669,7 +670,9 @@ def _preparar_para_editar(pagina, contenido):
             'en_app': not canal.no_se_ve, 'motivo': canal.no_se_ve,
             'datos': datos,
             'fuentes': _origenes_de(canal.fuentes.all(), importaciones),
-            'mas': reverse('canales:canal_editar', args=[canal.pk]),
+            # Lo editable de «Datos» en el panel, y si la app usa el orden de sus señales
+            'idioma': canal.idioma, 'pais': canal.pais, 'orden': canal.orden,
+            'motivo_quitado': canal.motivo_quitado, 'orden_a_mano': canal.orden_fuentes_a_mano,
         })
 
 
@@ -711,6 +714,9 @@ def organizar_contenido(request):
     (mover, cambiar el tipo, quitar, eliminar). Ver consultas.organizar_contenido.
     """
     contenido = request.GET.get('contenido', '')
+    solo = _solo_este(request)
+    if solo is not None:
+        contenido = solo.contenido
     if not secciones.es_valida(contenido):
         contenido = Contenido.VIVO
     filtros = _filtros_de_organizar(request.GET)
@@ -719,7 +725,13 @@ def organizar_contenido(request):
                if contenido == Contenido.SERIE else None)
     datos = consultas.organizar_contenido(contenido, categoria=request.GET.get('categoria', ''),
                                           pagina=request.GET.get('pagina'), series_armadas=armadas, **filtros)
-    _preparar_para_editar(datos.pagina, contenido)
+    # Un capítulo solo se muestra como lo que es (un canal), no como su serie
+    tarjetas = 'capitulo' if solo is not None and contenido == Contenido.SERIE else contenido
+    if solo is not None:
+        datos.pagina = Paginator([solo], 1).get_page(1)
+        datos.grupos = [(solo.categoria, [solo])]
+        datos.elegida = 'todas'
+    _preparar_para_editar(datos.pagina, tarjetas)
     nodo = next((n for n in datos.nodos if n['clave'] == datos.elegida), None)
     categorias = list(organizar.categorias_con_cantidades(contenido))
     # Los filtros de ahora, para los links del árbol (que cambian solo la categoría)
@@ -775,9 +787,15 @@ def organizar_contenido(request):
         'sin_mostrar': sin_mostrar.urlencode(),
         'alternar_sin_logo': alternar_sin_logo.urlencode(),
         'cuenta_sin_logo': cuentas.get('sin_logo', 0),
+        'solo': solo,
+        'tarjetas': tarjetas,
+        'volver_a': _volver_a(request),
         'pagina_siguiente': otra_pagina(datos.pagina.next_page_number()) if datos.pagina.has_next() else '',
         'pagina_anterior': otra_pagina(datos.pagina.previous_page_number()) if datos.pagina.has_previous() else '',
         'puede_editar': puede_editar,
+        # El panel de un canal: las filas de «Agregar fuentes» (vacías: las llena organizar_trabajo.js) y el idioma
+        'nuevas': NuevasFuentesFormSet(prefix='nuevas') if puede_editar else None,
+        'idiomas': Idioma.choices,
         # Para "Unir en una sola serie" y "Pasar a Series": Categoría -> Serie -> Temporada (js/destino_serie.js,
         # que pide las series a series_arbol recién cuando se abre una de esas dos)
         'categorias_de_series': (Categoria.objects.filter(contenido=Contenido.SERIE).order_by('orden', 'nombre')
@@ -790,6 +808,26 @@ def organizar_contenido(request):
         'exportar_elegida': f'ninguna:{contenido}' if datos.elegida == 'ninguna' else datos.elegida,
         'descripcion_filtros': _descripcion_de_filtros(filtros),
     })
+
+
+def _solo_este(request):
+    """
+    El canal pedido con ?canal= (los links de otras pantallas: Señales, Lo más visto, una serie...), con los
+    números que usa la tarjeta. Organizar lo muestra solo, con su panel abierto. None si no se pidió o ya no está.
+    """
+    pk = request.GET.get('canal', '')
+    if not pk.isdigit():
+        return None
+    canal = views_organizar._canal_para_tarjeta(int(pk))
+    if canal is None:
+        messages.warning(request, 'Ese canal ya no está: se eliminó (se recupera en «Eliminados»).')
+    return canal
+
+
+def _volver_a(request):
+    """El «Volver» de Organizar cuando se llegó desde otra pantalla (?volver=), si es de este sitio."""
+    volver = request.GET.get('volver', '')
+    return volver if volver and url_has_allowed_host_and_scheme(volver, allowed_hosts={request.get_host()}) else ''
 
 
 def _descripcion_de_filtros(filtros):
@@ -815,6 +853,8 @@ def organizar_editar(request):
     """
     La edición rápida de una cosa (o de una serie entera) desde Organizar contenido. Si la página lo pide en
     JSON (el panel de edición guarda sin recargar), contesta la tarjeta redibujada (views_organizar.tarjeta_json).
+    El panel de un canal manda además `completo`: lo de «Datos» (idioma, país, orden, por qué no se muestra) y
+    sus señales: el número de cada una (`numero-<id>`), si la app usa ese orden y las nuevas (`nuevas-…`).
     """
     en_json = views_organizar.quiere_json(request)
 
@@ -848,6 +888,11 @@ def organizar_editar(request):
                 views_organizar.revisar_link_de_imagen(datos['logo'])
             except organizar.NoSePuede as error:
                 return no_se_guardo(f'No se guardó: {error}')
+    completo = not es_serie and request.POST.get('completo') == '1'
+    nuevas = NuevasFuentesFormSet(request.POST, canal=canal, prefix='nuevas') if completo else None
+    if nuevas is not None and not nuevas.is_valid():
+        return no_se_guardo(f'No se guardó: {_errores_de_nuevas(nuevas)}')
+    agregadas, reordenadas = [], False
     try:
         if es_serie:
             categoria = _categoria_elegida(request, Contenido.SERIE)
@@ -858,15 +903,27 @@ def organizar_editar(request):
         else:
             categoria = _categoria_elegida(request, datos['contenido'] or canal.contenido)
             extra = {'contenido': datos['contenido']} if datos['contenido'] else {}
+            if 'numero' in request.POST:   # el panel de un capítulo no lo tiene: no se borra
+                extra['numero'] = datos['numero'].strip()
+            if completo:
+                extra.update(idioma=datos['idioma'], pais=datos['pais'], motivo_quitado=datos['motivo_quitado'].strip(),
+                             orden_fuentes_a_mano=datos['orden_fuentes_a_mano'])
+                if datos['orden'] is not None:
+                    extra['orden'] = datos['orden']
             cambios = organizar.editar_canal(canal, request.user, nombre=datos['nombre'], logo=datos['logo'],
                                              categoria=categoria, activo=datos['activo'],
-                                             numero=datos['numero'].strip(), destacado=datos['destacado'], **extra)
+                                             destacado=datos['destacado'], **extra)
             if 'logo' in cambios or 'contenido' in cambios:
                 imagenes.emparejar_logo_al_guardar(canal)
+            if completo:
+                agregadas, reordenadas = servicios.ordenar_y_agregar_fuentes(
+                    canal, _numeros_de_las_fuentes(request, canal), nuevas.nuevas(), request.user, verificar_varias)
             titulo = canal.nombre
     except organizar.NoSePuede as error:
         return no_se_guardo(str(error))
-    mensaje = f'Se guardó «{titulo}».' if cambios else f'«{titulo}» no tenía cambios.'
+    hubo = cambios or agregadas or reordenadas
+    mensaje = ' '.join([f'Se guardó «{titulo}».' if hubo else f'«{titulo}» no tenía cambios.',
+                        *(_aviso_de_fuente_nueva(fuente) for fuente in agregadas)])
     if en_json:
         if es_serie:
             return views_organizar.tarjeta_json(request, views_organizar._serie_para_tarjeta(titulo), Contenido.SERIE,
@@ -875,6 +932,31 @@ def organizar_editar(request):
                                             mensaje)
     messages.success(request, mensaje)
     return redirect(_volver(request))
+
+
+def _errores_de_nuevas(nuevas):
+    """Lo que está mal en las fuentes nuevas del panel, para el aviso: '«http://x»: Este canal ya tiene esa dirección.'"""
+    errores = list(nuevas.non_form_errors())
+    for posicion, fila in enumerate(nuevas.forms, start=1):
+        cual = f'«{fila["url"].value()}»' if fila['url'].value() else f'la fuente nueva {posicion}'
+        errores += [f'{cual}: {" ".join(mensajes)}' for mensajes in fila.errors.values()]
+    return '; '.join(errores)
+
+
+def _numeros_de_las_fuentes(request, canal):
+    """{fuente.pk: número} con el número que se le puso a cada señal en el panel (`numero-<id>`)."""
+    numeros = {}
+    for pk in canal.fuentes.values_list('pk', flat=True):
+        valor = request.POST.get(f'numero-{pk}', '').strip()
+        if valor.isdigit() and int(valor) > 0:
+            numeros[pk] = int(valor)
+    return numeros
+
+
+def _aviso_de_fuente_nueva(fuente):
+    if fuente.estado == Fuente.Estado.CAIDA:
+        return f'La fuente {fuente.prioridad} se agregó, pero no funciona: {fuente.error}'
+    return f'Fuente {fuente.prioridad} agregada ({fuente.get_tipo_display()}, {fuente.get_estado_display().lower()}).'
 
 
 @require_POST
@@ -1500,46 +1582,29 @@ def secciones_acciones(request):
 
 # ── Editar un canal ──────────────────────────────────────────────────
 
-@requiere_permiso('importar_canales')
+@requiere_permiso('ver_canales')
 def canal_editar(request, pk):
-    canal = get_object_or_404(Canal.objects.select_related('categoria'), pk=pk)
-    logo_viejo = canal.logo
-    form = CanalForm(request.POST or None, request.FILES or None, instance=canal)
-    fuentes = FuentesFormSet(request.POST or None, queryset=canal.fuentes.all(), prefix='fuentes')
-    nuevas = NuevasFuentesFormSet(request.POST or None, canal=canal, prefix='nuevas')
-    if (request.method == 'POST' and form.is_valid() and fuentes.is_valid() and nuevas.is_valid()
-            and _subir_logo(request, form)):
-        canal, agregadas = servicios.guardar_canal(form, fuentes, nuevas.nuevas(), request.user, verificar_varias)
-        if canal.logo != logo_viejo:
-            imagenes.soltar(logo_viejo)   # si era una subida y nadie más la usa, se borra
-        imagenes.emparejar_logo_al_guardar(canal)   # si ya la tiene, no hace nada
-        messages.success(request, f'Se guardó "{canal.nombre}".')
-        volver = _volver(request, canal.contenido)
-        for nueva in agregadas:
-            if nueva.estado == nueva.Estado.CAIDA:
-                messages.warning(request, f'La fuente {nueva.prioridad} se agregó, pero no funciona: {nueva.error}')
-            else:
-                messages.success(request, f'Fuente {nueva.prioridad} agregada ({nueva.get_tipo_display()}, '
-                                          f'{nueva.get_estado_display().lower()}).')
-        return redirect(volver)
-    return render(request, 'canales/editar.html', {
-        'canal': canal,
-        'logo_ver': imagenes.logo_para_mostrar(canal.logo, imagenes.logos_parejos([canal.logo])),
-        'form': form,
-        'fuentes': fuentes,
-        'nuevas': nuevas,
-        'siguiente_numero': len(fuentes.forms) + 1,
-        'volver': _volver(request, canal.contenido),
-    })
+    """
+    La página vieja de un canal («Más opciones»). Ahora TODO se edita en un solo lugar, el panel de
+    Organizar: esta dirección lleva ahí, mostrando solo ese canal (también un capítulo) con su panel
+    abierto. Así siguen andando los links de Señales, Lo más visto, las series y las importaciones.
+    `volver`: a dónde lleva el botón «Volver» de Organizar.
+    """
+    canal = get_object_or_404(Canal, pk=pk)
+    parametros = {'contenido': canal.contenido, 'canal': canal.pk, 'abrir': f'c{canal.pk}'}
+    volver = request.GET.get('volver', '')
+    if volver and url_has_allowed_host_and_scheme(volver, allowed_hosts={request.get_host()}):
+        parametros['volver'] = volver
+    return redirect(f"{reverse('canales:organizar')}?{urlencode(parametros)}")
 
 
 @require_POST
 @requiere_permiso('importar_canales')
 def fuente_borrar(request, pk):
     """
-    Borra UNA fuente (la que no anda) desde Organizar o la página del canal, y
-    vuelve a donde se estaba. En Organizar se vuelve con el panel de detalles
-    de ese canal abierto (#ver-<id>).
+    Borra UNA fuente (la que no anda) desde el panel de edición de Organizar
+    (o Señales), y vuelve a donde se estaba: en Organizar, con el panel de
+    ese canal abierto (#ver-<id>).
     """
     fuente = get_object_or_404(Fuente.objects.select_related('canal'), pk=pk)
     canal = fuente.canal
@@ -1549,24 +1614,11 @@ def fuente_borrar(request, pk):
     else:
         messages.warning(request, f'Se borró la señal de «{canal.nombre}». Era la única: no se va a ver en la app '
                                   f'hasta que le agregues otra.')
-    # "despues": la página del canal (vuelve a ella); si no, Organizar con su detalle abierto
+    # "despues": una página a la que volver tal cual; si no, Organizar con el panel de ese canal abierto
     despues = request.POST.get('despues', '')
     if despues and url_has_allowed_host_and_scheme(despues, allowed_hosts={request.get_host()}):
         return redirect(despues)
     return redirect(f'{_volver(request, canal.contenido).split("#")[0]}#ver-{canal.pk}')
-
-
-def _subir_logo(request, form):
-    """Si se subió una imagen, la guarda y la deja como logo. False si no sirve (el error queda en el form)."""
-    archivo = form.cleaned_data.get('imagen')
-    if not archivo:
-        return True
-    try:
-        form.instance.logo = imagenes.guardar_subida(archivo, request)
-    except imagenes.ImagenInvalida as error:
-        form.add_error('imagen', str(error))
-        return False
-    return True
 
 
 # ── Probar un link y agregarlo a mano ────────────────────────────────

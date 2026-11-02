@@ -79,9 +79,8 @@ class DetalleYBorrarFuenteTests(TestCase):
         self.assertContains(respuesta, 'Era la única')
         self.assertTrue(Canal.objects.filter(pk=self.canal.pk).exists())   # el canal queda
 
-    def test_desde_la_pagina_del_canal_vuelve_a_ella(self):
-        pagina = reverse('canales:canal_editar', args=[self.canal.pk])
-        self.assertContains(self.client.get(pagina), reverse('canales:fuente_borrar', args=[self.mala.pk]))
+    def test_vuelve_a_la_pagina_que_se_le_dice(self):
+        pagina = reverse('canales:senales') + f'?canal={self.canal.pk}'
         respuesta = self.client.post(reverse('canales:fuente_borrar', args=[self.mala.pk]), {'despues': pagina})
         self.assertRedirects(respuesta, pagina, fetch_redirect_response=False)
 

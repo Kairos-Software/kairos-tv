@@ -1572,22 +1572,22 @@ def probar_fuente(fuente, verificar_url):
 ESPERA_AL_AGREGAR = 25
 
 
-def guardar_canal(form, fuentes, nuevas=(), usuario=None, verificar_varias=None):
+def ordenar_y_agregar_fuentes(canal, numeros=None, nuevas=(), usuario=None, verificar_varias=None):
     """
-    Guarda el formulario del canal (CanalForm), el de sus fuentes
-    (FuentesFormSet: número, apagar o borrar) y las fuentes nuevas
-    (NuevasFuentesFormSet.nuevas(): dirección, número y si es reproductor
-    web), que se prueban en el momento, todas a la vez. Después deja las
-    fuentes numeradas 1, 2, 3... (numerar_fuentes). Devuelve (canal, [fuentes nuevas]).
+    Las fuentes de un canal desde el panel de edición de Organizar:
+      - `numeros` {fuente.pk: número}: el número que se le eligió a cada una
+        (el panel muestra 1, 2, 3... en su orden). Si cambió, va a ese lugar.
+      - `nuevas` (NuevasFuentesFormSet.nuevas(): dirección, número y si es
+        reproductor web): se prueban en el momento, todas a la vez.
+    Después quedan numeradas 1, 2, 3... (numerar_fuentes).
+    Devuelve ([fuentes nuevas, con el número con que quedaron], si cambió el orden).
     """
-    with transaction.atomic():
-        canal = form.save(commit=False)
-        canal.marcar_autor(usuario)
-        canal.save()
-        fuentes.save()
-    # Las que ya estaban y se les cambió el número: van a ese lugar, igual que las nuevas
-    movidas = [(f.instance, f.cleaned_data['prioridad']) for f in fuentes.forms
-               if 'prioridad' in f.changed_data and f not in fuentes.deleted_forms]
+    numeros = numeros or {}
+    actuales = list(canal.fuentes.order_by('prioridad', 'pk'))
+    movidas = [(fuente, numeros[fuente.pk]) for posicion, fuente in enumerate(actuales, start=1)
+               if numeros.get(fuente.pk, posicion) != posicion]
+    if not movidas and not nuevas:
+        return [], False
     tipos = {n['url']: _tipo_nuevo(n['url'], n.get('reproductor_web')) for n in nuevas}
     resultados = (verificar_varias(tipos, hasta=time.monotonic() + ESPERA_AL_AGREGAR)
                   if verificar_varias and tipos else {})
@@ -1598,10 +1598,17 @@ def guardar_canal(form, fuentes, nuevas=(), usuario=None, verificar_varias=None)
                                     resultado=resultados.get(nueva['url']))
             agregadas.append((fuente, nueva.get('numero')))
         numerar_fuentes(canal, movidas + [(fuente, numero) for fuente, numero in agregadas if numero])
+        canal.marcar_autor(usuario)
+        canal.save(update_fields=['modificado', 'modificado_por'])
     for fuente, _ in agregadas:
         fuente.refresh_from_db(fields=['prioridad'])   # el número con que quedó, para el aviso
-    registrar(usuario, Accion.EDITAR, f'Editó el canal "{canal.nombre}".', modulo='canales')
-    return canal, [fuente for fuente, _ in agregadas]
+    if agregadas:
+        registrar(usuario, Accion.CREAR, f'Agregó {len(agregadas)} fuente{"s" if len(agregadas) > 1 else ""} a '
+                                         f'"{canal.nombre}".', objeto=canal, modulo='canales')
+    if movidas:
+        registrar(usuario, Accion.EDITAR, f'Cambió el orden de las fuentes de "{canal.nombre}".', objeto=canal,
+                  modulo='canales')
+    return [fuente for fuente, _ in agregadas], bool(movidas)
 
 
 def _tipo_nuevo(url, reproductor_web=False):
@@ -1611,7 +1618,7 @@ def _tipo_nuevo(url, reproductor_web=False):
 def agregar_fuente(canal, url, verificar_url=None, usuario=None, *, tipo=None, resultado=None):
     """
     Suma una dirección al canal (al final de la lista) y, si se puede, la
-    prueba. `resultado`: el de una prueba ya hecha (guardar_canal prueba varias a la vez).
+    prueba. `resultado`: el de una prueba ya hecha (ordenar_y_agregar_fuentes prueba varias a la vez).
     """
     tipo = tipo or _tipo_nuevo(url)
     prioridad = (canal.fuentes.aggregate(maximo=Max('prioridad'))['maximo'] or 0) + 1

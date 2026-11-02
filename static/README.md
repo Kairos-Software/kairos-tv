@@ -24,11 +24,11 @@ se genera sola y no va al repo.
 
 Los archivos se sirven con su mismo nombre, así que un navegador puede seguir
 un rato con la copia vieja de un `.js` o `.css`. Por eso Organizar, la página
-de una serie, Editar canal, Importar y estado y la de una lista importada los
-piden con `?v=20261021` al final (los nuevos dependen del `trabajo.js` nuevo):
-**si se cambia alguno de esos archivos, subir ese número en esas cinco
-plantillas** (`canales/templates/canales/organizar.html`, `serie_detalle.html`,
-`editar.html`, `inicio.html` e `importacion.html`).
+de una serie, Importar y estado y la de una lista importada los piden con
+`?v=<fecha>` al final (los nuevos dependen del `trabajo.js` nuevo): **si se
+cambia alguno de esos archivos, subir ese número en las plantillas que lo
+cargan** (`canales/templates/canales/organizar.html`, `serie_detalle.html`,
+`inicio.html` e `importacion.html`).
 
 ## Archivos
 
@@ -41,7 +41,7 @@ plantillas** (`canales/templates/canales/organizar.html`, `serie_detalle.html`,
 | `js/mantenimiento.js` + `css/mantenimiento.css` | Contenido → Mantenimiento del catálogo: "Qué revisar" (una sección o una lista importada), verificar de a tandas y el resultado (qué se cayó y qué volvió). Solo los carga `canales/inicio.html` (con `tandas.js`). |
 | `js/organizar_detalle.js` + `css/organizar_detalle.css` | Organizar contenido: **las señales de una tarjeta** (`KairosSenales.pintar`: cada señal con su link, de qué lista salió, cómo anda y sus botones Probar ahora / Quitar / Volver a mostrar / Borrar; al volver de la acción el panel se abre en la misma tarjeta). Las usa el panel de edición. El CSS dibuja esa lista y los datos, y acomoda el cuadro Exportar en el celular. Solo los carga `canales/organizar.html`. |
 | `js/organizar_trabajo.js` + `css/organizar_trabajo.css` | **Organizar para trabajar rápido** (`canales/organizar.html`): el **panel de edición** del costado (tocar una tarjeta; guarda sin recargar, Anterior / Siguiente, Ctrl+Enter = guardar y seguir, Esc cierra), la **vista Lista como planilla** (nombre ahí mismo con Enter / Tab, categoría con buscador, ★ y «se muestra» con un toque), **arrastrar una imagen arriba de una tarjeta** (con «Deshacer»), las casillas con Shift, la barra de abajo con **Cambiar nombres** (vista previa), juntar categorías, crear una sección y Exportar. Habla con `canales/views_organizar.py`. |
-| `js/imagenes_contenido.js` | **Imágenes sin salir del panel** (`KairosImagenes`): lee lo que se arrastra o pega (archivos, imágenes de otras páginas, links, resultados de Google Imágenes) y arma la tira de sugerencias: las que ya tienen otras cosas con ese nombre en el panel (`/canales/organizar/imagenes/`) y las de Wikipedia. Lo usan Organizar, la página de una serie y Editar canal. |
+| `js/imagenes_contenido.js` | **Imágenes sin salir del panel** (`KairosImagenes`): lee lo que se arrastra o pega (archivos, imágenes de otras páginas, links, resultados de Google Imágenes) y arma la tira de sugerencias: las que ya tienen otras cosas con ese nombre en el panel (`/canales/organizar/imagenes/`) y las de Wikipedia. Lo usan Organizar y la página de una serie. |
 | `js/serie_trabajo.js` | La página de una serie: portada (buscar, subir, link, arrastrar o pegar), nombre y categoría que se cambian ahí mismo sin recargar, y la imagen de un capítulo arrastrándole una encima. |
 | `js/ordenar_capitulos.js` + `css/ordenar_capitulos.css` | La lista de capítulos de la página de una serie y cómo se ordena: arrastrar (mouse o dedo) o flechas, barra "Guardar orden / Deshacer", y el aviso de desordenados con su botón. Solo los carga `canales/serie_detalle.html`. |
 | `js/importar_varias.js` + `css/importar_varias.css` | Contenido → **Importar y estado**: la zona de subir (siempre a la vista: se toca o se le sueltan varias listas, y se suben solas, de a una; el servidor responde JSON), cada una con su avance y su "Abrir", las opciones como casillas cortas y el historial con cómo va cada lista. Sin JavaScript, el formulario sube una como siempre. |

@@ -237,8 +237,8 @@ imagen cuadrada) y si está oculta y hasta cuándo. Se cierra con la X o
 tocando otra vez "Detalles". Lo mismo en el cuadro **Editar**.
 
 **Borrar UNA señal** (`/canales/fuentes/<id>/borrar/`, `servicios.borrar_fuente`):
-botón "Borrar esta señal" en el panel de detalles y el cuadro Editar, "Borrar"
-en la página del canal y en cada capítulo de la página de una serie. Pregunta
+botón "Borrar esta señal" en el panel de edición de Organizar y "Borrar" en
+cada capítulo de la página de una serie. Pregunta
 antes; las otras quedan. Si era la única, el canal sigue cargado pero no se ve
 en la app hasta que tenga otra. El link borrado queda en la Actividad (en
 "cambios", completo). En una serie, el panel junta las señales por lista de
@@ -328,11 +328,16 @@ elegir otra se explica en vez de partirla en dos). Donde se deciden:
 uno, los elegidos o todos los que coinciden con el filtro, con un motivo.
 "Volver a mostrar" lo deshace.
 
-**Editar** ("Más opciones" en el cuadro Editar de Organizar, o el nombre en el
-informe de una importación): nombre, logo (link o subido, con vista previa de cómo queda en la app),
-número, categoría (elegir una o escribir una nueva), contenido, idioma, país,
-orden, si se muestra y si está destacado en la TV. Abajo, sus fuentes: cambiar el orden en que la app las
-prueba, apagarlas, borrar una (botón "Borrar", en el momento) o agregar una dirección nueva (se prueba al guardar).
+**Editar un canal: UN solo lugar** (2026-11-01). Todo se edita en el panel de
+edición de Organizar (tocar la tarjeta): nombre, imagen, categoría, sección,
+número, si se muestra (y por qué no), destacado, sus señales y «Datos» (idioma,
+país y orden en la categoría; lo demás es para leer). Ya no hay otra página
+(«Más opciones»): su dirección (`/canales/canal/<id>/editar/`, `views.canal_editar`)
+lleva a Organizar con ese canal solo (`?canal=<id>`), con el panel abierto y
+«Volver» a la pantalla de donde se vino. Así siguen andando los links de
+Señales, Lo más visto, una serie (también un capítulo, que se abre como
+capítulo), una importación y Probar un link. Lo nuevo lo manda el panel con
+`completo` (`views.organizar_editar`): si no vino, idioma, país y número no se tocan.
 
 ## Probar un link y agregarlo a mano
 
@@ -461,8 +466,8 @@ la verificación programada (`verificar_fuentes`, cada 6 horas) las prueba de
 nuevo y las que andan pasan a "funciona".
 
 **Destacado en la TV** (`Canal.destacado`): se marca en Organizar contenido →
-Editar ("★ Destacado en la TV"; en una serie se marcan todos sus capítulos) o
-en la página del canal. La API lo manda (`destacado`) y el modo reposo de la
+Editar ("★ Destacado en la TV"; en una serie se marcan todos sus capítulos).
+La API lo manda (`destacado`) y el modo reposo de la
 TV lo muestra más seguido que lo que sale al azar, sin que salga siempre
 (ver `app_movil/lib/tv/reposo.dart`). En Organizar, "Mostrar → Destacado en la
 TV (★)" lista lo marcado, y la tarjeta lleva una ★.
@@ -470,8 +475,8 @@ TV (★)" lista lo marcado, y la tarjeta lleva una ★.
 **La mejor fuente, primera:** la app arranca por la primera fuente de cada
 canal, así que el servidor las manda ordenadas (`consultas.ordenadas_por_estabilidad`):
 
-0. **Si en el panel se eligió el orden, manda ese.** En Editar canal, la
-   casilla «La app usa este orden» (`Canal.orden_fuentes_a_mano`, migración
+0. **Si en el panel se eligió el orden, manda ese.** En el panel de edición
+   de Organizar, la casilla «La app usa este orden» (`Canal.orden_fuentes_a_mano`, migración
    0033) se marca sola al elegir un número: entonces la fuente 1 del panel es
    la "Fuente 1" de la app, aunque se corte (solo se saltean las caídas, las
    ocultas y las apagadas). Lo de abajo solo desempata. Sin marcar, el orden
@@ -683,16 +688,14 @@ está en `static/js/trabajo.js` y `static/css/trabajo.css`.
   Enter: `organizar.titular_capitulo`, `/canales/series/capitulo/<id>/titulo/`).
 - **Una lista importada** quedó más junta: la barra de Contenido, los cuatro
   pasos en una fila y cada entrada en una línea.
-- **Editar canal** («Más opciones») tiene la misma búsqueda de imágenes, y se
-  le arrastra o pega una imagen.
-- **Editar canal → Fuentes** (2026-11-01): se agregan **varias a la vez**, cada
-  una con su número («Otra fuente» suma una fila: `NuevasFuentesFormSet`,
-  `_fuente_nueva.html`). Sin número va al final; con un número que ya existe
-  va en ese lugar y las demás se corren. Lo mismo al cambiarle el número a
-  una que ya estaba. Al guardar se prueban todas juntas
+- **Las señales en el panel de edición** (2026-11-01): cada una tiene su
+  número (`numero-<id>`): cambiarlo la pone en ese lugar y las demás se
+  corren. «Agregar una fuente» suma filas (`NuevasFuentesFormSet`,
+  `_fuente_nueva.html`), varias a la vez: sin número va al final, con número va
+  en ese lugar. Al guardar se prueban todas juntas
   (`verificacion.verificar_varias`, como mucho `servicios.ESPERA_AL_AGREGAR`
-  segundos: las que no llegan quedan sin verificar) y las fuentes quedan
-  numeradas 1, 2, 3... (`servicios.numerar_fuentes`).
+  segundos: las que no llegan quedan sin verificar) y quedan numeradas 1, 2,
+  3... (`servicios.ordenar_y_agregar_fuentes` y `numerar_fuentes`).
 
 ### Para revisar (la bandeja del panel)
 

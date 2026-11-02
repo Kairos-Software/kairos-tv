@@ -1,6 +1,6 @@
 /*
  * Kairos TV · las imágenes de Contenido (logos y pósters) sin salir del panel. Lo usan Organizar
- * (organizar_trabajo.js), la página de una serie (portada y capítulos) y Editar canal.
+ * (organizar_trabajo.js) y la página de una serie (portada y capítulos).
  *
  *   KairosImagenes.trae(transferencia)        -> si lo que se arrastra puede ser una imagen
  *   KairosImagenes.leer(transferencia)        -> Promise de {archivo: File} | {url: 'https://...'} | null:

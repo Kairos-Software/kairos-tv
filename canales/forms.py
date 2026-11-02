@@ -7,7 +7,7 @@ from herramientas.formularios import EstiloBootstrapMixin
 
 from . import organizar, secciones
 from .m3u import leer_m3u
-from .models import Canal, Categoria, Contenido, Fuente, Seccion
+from .models import Canal, Categoria, Contenido, Idioma, Seccion
 
 # Una lista completa de un proveedor (en vivo + películas + series: más de
 # 250 000 entradas) pesa 70-80 MB. Hasta 20 MB (octubre 2026) no entraba.
@@ -116,6 +116,8 @@ class EditarDesdeOrganizarForm(forms.Form):
     La edición rápida de "Organizar contenido" (la categoría se lee aparte: views._categoria_elegida). El link de
     la imagen se revisa en views.organizar_editar SOLO si cambió: un logo raro que vino en una lista (con espacios,
     sin dominio completo) no tiene que impedir guardar el nombre.
+    Lo de "Datos" (idioma, país, orden, por qué no se muestra) y si la app usa el orden de las fuentes llega
+    solo desde el panel de un canal (con `completo`): si no vino, no se toca.
     """
     nombre = forms.CharField(max_length=120)
     logo = forms.CharField(max_length=500, required=False)
@@ -123,10 +125,18 @@ class EditarDesdeOrganizarForm(forms.Form):
     contenido = forms.ChoiceField(choices=Contenido.choices, required=False)
     activo = forms.BooleanField(required=False)
     destacado = forms.BooleanField(required=False)
+    idioma = forms.ChoiceField(choices=Idioma.choices, required=False)
+    pais = forms.CharField(max_length=2, required=False)
+    orden = forms.IntegerField(min_value=0, max_value=99999, required=False)
+    motivo_quitado = forms.CharField(max_length=200, required=False)
+    orden_fuentes_a_mano = forms.BooleanField(required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['contenido'].choices = secciones.todas()
+
+    def clean_pais(self):
+        return self.cleaned_data['pais'].strip().upper()
 
 
 class TraerDeYoutubeForm(EstiloBootstrapMixin, forms.Form):
@@ -311,67 +321,17 @@ class QuitarCanalesForm(forms.Form):
     motivo = forms.CharField(max_length=200, required=False)
 
 
-class CanalForm(EstiloBootstrapMixin, forms.ModelForm):
-    """
-    Editar un canal desde el panel. La categoría se elige o se crea escribiéndola.
-    Las fuentes nuevas van aparte: NuevasFuentesFormSet.
-    """
-    nueva_categoria = forms.CharField(
-        label='O una categoría nueva', max_length=80, required=False,
-        help_text='Si escribís acá, se crea (o se usa la que ya se llame así) en vez de la de arriba.',
-    )
-    imagen = forms.FileField(
-        label='O subí la imagen desde la compu', required=False,
-        help_text='JPG, PNG o WEBP (se achica sola; si tiene el fondo de cuadritos pintado, se lo saca). '
-                  'Si subís una, gana sobre la dirección de arriba.',
-        widget=forms.FileInput(attrs={'accept': 'image/jpeg,image/png,image/webp'}),
-    )
-
-    class Meta:
-        model = Canal
-        fields = ['nombre', 'logo', 'numero', 'categoria', 'contenido', 'idioma', 'pais', 'orden',
-                  'activo', 'motivo_quitado', 'destacado', 'orden_fuentes_a_mano']
-        labels = {'activo': 'Se muestra en la app', 'motivo_quitado': 'Si no se muestra, por qué',
-                  'destacado': '★ Destacado en la TV', 'orden_fuentes_a_mano': 'La app usa este orden'}
-        help_texts = {'orden_fuentes_a_mano': 'Se marca sola al elegir un número. Sin marcar, la app pone primero '
-                                              'la que mejor anda y el número solo desempata.'}
-        widgets = {'logo': forms.URLInput(attrs={'placeholder': 'https://.../logo.png'})}
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        _elegir_categoria_con_su_seccion(self.fields['categoria'])
-        self.fields['contenido'] = _elegir_seccion(self.fields['contenido'])
-        self.fields['pais'].widget.attrs.update({'maxlength': 2, 'style': 'text-transform:uppercase'})
-
-    def clean_pais(self):
-        return self.cleaned_data['pais'].strip().upper()
-
-    def clean(self):
-        datos = super().clean()
-        if datos.get('activo'):
-            datos['motivo_quitado'] = ''
-        _categoria_de_su_seccion(datos, self.instance)
-        return datos
-
-
-FuentesFormSet = forms.modelformset_factory(
-    Fuente, fields=['prioridad', 'activa'], extra=0, can_delete=True,
-    widgets={'prioridad': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'style': 'width:5rem',
-                                                   'min': 1, 'aria-label': 'Número'}),
-             'activa': forms.CheckboxInput(attrs={'class': 'form-check-input', 'aria-label': 'Activa'})},
-)
-
-
 class NuevaFuenteForm(forms.Form):
-    """Una fila de "Agregar fuentes" en Editar canal. Vacía = no se agrega nada."""
+    """Una fila de "Agregar fuentes" en el panel de edición de Organizar. Vacía = no se agrega nada."""
     numero = forms.IntegerField(
         min_value=1, max_value=999, required=False,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'aria-label': 'Número'}),
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': 1, 'aria-label': 'Número'}),
     )
     url = forms.CharField(
         max_length=1000, required=False, validators=[URLValidator(schemes=['http', 'https', 'rtsp', 'rtsps'])],
-        widget=forms.TextInput(attrs={'class': 'form-control', 'aria-label': 'Dirección', 'inputmode': 'url',
-                                      'placeholder': 'https://... (.m3u8, video directo, YouTube, Twitch...)'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'aria-label': 'Dirección',
+                                      'inputmode': 'url', 'autocomplete': 'off',
+                                      'placeholder': 'https://... (.m3u8, .ts, YouTube, Twitch...)'}),
     )
     reproductor_web = forms.BooleanField(
         required=False, widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),

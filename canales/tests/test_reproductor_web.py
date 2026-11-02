@@ -4,9 +4,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from canales import consultas, servicios
-from canales.forms import CanalForm, FuentesFormSet, NuevasFuentesFormSet
 from canales.models import Canal, Fuente
-from canales.verificacion import verificar_url, verificar_varias
+from canales.verificacion import verificar_url
 from usuarios.models import Usuario, Rol
 
 
@@ -45,14 +44,11 @@ class ReproductorWebTests(TestCase):
         self.assertEqual(Fuente.objects.get(url=self.url_web).tipo, 'web')
 
     def test_agregar_web_a_un_canal_existente(self):
-        form = CanalForm({'nombre': self.canal.nombre, 'contenido': 'vivo', 'idioma': 'es',
-            'pais': 'AR', 'orden': 0, 'activo': 'on'}, instance=self.canal)
-        fuentes = FuentesFormSet({'fuentes-TOTAL_FORMS': 0, 'fuentes-INITIAL_FORMS': 0},
-            queryset=Fuente.objects.none(), prefix='fuentes')
-        nuevas = NuevasFuentesFormSet({'nuevas-TOTAL_FORMS': 1, 'nuevas-INITIAL_FORMS': 0,
-            'nuevas-0-url': self.url_web, 'nuevas-0-reproductor_web': 'on'}, canal=self.canal, prefix='nuevas')
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertTrue(fuentes.is_valid(), fuentes.errors)
-        self.assertTrue(nuevas.is_valid(), nuevas.errors)
-        _, [nueva] = servicios.guardar_canal(form, fuentes, nuevas.nuevas(), verificar_varias=verificar_varias)
+        respuesta = self.client.post(reverse('canales:organizar_editar'), {
+            'tipo': 'canal', 'canal': self.canal.pk, 'nombre': self.canal.nombre, 'logo': '', 'categoria': 'ninguna',
+            'contenido': 'vivo', 'activo': 'on', 'completo': '1', 'idioma': 'es', 'pais': 'AR', 'orden': '0',
+            'nuevas-TOTAL_FORMS': 1, 'nuevas-INITIAL_FORMS': 0, 'nuevas-0-url': self.url_web,
+            'nuevas-0-reproductor_web': 'on'}, HTTP_ACCEPT='application/json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        nueva = Fuente.objects.get(canal=self.canal, url=self.url_web)
         self.assertEqual((nueva.tipo, nueva.estado), ('web', 'sin_verificar'))

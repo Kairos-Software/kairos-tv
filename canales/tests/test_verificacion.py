@@ -878,60 +878,6 @@ class ResolverPaginaTests(TestCase):
         self.assertEqual(respuesta.json()['url'], 'https://cdn/x.m3u8')
 
 
-class EditarCanalTests(TestCase):
-
-    def setUp(self):
-        importar_m3u(LISTA, verificar=verificador_falso)
-        self.canal = Canal.objects.get(nombre='Canal 26')
-        self.url = reverse('canales:canal_editar', args=[self.canal.pk])
-        admin = Usuario.objects.create_user(
-            'admin', None, 'x', rol=Rol.objects.create(nombre='Canales', permisos=['ver_canales', 'importar_canales']))
-        self.client.force_login(admin)
-
-    def datos(self, **cambios):
-        fuente = self.canal.fuentes.get()
-        datos = {
-            'nombre': 'Canal 26', 'logo': '', 'numero': '26', 'categoria': self.canal.categoria_id or '',
-            'nueva_categoria': '', 'contenido': 'vivo', 'idioma': 'es', 'pais': 'ar', 'orden': 0, 'activo': 'on',
-            'motivo_quitado': '',
-            'nuevas-TOTAL_FORMS': 1, 'nuevas-INITIAL_FORMS': 0, 'nuevas-0-numero': '', 'nuevas-0-url': '',
-            'fuentes-TOTAL_FORMS': 1, 'fuentes-INITIAL_FORMS': 1, 'fuentes-MIN_NUM_FORMS': 0,
-            'fuentes-MAX_NUM_FORMS': 1000,
-            'fuentes-0-id': fuente.pk, 'fuentes-0-prioridad': 1, 'fuentes-0-activa': 'on',
-        }
-        datos.update(cambios)
-        return datos
-
-    def test_se_ve(self):
-        respuesta = self.client.get(self.url)
-        self.assertContains(respuesta, 'Así se ve en la app')
-        self.assertContains(respuesta, 'https://anda/c26.m3u8')
-
-    def test_cambiar_nombre_logo_y_categoria_nueva(self):
-        respuesta = self.client.post(self.url, self.datos(nombre='Canal 26 Noticias', logo='https://logos.ejemplo.com/nuevo.png',
-                                                          nueva_categoria='Argentina'))
-        self.assertRedirects(respuesta, reverse('canales:organizar') + '?contenido=vivo', fetch_redirect_response=False)
-        self.canal.refresh_from_db()
-        self.assertEqual((self.canal.nombre, self.canal.logo, self.canal.categoria.nombre, self.canal.pais),
-                         ('Canal 26 Noticias', 'https://logos.ejemplo.com/nuevo.png', 'Argentina', 'AR'))
-
-    @mock.patch('canales.verificacion.verificar_url', return_value=Resultado(FUNCIONA, tipo='directo'))
-    def test_agregar_una_fuente_y_borrar_otra(self, verificar_url):
-        self.client.post(self.url, self.datos(**{'nuevas-0-url': 'http://iptv.ejemplo.com:8080/u/p/9', 'fuentes-0-DELETE': 'on'}))
-        fuente = self.canal.fuentes.get()
-        self.assertEqual((fuente.url, fuente.tipo, fuente.estado), ('http://iptv.ejemplo.com:8080/u/p/9', 'directo', 'funciona'))
-
-    def test_logo_invalido(self):
-        respuesta = self.client.post(self.url, self.datos(logo='no es una direccion'))
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(Canal.objects.get(pk=self.canal.pk).logo, '')
-
-    def test_sin_permiso(self):
-        self.client.force_login(Usuario.objects.create_user(
-            'mira', None, 'x', rol=Rol.objects.create(nombre='Mira', permisos=['ver_canales'])))
-        self.assertEqual(self.client.get(self.url).status_code, 403)
-
-
 class ResumenYSeriesTests(TestCase):
     """El panel separa en vivo, películas y series; las series se agrupan como en la app."""
 

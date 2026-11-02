@@ -55,6 +55,8 @@ def tarjeta_json(request, item, contenido, mensaje='', status=200):
 
     if item is None:
         return JsonResponse({'ok': True, 'mensaje': mensaje, 'tarjeta': '', 'datos': None})
+    if isinstance(item, Canal) and contenido == Contenido.SERIE:
+        contenido = 'capitulo'   # un capítulo abierto solo en Organizar (?canal=): su tarjeta es la de un canal
     _preparar_para_editar([item], contenido)
     html = render_to_string('canales/_organizar_tarjeta.html', {
         'item': item, 'contenido': contenido, 'forma': secciones.forma(contenido),

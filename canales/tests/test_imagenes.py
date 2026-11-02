@@ -102,26 +102,6 @@ class SubirImagenTests(TestCase):
         self.assertContains(respuesta, 'enctype="multipart/form-data"')
         self.assertContains(respuesta, 'name="imagen"')
 
-    def _editar_en_su_pagina(self, **datos):
-        return self.client.post(reverse('canales:canal_editar', args=[self.pelicula.pk]), {
-            'nombre': self.pelicula.nombre, 'logo': self.pelicula.logo, 'contenido': 'pelicula', 'orden': 0,
-            'activo': 'on', 'fuentes-TOTAL_FORMS': 0, 'fuentes-INITIAL_FORMS': 0,
-            'nuevas-TOTAL_FORMS': 0, 'nuevas-INITIAL_FORMS': 0, **datos})
-
-    def test_tambien_desde_editar_del_catalogo(self):
-        self.assertContains(self.client.get(reverse('canales:canal_editar', args=[self.pelicula.pk])), 'name="imagen"')
-        self.assertEqual(self._editar_en_su_pagina(imagen=_imagen()).status_code, 302)
-        self.pelicula.refresh_from_db()
-        self.assertRegex(self.pelicula.logo, r'/media/canales/imagenes/[0-9a-f]{32}\.jpg$')
-        self._editar_en_su_pagina(logo='https://ejemplo.com/otra.jpg')   # la subida vieja se borra
-        self.assertEqual(_archivos(), [])
-
-    def test_desde_editar_lo_que_no_es_imagen_muestra_el_error(self):
-        respuesta = self._editar_en_su_pagina(nombre='Otro', imagen=SimpleUploadedFile('x.png', b'nada', 'image/png'))
-        self.assertContains(respuesta, 'no es una imagen')
-        self.pelicula.refresh_from_db()
-        self.assertEqual(self.pelicula.nombre, 'EL REGRESO (2019) Película completa')
-
 
 def _cuadritos(lado=320, cuadro=16, claro=(255, 255, 255), oscuro=(204, 204, 204)):
     """Un "PNG sin fondo" de internet: un logo rojo con los cuadritos PINTADOS (y un gris igual adentro)."""

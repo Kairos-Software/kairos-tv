@@ -223,3 +223,22 @@ html.vista-lista .pagina-organizar .espejo-tarjeta:hover [data-nombre-editable] 
 .renombrar-antes { color: var(--texto-apagado); text-decoration: line-through; }
 .renombrar-vista strong { color: var(--texto); }
 .renombrar-vista i { color: var(--celeste); font-size: .75rem; }
+
+/* ── El panel de un canal: el número de cada señal (su orden) y «Agregar una fuente» ── */
+.senal-orden { width: 3.4rem; flex: none; padding: .15rem .35rem; text-align: center; font-weight: 700; }
+.editor-orden-a-mano { display: flex; align-items: center; gap: .1rem; margin-bottom: .2rem; font-size: .84rem; }
+.fuentes-nuevas { margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--borde); }
+.fuente-nueva {
+    display: grid;
+    grid-template-columns: 3.4rem minmax(0, 1fr) auto;
+    gap: .35rem .4rem;
+    align-items: center;
+    margin-bottom: .55rem;
+}
+.fuente-nueva + .fuente-nueva:not([hidden]) { padding-top: .55rem; border-top: 1px dashed var(--borde); }
+.fuente-nueva input[type="number"] { padding-left: .35rem; padding-right: .2rem; text-align: center; }
+.fuente-nueva-web { grid-column: 2 / -1; display: flex; align-items: center; gap: .1rem; margin: 0; font-size: .78rem; color: var(--texto-suave); }
+.fuentes-nuevas .editor-ayuda { margin-top: .4rem; }
+/* «Datos»: idioma, país (2 letras) y orden en la categoría */
+.editor-fila.editor-fila-datos { grid-template-columns: minmax(0, 1fr) 3.6rem 5rem; margin-bottom: .55rem; }
+.editor-pais { text-transform: uppercase; text-align: center; }

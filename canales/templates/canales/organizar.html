@@ -8,8 +8,9 @@
       - Arriba: buscar y los chips de qué mostrar, con cuántos hay de cada uno (lo que queda por hacer:
         sin imagen, no se ven...).
       - Derecha: lo que hay en la elegida (parcial _organizar_tarjeta.html). Tocar una tarjeta abre el PANEL DE
-        EDICIÓN al costado (todo lo de esa cosa: datos, imagen, señales), que guarda sin recargar y pasa a la
-        anterior o a la siguiente. La casilla la elige para la barra de abajo (mover, cambiar de sección, unir en
+        EDICIÓN al costado, el ÚNICO lugar donde se edita un canal (datos, imagen, sus señales: ordenarlas por
+        número y agregar varias), que guarda sin recargar y pasa a la anterior o a la siguiente. Con ?canal=<id>
+        (lo que abren los links de otras pantallas, ver views.canal_editar) se ve ese solo, con «Volver». La casilla la elige para la barra de abajo (mover, cambiar de sección, unir en
         una serie, cambiar nombres, quitar, eliminar, exportar). En la vista Lista, el nombre, la categoría, ★ y
         "se muestra" se cambian ahí mismo. Arrastrar una imagen arriba de una tarjeta se la pone.
     Comportamiento: static/js/organizar_trabajo.js (+ imagenes_contenido.js, organizar_detalle.js, trabajo.js).
@@ -19,7 +20,7 @@
 {% block titulo %}Organizar contenido{% endblock %}
 {% block clase_body %}pagina-organizar{% endblock %}
 
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}"><link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/organizar_trabajo.css' %}?v=20261021">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/organizar_detalle.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/destino_serie.css' %}"><link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/organizar_trabajo.css' %}?v=20261102">{% endblock %}
 
 {% block encabezado %}
 {% barra_contenido 'organizar' %}
@@ -258,7 +259,16 @@
                aria-pressed="{% if filtros.sin_logo %}true{% else %}false{% endif %}" title="Solo lo que no tiene imagen (se suma a lo que elijas a la izquierda). Tocalo de nuevo para sacarlo."><i class="bi bi-image" aria-hidden="true"></i> Sin imagen <span>{{ cuenta_sin_logo }}</span></a>
         </nav>
 
-        {# ── La categoría elegida y sus opciones ── #}
+        {# ── La categoría elegida y sus opciones (o el canal solo que se pidió desde otra pantalla: ?canal=) ── #}
+        {% if solo %}
+        <div class="espejo-titulo">
+            <h2>«{{ solo.nombre }}»</h2>
+            <div class="espejo-titulo-acciones">
+                {% if volver_a %}<a href="{{ volver_a }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left" aria-hidden="true"></i> Volver</a>{% endif %}
+                <a href="?contenido={{ contenido }}" class="btn btn-sm btn-link">Ver toda la sección</a>
+            </div>
+        </div>
+        {% else %}
         <div class="espejo-titulo">
             <h2>
                 {% if datos.elegida == 'todas' %}Todas las categorías{% elif nodo.categoria %}{{ nodo.categoria.nombre }}{% else %}Sin categoría{% endif %}
@@ -276,6 +286,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         {% if puede_editar and nodo.categoria %}
         <details class="espejo-opciones mb-3">
@@ -363,13 +374,13 @@
             <h3 class="espejo-seccion">{% if categoria %}{{ categoria.nombre }}{% else %}Sin categoría (en la app: «Otros»){% endif %}</h3>
             {% endif %}
             <div class="espejo-grilla{% if forma != 'vivo' %} con-poster{% endif %}">
-                {% for item in items %}{% include "canales/_organizar_tarjeta.html" %}{% endfor %}
+                {% for item in items %}{% include "canales/_organizar_tarjeta.html" with contenido=tarjetas %}{% endfor %}
             </div>
             {% endfor %}
 
             {% include "parciales/_paginacion.html" with pagina=datos.pagina parametros=parametros %}
 
-            {% if puede_editar %}
+            {% if puede_editar and not solo %}
             <div class="acciones-catalogo espejo-barra">
                 <div class="espejo-barra-fila">
                     <div class="form-check mb-0">
@@ -525,6 +536,7 @@
         <input type="hidden" name="canal">
         <input type="hidden" name="serie">
         <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+        <input type="hidden" name="completo" value="">{# "1" en un canal: manda también «Datos» y sus señales #}
         <div class="editor-cabeza">
             <div class="espejo-imagen editor-vista" data-editor-vista{% if puede_editar %} data-soltar-imagen tabindex="0" role="button" aria-label="Cambiar la imagen: arrastrá una, pegala con Ctrl+V o tocá para subir un archivo" title="Arrastrá una imagen acá, pegala con Ctrl+V o tocá para subir un archivo"{% endif %}></div>
             <div class="editor-titulo">
@@ -589,14 +601,49 @@
                     <button type="button" class="ayuda-boton ms-1" data-ayuda="Cuando nadie usa la TV, la app muestra una vidriera con películas, series y canales. Lo destacado sale ahí más seguido que lo demás (no todo el tiempo)." aria-label="Qué es destacado">?</button>
                 </div>
             </div>
+            <input type="text" name="motivo_quitado" class="form-control form-control-sm" maxlength="200" placeholder="Por qué no se muestra (opcional)" aria-label="Por qué no se muestra" autocomplete="off" hidden data-editor-motivo>
             {% endif %}
             <details class="editor-bloque" data-editor-bloque-senales>
                 <summary>Señales <span class="editor-bloque-numero" data-editor-cuantas></span></summary>
+                {% if puede_editar %}
+                <div class="form-check editor-orden-a-mano" data-solo-canal>
+                    <input class="form-check-input" type="checkbox" name="orden_fuentes_a_mano" id="editor-orden-a-mano">
+                    <label class="form-check-label" for="editor-orden-a-mano">La app usa este orden</label>
+                    <button type="button" class="ayuda-boton ms-1" data-ayuda="Se marca sola al cambiar un número. Marcada: la app prueba la 1 y, si no anda, pasa a la siguiente (las caídas y las quitadas se saltean). Sin marcar: la app pone primero la que mejor anda y el número solo desempata." aria-label="Qué es usar este orden">?</button>
+                </div>
+                {% endif %}
                 <p class="espejo-ayuda mx-0" data-editor-senales-ayuda></p>
                 <ul class="lista-senales" data-editor-senales></ul>
+                {% if puede_editar %}
+                <div class="fuentes-nuevas" data-solo-canal>
+                    {{ nuevas.management_form }}
+                    <div data-filas-nuevas></div>
+                    <template data-fila-nueva>{% include "canales/_fuente_nueva.html" with f=nuevas.empty_form %}</template>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-otra-fuente><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar una fuente</button>
+                    <p class="editor-ayuda" data-ayuda-nuevas hidden>Sin número, va al final. Con un número, va en ese lugar y las demás se corren. Se prueban al guardar.</p>
+                </div>
+                {% endif %}
             </details>
             <details class="editor-bloque">
-                <summary>Datos <span class="texto-apagado fw-normal">· sección, de dónde salió, quién lo cargó…</span></summary>
+                <summary>Datos <span class="texto-apagado fw-normal">· idioma, país, de dónde salió, quién lo cargó…</span></summary>
+                {% if puede_editar %}
+                <div class="editor-fila editor-fila-datos" data-solo-canal>
+                    <div class="editor-campo">
+                        <label for="editor-idioma" class="form-label">Idioma</label>
+                        <select name="idioma" id="editor-idioma" class="form-select form-select-sm">
+                            {% for valor, nombre in idiomas %}<option value="{{ valor }}">{{ nombre }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="editor-campo">
+                        <label for="editor-pais" class="form-label">País</label>
+                        <input type="text" name="pais" id="editor-pais" class="form-control form-control-sm editor-pais" maxlength="2" placeholder="AR" autocomplete="off">
+                    </div>
+                    <div class="editor-campo">
+                        <label for="editor-orden" class="form-label" title="El lugar dentro de su categoría en la app: el número más chico aparece primero">Orden</label>
+                        <input type="number" name="orden" id="editor-orden" class="form-control form-control-sm" min="0" title="El lugar dentro de su categoría en la app: el número más chico aparece primero">
+                    </div>
+                </div>
+                {% endif %}
                 <dl class="detalle-datos" data-editor-datos></dl>
             </details>
         </div>
@@ -608,7 +655,7 @@
                 <span class="editor-aviso" data-editor-aviso role="status" aria-live="polite"></span>
             </div>
             <div class="editor-pie-enlaces">
-                <a href="#" data-editor-mas>Más opciones</a>
+                <a href="#" data-editor-mas hidden>Capítulos y temporadas</a>
                 <a href="#" data-editor-senales-link data-base="{% url 'canales:senales' %}">En Señales</a>
                 {% if puede_editar %}<button type="button" class="btn btn-link p-0 text-danger" data-editor-eliminar>Eliminar</button>{% endif %}
                 <span class="editor-atajos" aria-hidden="true"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> guarda y sigue · <kbd>Esc</kbd> cierra</span>
@@ -733,8 +780,8 @@
 
 {% block scripts %}
 <script src="{% static 'js/trabajo.js' %}?v=20261021"></script>
-<script src="{% static 'js/organizar_detalle.js' %}?v=20261021"></script>
+<script src="{% static 'js/organizar_detalle.js' %}?v=20261102"></script>
 {% if puede_editar %}<script src="{% static 'js/destino_serie.js' %}"></script>{% endif %}
 <script src="{% static 'js/imagenes_contenido.js' %}?v=20261021"></script>
-<script src="{% static 'js/organizar_trabajo.js' %}?v=20261021"></script>
+<script src="{% static 'js/organizar_trabajo.js' %}?v=20261102"></script>
 {% endblock %}

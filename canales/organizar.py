@@ -934,23 +934,27 @@ def destino_de_serie(nombre_serie, nombre_categoria, usuario=None):
 def editar_canal(canal, usuario=None, **datos):
     """
     Cambia lo que vino en `datos` (nombre, logo, numero, categoria, contenido,
-    activo, destacado) de un canal, película o capítulo. Si cambia de sección, su
-    categoría pasa a la del mismo nombre en la sección nueva. Devuelve los
-    nombres de lo que cambió.
+    activo, destacado y, desde el panel de edición, idioma, pais, orden,
+    motivo_quitado y orden_fuentes_a_mano) de un canal, película o capítulo.
+    Si cambia de sección, su categoría pasa a la del mismo nombre en la
+    sección nueva. Devuelve los nombres de lo que cambió.
     """
     if datos.get('contenido') == Contenido.SERIE and canal.contenido != Contenido.SERIE:
         raise NoSePuede('Para pasar algo a serie, elegilo y usá "Pasar a serie" en la barra de abajo: ahí se le '
                         'pone el nombre de la serie y el número de capítulo.')
     cambios = []
     logo_viejo = canal.logo
-    for campo in ('nombre', 'logo', 'numero', 'categoria', 'contenido', 'activo', 'destacado'):
+    for campo in ('nombre', 'logo', 'numero', 'categoria', 'contenido', 'activo', 'destacado', 'idioma', 'pais',
+                  'orden', 'motivo_quitado', 'orden_fuentes_a_mano'):
         if campo in datos and getattr(canal, campo) != datos[campo]:
             setattr(canal, campo, datos[campo])
             cambios.append(campo)
     if canal.categoria is not None and canal.categoria.contenido != canal.contenido:
         canal.categoria = categoria_por_nombre(canal.categoria.nombre, canal.contenido, usuario=usuario)
-    if 'activo' in cambios:
-        canal.motivo_quitado = '' if canal.activo else 'Quitado a mano.'
+    if canal.activo:
+        canal.motivo_quitado = ''
+    elif 'activo' in cambios and not canal.motivo_quitado:
+        canal.motivo_quitado = 'Quitado a mano.'
     if cambios:
         canal.marcar_autor(usuario)
         canal.save()

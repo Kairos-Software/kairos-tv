@@ -10,6 +10,8 @@
  * Lo usa el panel de edición (organizar_trabajo.js); los datos salen del
  * data-datos de la tarjeta (los arma views._preparar_para_editar). Esos botones
  * recargan la página y el panel se vuelve a abrir en la misma (?abrir=).
+ * Quien edita, en un canal, cambia ahí mismo el número de cada señal (`numero-<id>`):
+ * se guarda con el «Guardar» del panel y la señal va a ese lugar.
  * (El panel viejo de Detalles quedó dentro del de edición: si no está, no hace nada.)
  */
 (function () {
@@ -33,7 +35,15 @@
         formulario.elements.volver.value = url.pathname + url.search;
     }
 
+    /** Estos botones recargan la página: si el panel tiene cambios sin guardar, se pregunta antes. */
+    function seguirSinGuardar() {
+        var editor = window.KairosEditor;
+        return !editor || !editor.sucio() ||
+            window.confirm('Hay cambios sin guardar en el panel (números, fuentes nuevas, datos…). Si seguís, se pierden.');
+    }
+
     function borrar(senal, datos) {
+        if (!seguirSinGuardar()) return;
         var unica = datos.fuentes.length === 1;
         var pregunta = '¿Borrar la señal ' + senal.orden + ' (' + senal.origen + ') de «' + datos.nombre + '»?\n\n' +
             (unica ? 'Es su ÚNICA señal: no se va a ver en la app hasta que le agregues otra.'
@@ -46,6 +56,7 @@
 
     /** Quitar, volver a mostrar o probar ahora UNA señal (canales/views_revisar.fuente_accion). */
     function accion(senal, datos, cual) {
+        if (!seguirSinGuardar()) return;
         if (cual === 'quitar' && !window.confirm('¿Quitar la señal ' + senal.orden + ' (' + senal.origen + ') de «' +
                 datos.nombre + '»?\n\nLa app deja de usarla. No se borra: «Volver a mostrar esta señal» la devuelve.')) {
             return;
@@ -83,7 +94,18 @@
         datos.fuentes.forEach(function (f) {
             var li = crear('li', 'senal' + (f.caida || f.oculta || !f.activa ? ' senal-mal' : ''));
             var cabeza = crear('div', 'senal-cabeza');
-            if (f.orden) cabeza.appendChild(crear('span', 'senal-numero', String(f.orden)));
+            // Quien edita cambia el número ahí mismo: al guardar, la señal va a ese lugar (views.organizar_editar)
+            if (formAccion && f.borrable && f.id && datos.tipo !== 'serie') {
+                var numero = crear('input', 'form-control form-control-sm senal-orden');
+                numero.type = 'number';
+                numero.min = 1;
+                numero.name = 'numero-' + f.id;
+                numero.value = f.orden;
+                numero.setAttribute('aria-label', 'Número de la señal ' + f.orden + ' (su lugar en el orden)');
+                cabeza.appendChild(numero);
+            } else if (f.orden) {
+                cabeza.appendChild(crear('span', 'senal-numero', String(f.orden)));
+            }
             var origen = crear(f.importacion ? 'a' : 'strong', 'senal-origen', f.origen);
             if (f.importacion) { origen.href = f.importacion; origen.title = 'Ver esa importación (de qué lista salió)'; }
             cabeza.appendChild(origen);
