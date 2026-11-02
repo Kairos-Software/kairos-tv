@@ -315,7 +315,7 @@ def prender_o_apagar_lista(origen, prender, contenido=Contenido.VIVO, usuario=No
     """
     fuentes = Fuente.objects.filter(origen=origen, canal__eliminado_en__isnull=True, canal__contenido=contenido,
                                     activa=not prender)
-    cantidad = fuentes.update(activa=prender, retirada=None)
+    cantidad = fuentes.update(activa=prender, retirada=None, motivo_quitada='')
     if cantidad:
         registrar(usuario, Accion.EDITAR, f'{"Prendió" if prender else "Apagó"} las {cantidad} fuentes de la lista '
                                           f'«{origen}» (Para revisar).', modulo='canales')

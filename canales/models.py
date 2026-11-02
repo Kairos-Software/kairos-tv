@@ -374,6 +374,11 @@ class Fuente(models.Model):
     # apagado a mano: el servidor la sigue probando y, si vuelve a andar,
     # vuelve sola. Null = no la retiró la limpieza.
     retirada = models.DateTimeField('retirada por la limpieza', null=True, blank=True)
+    # Por qué se QUITÓ (activa = False), cuando hay un motivo anotado: lo que
+    # dijo el analizador de canales de la PC al importar su lista limpia (ver
+    # servicios.quitar_las_que_no_sirven). Como lo quitado a mano, no vuelve
+    # sola. Se borra al volver a mostrarla o al quitarla a mano.
+    motivo_quitada = models.CharField('por qué se quitó', max_length=200, blank=True)
     # El ÚLTIMO problema que tuvo en un aparato, con el detalle técnico que
     # manda la app (qué pasó, el error del reproductor, a los cuántos segundos):
     # para diagnosticar por qué un canal no conecta. No se borra cuando vuelve

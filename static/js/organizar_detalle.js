@@ -111,7 +111,7 @@
             cabeza.appendChild(origen);
             if (f.estado) {
                 cabeza.appendChild(crear('span', 'senal-estado' + (f.caida ? ' estado-mal' : ''),
-                    f.estado + (f.activa ? '' : (f.retirada ? ' · retirada' : ' · apagada a mano'))));
+                    f.estado + (f.activa ? '' : (f.retirada ? ' · retirada' : f.quitada ? ' · quitada' : ' · apagada a mano'))));
             }
             li.appendChild(cabeza);
             var tecnico = [f.tipo, f.calidad, f.codec && !f.calidad ? 'códec ' + f.codec : ''].filter(Boolean).join(' · ');
@@ -121,6 +121,7 @@
             if (f.aparatos) li.appendChild(crear('div', 'senal-dato', 'En los aparatos: ' + f.aparatos));
             if (f.oculta) li.appendChild(crear('div', 'senal-dato estado-mal', f.oculta));
             if (f.retirada) li.appendChild(crear('div', 'senal-dato estado-mal', f.retirada));
+            if (f.quitada) li.appendChild(crear('div', 'senal-dato estado-mal', f.quitada));
             if (f.problema) li.appendChild(crear('div', 'senal-dato senal-aviso', f.problema));
             if (f.salud) li.appendChild(crear('div', 'senal-dato' + (f.salud_mal ? ' estado-mal' : ''), 'Salud: ' + f.salud));
             if (f.aviso_codec) li.appendChild(crear('div', 'senal-dato senal-aviso', f.aviso_codec));

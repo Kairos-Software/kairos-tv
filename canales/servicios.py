@@ -42,7 +42,7 @@ from actividad.registro import registrar
 from . import clasificar, organizar, salud, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
 from .consultas import anotar_series, fuentes_usables
-from .m3u import EntradaM3U, leer_m3u, normalizar
+from .m3u import EntradaM3U, leer_las_que_no_sirven, leer_m3u, normalizar
 from .models import (OCULTA_POR, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
                      medidas_de_calidad)
 from .verificacion import NOMBRES_DE_CODECS, Resultado
@@ -1525,10 +1525,37 @@ def quitar_fuente(fuente, usuario=None):
     andando con las otras. Es como apagarla a mano: no vuelve sola (para eso,
     mostrar_fuente). No se borra.
     """
-    fuente.activa, fuente.retirada = False, None
-    fuente.save(update_fields=['activa', 'retirada'])
+    fuente.activa, fuente.retirada, fuente.motivo_quitada = False, None, ''
+    fuente.save(update_fields=['activa', 'retirada', 'motivo_quitada'])
     registrar(usuario, Accion.EDITAR, f'Quitó una señal de "{fuente.canal}" ({fuente.origen or "sin origen"}).',
               objeto=fuente.canal, modulo='canales')
+
+
+def quitar_las_que_no_sirven(texto, usuario=None):
+    """
+    La lista limpia del analizador de canales (el programa de la PC) trae
+    anotadas las señales que no sirven (m3u.leer_las_que_no_sirven). Las que
+    están cargadas acá se quitan como con "Quitar esta señal": la app deja de
+    recibirlas, no se borran y no vuelven solas (aunque la limpieza las haya
+    retirado antes). Queda anotado lo que dijo el analizador; "Volver a
+    mostrar esta señal" las devuelve. Devuelve cuántas se quitaron.
+    """
+    malas = leer_las_que_no_sirven(texto)
+    if not malas:
+        return 0
+    hoy = f'{timezone.localtime():%d/%m}'
+    urls, quitadas = list(malas), []
+    for desde in range(0, len(urls), 2000):
+        for fuente in Fuente.objects.filter(Q(activa=True) | Q(retirada__isnull=False),
+                                            url__in=urls[desde:desde + 2000]):
+            fuente.activa, fuente.retirada = False, None
+            fuente.motivo_quitada = f'El analizador de canales ({hoy}): {malas[fuente.url] or "no sirve"}'[:200]
+            quitadas.append(fuente)
+    Fuente.objects.bulk_update(quitadas, ['activa', 'retirada', 'motivo_quitada'], batch_size=1000)
+    if quitadas:
+        registrar(usuario, Accion.EDITAR, f'Quitó {len(quitadas)} señal(es) que el analizador de canales dio como '
+                                          f'que no sirven.', modulo='canales')
+    return len(quitadas)
 
 
 def mostrar_fuente(fuente, usuario=None):
@@ -1540,7 +1567,7 @@ def mostrar_fuente(fuente, usuario=None):
     probar) y se olvida desde cuándo fallaba (la limpieza cuenta una semana
     desde ahora).
     """
-    fuente.activa, fuente.retirada = True, None
+    fuente.activa, fuente.retirada, fuente.motivo_quitada = True, None, ''
     fuente.oculta_desde = fuente.oculta_hasta = fuente.primer_aviso = None
     fuente.veces_oculta = fuente.avisos_de_aparatos = 0
     fuente.falla_en_aparatos = ''

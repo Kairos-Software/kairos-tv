@@ -40,7 +40,8 @@ PROBLEMAS = {
     'muertas': ('Muertas', f'No andan hace {salud.DIAS_PARA_QUITAR} días o más.'),
     'retiradas': ('Retiradas', 'La limpieza las sacó de la app porque no anduvieron en una semana. Si vuelven a '
                                'andar, vuelven solas.'),
-    'apagadas': ('Quitadas a mano', 'Alguien las quitó: la app no las usa aunque anden. No vuelven solas.'),
+    'apagadas': ('Quitadas a mano', 'Alguien las quitó (o el analizador de canales de la PC dijo que no sirven): la '
+                                    'app no las usa aunque anden. No vuelven solas.'),
     'sin_datos': ('Sin datos', 'Todavía no se sabe si andan: el servidor no las puede probar (los paneles Xtream lo '
                                'bloquean) y nadie las vio en un aparato.'),
 }
@@ -94,7 +95,7 @@ def detalle(fuente, problema, ahora):
     if problema == 'retiradas':
         return f'retirada el {timezone.localtime(fuente.retirada):%d/%m}' + (f' · {motivo}' if motivo else '')
     if problema == 'apagadas':
-        return 'la quitaron a mano'
+        return fuente.motivo_quitada or 'la quitaron a mano'
     if problema == 'sin_datos':
         return ('el servidor no la puede probar y nadie la vio' if salud.NO_SE_SABE in fuente.historial
                 else 'todavía no se probó')

@@ -6,7 +6,7 @@ from django.core.validators import URLValidator
 from herramientas.formularios import EstiloBootstrapMixin
 
 from . import organizar, secciones
-from .m3u import leer_m3u
+from .m3u import leer_las_que_no_sirven, leer_m3u
 from .models import Canal, Categoria, Contenido, Idioma, Seccion
 
 # Una lista completa de un proveedor (en vivo + películas + series: más de
@@ -298,7 +298,9 @@ class ImportarListaForm(EstiloBootstrapMixin, forms.Form):
             raise forms.ValidationError(f'El archivo pesa más de {TAMANIO_MAXIMO // (1024 * 1024)} MB. '
                                         f'Comprimilo en un .zip (una lista baja a la décima parte).')
         texto = _texto_del_archivo(archivo)
-        if not leer_m3u(texto):
+        # Una lista limpia del analizador puede traer solo las que no sirven (para sacarlas de la app)
+        self.tiene_canales = bool(leer_m3u(texto))
+        if not self.tiene_canales and not leer_las_que_no_sirven(texto):
             raise forms.ValidationError('No se encontró ningún canal en el archivo. ¿Es una lista M3U?')
         self.texto = texto
         return archivo

@@ -80,6 +80,21 @@ def inicio(request):
         # Varias listas de una (static/js/importar_varias.js): la página las sube de a una y espera JSON
         de_a_varias = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if form.is_valid():
+            # Una lista limpia del analizador de canales: primero se sacan de la app las que dio como que no sirven
+            quitadas = servicios.quitar_las_que_no_sirven(form.texto, request.user)
+            if quitadas:
+                messages.info(request, f'La lista trae {quitadas} señal(es) que el analizador de canales dio como que '
+                                       f'no sirven: se quitaron de la app (no se borraron). Están en Señales → '
+                                       f'«Quitadas a mano», con el motivo.')
+            if not form.tiene_canales:
+                # Solo traía las que no sirven: no hay nada que importar; se va a verlas
+                quitadas_url = f"{reverse('canales:senales')}?problema=apagadas"
+                if de_a_varias:
+                    return JsonResponse({'ok': True, 'url': quitadas_url, 'total': 0})
+                if not quitadas:
+                    messages.info(request, 'Las señales que no sirven de esa lista ya estaban quitadas (o no están '
+                                           'cargadas acá).')
+                return redirect(quitadas_url)
             # Solo analiza (segundos). Una lista grande ni eso: la pantalla de
             # la importación la lee de a tandas, y después se elige qué probar.
             # La verificación también la va pidiendo la pantalla, de a tandas.
@@ -575,6 +590,7 @@ def _origenes_de(fuentes, importaciones, borrables=True):
              'salud_mal': salud.de_fuente(f) in (salud.Salud.FALLA, salud.Salud.RECHAZA, salud.Salud.MUERTA),
              'problema': (f'Último problema en un aparato ({_fecha(f.problema_en)}): {f.problema_en_aparato}'
                           if f.problema_en_aparato else ''),
+             'quitada': f.motivo_quitada if not f.activa else '',
              'retirada': (f'Retirada sola el {_fecha(f.retirada)}: no anduvo en {salud.DIAS_PARA_QUITAR} días y el '
                           f'canal sigue con sus otras señales. Si vuelve a andar, vuelve sola.' if f.retirada and not f.activa
                           else ''),

@@ -21,6 +21,15 @@ Las listas que exporta este sistema (exportar.py) llevan además la sección
 de cada cosa (kairos-seccion="pelicula"), para que al volver a importarlas
 vaya a la misma aunque la dirección no diga si es una película.
 
+Las listas limpias del ANALIZADOR DE CANALES (el programa de la PC que mira
+cada señal un minuto y medio: KAIROS TV\\analizador-canales) traen al final,
+en comentarios que las otras apps no leen, las señales que no sirven:
+
+    #KAIROS-NO-SIRVE url="http://servidor/canal.m3u8" motivo="Se cortó a los 40 s y no volvió"
+
+Esas las lee leer_las_que_no_sirven (y servicios.quitar_las_que_no_sirven las
+saca de la app al importar la lista).
+
     from canales.m3u import leer_m3u
     for entrada in leer_m3u(texto):
         entrada.nombre, entrada.url, entrada.categoria, ...
@@ -34,6 +43,8 @@ from .clasificar import formato, limpiar_nombre, sin_acentos
 _ATRIBUTO = re.compile(r'([\w-]+)\s*=\s*"([^"]*)"')
 # Marcas que algunas listas agregan al nombre (Ⓨ = YouTube, Ⓖ = geobloqueado...)
 _MARCAS = re.compile(r'[ⓎⒼⓈ]')
+# Una señal que el analizador de canales dio como que no sirve (ver arriba)
+NO_SIRVE = '#KAIROS-NO-SIRVE'
 
 
 @dataclass
@@ -117,3 +128,16 @@ def leer_m3u(texto):
                 entradas.append(pendiente)
             pendiente = None
     return entradas
+
+
+def leer_las_que_no_sirven(texto):
+    """{dirección: motivo} de las líneas #KAIROS-NO-SIRVE de una lista limpia del analizador (ver arriba)."""
+    malas = {}
+    for linea in (texto or '').splitlines():
+        linea = linea.strip()
+        if linea.upper().startswith(NO_SIRVE):
+            atributos = dict(_ATRIBUTO.findall(linea))
+            url = atributos.get('url', '').strip()
+            if url:
+                malas[url] = atributos.get('motivo', '').strip()
+    return malas
