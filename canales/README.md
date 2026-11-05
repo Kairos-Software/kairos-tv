@@ -642,6 +642,10 @@ El analizador de canales es un programa aparte, para la PC
 sonido, cortes, idioma) y exporta una lista limpia. El ida y vuelta:
 
 1. **Exportar** desde Organizar (secciones, categorías o todo) → lista M3U8.
+   Las páginas con reproductor (`Fuente.Tipo.WEB`) y las páginas de video
+   (`PAGINA`) salen con `kairos-tipo="web"` / `"pagina"` en su `#EXTINF`
+   (`exportar.TIPOS_DE_PAGINA`): así el analizador no las mira como una señal
+   de video ni las da por caídas. Las otras apps ignoran ese atributo.
 2. El analizador la mira y baja la lista limpia: las buenas con sus líneas de
    siempre y, al final, las que no sirven en comentarios que las otras apps no
    leen: `#KAIROS-NO-SIRVE url="..." motivo="Se cortó a los 40 s y no volvió"`.

@@ -226,6 +226,7 @@ class TarjetaCanalTv extends StatelessWidget {
     this.autofocus = false,
     this.ancho = 290,
     this.nodo,
+    this.alEnfocar,
   });
 
   final Canal canal;
@@ -236,6 +237,7 @@ class TarjetaCanalTv extends StatelessWidget {
   final bool autofocus;
   final double ancho;
   final FocusNode? nodo;
+  final ValueChanged<bool>? alEnfocar;
 
   @override
   Widget build(BuildContext context) {
@@ -247,6 +249,7 @@ class TarjetaCanalTv extends StatelessWidget {
         alOkLargo: alOkLargo,
         autofocus: autofocus,
         nodo: nodo,
+        alEnfocar: alEnfocar,
         curva: Curva.tarjeta,
         etiqueta: 'Canal $numero, ${canal.nombre}',
         child: DecoratedBox(

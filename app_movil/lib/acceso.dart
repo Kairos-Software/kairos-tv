@@ -86,6 +86,9 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   bool _simbolos = false;
   final _primeraTecla = FocusNode(debugLabel: 'teclado del login');
 
+  /// El "1" del teclado numérico: adonde vuelve el foco si queda en el aire.
+  final _teclaUno = FocusNode(debugLabel: 'teclado del código');
+
   @override
   void initState() {
     super.initState();
@@ -95,22 +98,45 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
     // La app quiso volver a entrar sola y el servidor no la dejó: por qué
     _error = sesion.avisoParaElLogin;
     sesion.avisoParaElLogin = null;
+    FocusManager.instance.addListener(_cuidarFoco);
   }
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_cuidarFoco);
     _usuario.dispose();
     _password.dispose();
     _primeraTecla.dispose();
+    _teclaUno.dispose();
     super.dispose();
   }
 
+  bool get _codigoCompleto => _codigo.length >= _largoCodigo;
+
   void _tecla(String digito) {
-    if (_codigo.length >= _largoCodigo) return;
+    if (_enviando) return;
     setState(() {
-      _codigo += digito;
+      // Completo (el que no entró, o el último usado): un número nuevo empieza otro código
+      _codigo = _codigoCompleto ? digito : _codigo + digito;
       _error = null;
     });
+  }
+
+  /// En la TV el control remoto necesita algo elegido: sin eso no se ve el foco
+  /// y los números no llegan a [_teclaFisica]. Pasa, por ejemplo, al cerrar el
+  /// cartel de una versión nueva con "Más tarde".
+  void _cuidarFoco() {
+    if (!Aparato.esTv || !_focoEnElAire) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_focoEnElAire || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+      final nodo = _conCodigo ? _teclaUno : _primeraTecla;
+      if (nodo.context != null) nodo.requestFocus();
+    });
+  }
+
+  bool get _focoEnElAire {
+    final foco = FocusManager.instance.primaryFocus;
+    return foco == null || foco is FocusScopeNode;
   }
 
   void _borrar() {
@@ -356,10 +382,12 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
         const SizedBox(height: 8),
         Text('Ingresá tu código', style: ancha ? LetraTv.pantalla.copyWith(fontSize: 40) : _tituloCelular),
         const SizedBox(height: 4),
-        Text(
-          ancha ? 'Escribí los 8 números que te dio tu vendedor.' : 'Los 8 números que te dio tu vendedor.',
-          style: ancha ? LetraTv.cuerpo : Letra.cuerpo,
-        ),
+        Text(switch ((_codigoCompleto, ancha)) {
+          (true, true) => 'OK para entrar · otro número empieza de nuevo.',
+          (true, false) => 'Tocá OK, o escribí otro código.',
+          (false, true) => 'Escribí los 8 números que te dio tu vendedor.',
+          (false, false) => 'Los 8 números que te dio tu vendedor.',
+        }, style: ancha ? LetraTv.cuerpo : Letra.cuerpo),
         const SizedBox(height: 24),
         _Visor(codigo: _codigo, largo: _largoCodigo, grande: ancha),
         if (_error != null) ...[const SizedBox(height: 14), _CartelError(_error!)],
@@ -369,6 +397,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
           alBorrar: _borrar,
           alOk: _ingresar,
           enviando: _enviando,
+          teclaUno: _teclaUno,
           alto: ancha ? 72 : 56,
         ),
         if (ancha) ...[
@@ -859,19 +888,35 @@ class _Visor extends StatelessWidget {
       color: Tono.celesteClaro,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
-    String grupo(int desde) =>
-        [for (var i = desde; i < desde + largo ~/ 2; i++) i < codigo.length ? codigo[i] : '_'].join();
+    final completo = codigo.length >= largo;
+    // El lugar del próximo número se ve encendido: es el cursor. Completo, todo
+    // queda resaltado como un texto seleccionado: lo que se escribe lo reemplaza.
+    InlineSpan lugar(int i) => i < codigo.length
+        ? TextSpan(text: codigo[i])
+        : TextSpan(
+            text: '_',
+            style: TextStyle(color: i == codigo.length ? Tono.celeste : Tono.textoApagado),
+          );
     return Container(
       height: grande ? 82 : 64,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Tono.capaMinima,
+        color: completo ? Tono.celeste.withValues(alpha: .14) : Tono.capaMinima,
         borderRadius: BorderRadius.circular(Curva.boton),
-        border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
+        border: Border.all(
+          color: completo ? Tono.celeste.withValues(alpha: .7) : Tono.bordeSuave.withValues(alpha: .6),
+        ),
       ),
       child: Semantics(
         label: 'Código: ${codigo.split('').join(' ')}',
-        child: Text('${grupo(0)}  ${grupo(largo ~/ 2)}', style: estilo),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              for (var i = 0; i < largo; i++) ...[if (i == largo ~/ 2) const TextSpan(text: '  '), lugar(i)],
+            ],
+          ),
+          style: estilo,
+        ),
       ),
     );
   }
@@ -885,6 +930,7 @@ class _TecladoNumerico extends StatelessWidget {
     required this.alOk,
     required this.enviando,
     required this.alto,
+    required this.teclaUno,
   });
 
   final ValueChanged<String> alTecla;
@@ -892,16 +938,25 @@ class _TecladoNumerico extends StatelessWidget {
   final VoidCallback alOk;
   final bool enviando;
   final double alto;
+  final FocusNode teclaUno;
 
   @override
   Widget build(BuildContext context) {
-    Widget tecla(String texto, VoidCallback alOk, {IconData? icono, bool autofocus = false, String? etiqueta}) {
+    Widget tecla(
+      String texto,
+      VoidCallback alOk, {
+      IconData? icono,
+      bool autofocus = false,
+      String? etiqueta,
+      FocusNode? nodo,
+    }) {
       return Expanded(
         child: Padding(
           padding: const EdgeInsets.all(6),
           child: Enfocable(
             alOk: alOk,
             autofocus: autofocus,
+            nodo: nodo,
             curva: Curva.boton,
             escala: 1.05,
             etiqueta: etiqueta ?? texto,
@@ -939,7 +994,12 @@ class _TecladoNumerico extends StatelessWidget {
             ['4', '5', '6'],
             ['7', '8', '9'],
           ])
-            Row(children: [for (final n in fila) tecla(n, () => alTecla(n), autofocus: n == '1' && Aparato.esTv)]),
+            Row(
+              children: [
+                for (final n in fila)
+                  tecla(n, () => alTecla(n), autofocus: n == '1' && Aparato.esTv, nodo: n == '1' ? teclaUno : null),
+              ],
+            ),
           Row(
             children: [
               tecla('Borrar', alBorrar, icono: Icons.backspace_outlined, etiqueta: 'Borrar'),
@@ -1016,7 +1076,7 @@ class _CartelError extends StatelessWidget {
   final ApiError error;
 
   (String, String) get _textos => switch (error.codigo) {
-    'codigo_invalido' => ('Código incorrecto', 'Revisá los 8 números.'),
+    'codigo_invalido' => ('Código incorrecto', 'Revisá los 8 números: escribí el código de nuevo o usá Borrar.'),
     'codigo_corto' => ('Código incompleto', error.detalle),
     'cuenta_en_uso' => ('Cuenta en uso', error.detalle),
     'login_bloqueado' || 'bloqueado' => ('Demasiados intentos', error.detalle),

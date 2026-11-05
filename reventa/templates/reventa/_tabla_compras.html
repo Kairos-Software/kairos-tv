@@ -19,7 +19,7 @@
                 {% if mostrar_revendedor %}<td><a href="{% url 'reventa:revendedor' compra.revendedor_id %}">{{ compra.revendedor }}</a></td>{% endif %}
                 <td>{{ compra.paquete.nombre|default:"—" }}</td>
                 <td class="dato">{{ compra.creditos }}</td>
-                <td class="dato">$ {{ compra.precio|floatformat:2|intcomma }}</td>
+                <td class="dato">$ {{ compra.precio|floatformat:"2g" }}</td>
                 <td>
                     {% if compra.estado == 'pagada' %}<span class="chip chip-si">Pagada</span>
                     {% elif compra.estado == 'cancelada' %}<span class="chip">Cancelada</span>

@@ -101,4 +101,12 @@
     {% include "reventa/_libreta.html" with pagina=movimientos %}
 </section>
 {% include "parciales/_paginacion.html" with pagina=movimientos %}
+
+<section class="tarjeta zona-eliminar mt-4">
+    <div>
+        <h2 class="tarjeta-titulo mb-1">Eliminar este revendedor</h2>
+        <p class="texto-suave small mb-0">Se le cierra el panel. Antes de confirmar, te dice qué pasa con sus clientes y sus créditos, y te deja elegir.</p>
+    </div>
+    <a href="{% url 'reventa:revendedor_eliminar' revendedor.pk %}" class="btn btn-outline-danger">Eliminar revendedor</a>
+</section>
 {% endblock %}

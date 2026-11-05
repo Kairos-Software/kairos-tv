@@ -55,7 +55,7 @@ class PantallaMovil extends StatefulWidget {
   State<PantallaMovil> createState() => _PantallaMovilState();
 }
 
-class _PantallaMovilState extends State<PantallaMovil> {
+class _PantallaMovilState extends State<PantallaMovil> with SingleTickerProviderStateMixin {
   static const _cadaCuanto = Duration(minutes: 15);
 
   late final Catalogo _catalogo = widget.catalogo ?? Catalogo(SesionScope.leer(context).api);
@@ -67,6 +67,13 @@ class _PantallaMovilState extends State<PantallaMovil> {
   PedidoEnVivo? _pedidoEnVivo;
   AppLifecycleListener? _ciclo;
   Timer? _refresco;
+
+  /// Al cambiar de sección, la nueva aparece subiendo un poco.
+  late final AnimationController _cambioDeSeccion = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 320),
+    value: 1,
+  );
 
   @override
   void initState() {
@@ -101,6 +108,7 @@ class _PantallaMovilState extends State<PantallaMovil> {
     _biblioteca.removeListener(_asegurarCapitulos);
     _ciclo?.dispose();
     _refresco?.cancel();
+    _cambioDeSeccion.dispose();
     if (widget.catalogo == null) _catalogo.dispose();
     if (widget.biblioteca == null) _biblioteca.dispose();
     super.dispose();
@@ -140,6 +148,7 @@ class _PantallaMovilState extends State<PantallaMovil> {
 
   void _irA(Seccion seccion, {String? categoria, int? canal}) {
     Tele.instancia.seccion(seccion.name);
+    if (seccion != _seccion && !MediaQuery.disableAnimationsOf(context)) _cambioDeSeccion.forward(from: 0);
     setState(() {
       _seccion = seccion;
       if (seccion == Seccion.enVivo && (categoria != null || canal != null)) {
@@ -198,16 +207,26 @@ class _PantallaMovilState extends State<PantallaMovil> {
                   ),
                   alPerfil: () => _irA(Seccion.miEspacio),
                 ),
-                body: IndexedStack(
-                  index: _seccion.index,
-                  children: [
-                    const SeccionInicio(),
-                    SeccionEnVivo(visible: _seccion == Seccion.enVivo, pedido: _pedidoEnVivo),
-                    const SeccionGrilla(contenido: 'serie'),
-                    const SeccionGrilla(contenido: 'pelicula'),
-                    const SeccionFavoritos(),
-                    const SeccionMiEspacio(),
-                  ],
+                body: AnimatedBuilder(
+                  animation: _cambioDeSeccion,
+                  builder: (_, seccion) {
+                    final avance = Curves.easeOutCubic.transform(_cambioDeSeccion.value);
+                    return Opacity(
+                      opacity: avance,
+                      child: Transform.translate(offset: Offset(0, (1 - avance) * 14), child: seccion),
+                    );
+                  },
+                  child: IndexedStack(
+                    index: _seccion.index,
+                    children: [
+                      const SeccionInicio(),
+                      SeccionEnVivo(visible: _seccion == Seccion.enVivo, pedido: _pedidoEnVivo),
+                      const SeccionGrilla(contenido: 'serie'),
+                      const SeccionGrilla(contenido: 'pelicula'),
+                      const SeccionFavoritos(),
+                      const SeccionMiEspacio(),
+                    ],
+                  ),
                 ),
                 bottomNavigationBar: _BarraInferior(seccion: _seccion, alElegir: _irA),
               ),
@@ -320,7 +339,8 @@ class _BarraSuperior extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// "nav": vidrio oscuro (capa mínima al 90 %), seis botones; el activo en celeste.
+/// "nav": vidrio oscuro (capa mínima al 90 %), seis botones; el activo en celeste, y una
+/// marca con brillo que se desliza hasta él.
 class _BarraInferior extends StatelessWidget {
   const _BarraInferior({required this.seccion, required this.alElegir});
 
@@ -349,36 +369,65 @@ class _BarraInferior extends StatelessWidget {
           padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
           child: SizedBox(
             height: 64,
-            child: Row(
+            child: Stack(
               children: [
-                for (final (valor, icono, iconoActivo, texto) in _items)
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => alElegir(valor),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            valor == seccion ? iconoActivo : icono,
-                            size: 24,
-                            color: valor == seccion ? Tono.celeste : Tono.textoSuave,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            texto,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Letra.mini.copyWith(
-                              color: valor == seccion ? Tono.celeste : Tono.textoSuave,
-                              fontWeight: valor == seccion ? FontWeight.w700 : FontWeight.w600,
-                              fontSize: 9.5,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ],
+                AnimatedAlign(
+                  duration: const Duration(milliseconds: 380),
+                  curve: Curves.easeOutBack,
+                  alignment: Alignment(-1 + 2 * seccion.index / (_items.length - 1), -1),
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / _items.length,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: 34,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: Tono.celeste,
+                          borderRadius: BorderRadius.circular(2),
+                          boxShadow: brilloCeleste(desenfoque: 12, opacidad: .9),
+                        ),
                       ),
                     ),
                   ),
+                ),
+                Row(
+                  children: [
+                    for (final (valor, icono, iconoActivo, texto) in _items)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => alElegir(valor),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              AnimatedScale(
+                                scale: valor == seccion ? 1.14 : 1,
+                                duration: const Duration(milliseconds: 260),
+                                curve: Curves.easeOutBack,
+                                child: Icon(
+                                  valor == seccion ? iconoActivo : icono,
+                                  size: 24,
+                                  color: valor == seccion ? Tono.celeste : Tono.textoSuave,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                texto,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Letra.mini.copyWith(
+                                  color: valor == seccion ? Tono.celeste : Tono.textoSuave,
+                                  fontWeight: valor == seccion ? FontWeight.w700 : FontWeight.w600,
+                                  fontSize: 9.5,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),

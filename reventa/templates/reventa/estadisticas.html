@@ -56,13 +56,13 @@
                     <td class="dato text-end">{{ f.creditos_comprados }}</td>
                     <td class="dato text-end">{{ f.creditos_regalados }}</td>
                     {% if es_negocio %}
-                    <td class="dato text-end">$ {{ f.invertido|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end">$ {{ f.cobrado_directos|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end"><strong>$ {{ f.ingresos|floatformat:2|intcomma }}</strong></td>
+                    <td class="dato text-end">$ {{ f.invertido|floatformat:"2g" }}</td>
+                    <td class="dato text-end">$ {{ f.cobrado_directos|floatformat:"2g" }}</td>
+                    <td class="dato text-end"><strong>$ {{ f.ingresos|floatformat:"2g" }}</strong></td>
                     {% else %}
-                    <td class="dato text-end">$ {{ f.cobrado|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end">$ {{ f.invertido|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end"><strong>$ {{ f.ganancia|floatformat:2|intcomma }}</strong></td>
+                    <td class="dato text-end">$ {{ f.cobrado|floatformat:"2g" }}</td>
+                    <td class="dato text-end">$ {{ f.invertido|floatformat:"2g" }}</td>
+                    <td class="dato text-end"><strong>$ {{ f.ganancia|floatformat:"2g" }}</strong></td>
                     {% endif %}
                 </tr>
             {% endfor %}
@@ -76,13 +76,13 @@
                     <td class="dato text-end">{{ total.creditos_comprados }}</td>
                     <td class="dato text-end">{{ total.creditos_regalados }}</td>
                     {% if es_negocio %}
-                    <td class="dato text-end">$ {{ total.invertido|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end">$ {{ total.cobrado_directos|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end"><strong>$ {{ total.ingresos|floatformat:2|intcomma }}</strong></td>
+                    <td class="dato text-end">$ {{ total.invertido|floatformat:"2g" }}</td>
+                    <td class="dato text-end">$ {{ total.cobrado_directos|floatformat:"2g" }}</td>
+                    <td class="dato text-end"><strong>$ {{ total.ingresos|floatformat:"2g" }}</strong></td>
                     {% else %}
-                    <td class="dato text-end">$ {{ total.cobrado|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end">$ {{ total.invertido|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end"><strong>$ {{ total.ganancia|floatformat:2|intcomma }}</strong></td>
+                    <td class="dato text-end">$ {{ total.cobrado|floatformat:"2g" }}</td>
+                    <td class="dato text-end">$ {{ total.invertido|floatformat:"2g" }}</td>
+                    <td class="dato text-end"><strong>$ {{ total.ganancia|floatformat:"2g" }}</strong></td>
                     {% endif %}
                 </tr>
             </tfoot>
@@ -112,9 +112,9 @@
                     <td class="dato text-end">{{ n.usados_este_mes }}</td>
                     <td class="dato text-end">{{ n.saldo }}</td>
                     <td class="dato text-end">{{ n.clientes.vigentes }}</td>
-                    <td class="dato text-end">$ {{ n.invertido|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end">$ {{ n.cobrado|floatformat:2|intcomma }}</td>
-                    <td class="dato text-end">$ {{ n.ganancia|floatformat:2|intcomma }}</td>
+                    <td class="dato text-end">$ {{ n.invertido|floatformat:"2g" }}</td>
+                    <td class="dato text-end">$ {{ n.cobrado|floatformat:"2g" }}</td>
+                    <td class="dato text-end">$ {{ n.ganancia|floatformat:"2g" }}</td>
                 </tr>
             {% endfor %}
             </tbody>

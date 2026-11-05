@@ -22,6 +22,7 @@ from actividad.models import Accion
 from actividad.registro import registrar
 from notificaciones.models import Nivel
 from notificaciones.servicios import notificar, notificar_a_quienes_puedan
+from usuarios import servicios as usuario_servicios
 from usuarios.models import Rol, Usuario
 
 from .models import (ANTICIPO_RENOVACION, DEMOS_POR_CLIENTE, DIAS_POR_CREDITO, HORAS_POR_DEMO, Cliente, Compra,
@@ -61,6 +62,88 @@ def crear_revendedor(username, password, first_name='', last_name='', telefono='
         debe_cambiar_password=True, creado_por=por if getattr(por, 'is_authenticated', False) else None,
     )
     return hacer_revendedor(usuario, precio_pantalla, por)
+
+
+# ── Eliminar y restaurar ─────────────────────────────────────────────
+# Eliminar es una baja lógica (ver herramientas/modelos.py): deja de verse y de
+# poder usarse, pero la libreta, las cargas y las compras quedan, para que las
+# cuentas del negocio no cambien, y se puede restaurar desde la papelera.
+
+@transaction.atomic
+def eliminar_cliente(cliente, por=None):
+    """Su código deja de valer y sus aparatos se desconectan ya. Lo cargado no vuelve al revendedor."""
+    cliente = _bloquear_cliente(cliente)
+    cliente.dispositivos.all().delete()
+    cliente.eliminar(por)
+    registrar(por, Accion.ELIMINAR, f'Eliminó al cliente {cliente}', objeto=cliente, modulo='reventa')
+    if cliente.revendedor_id and not cliente.propio and getattr(por, 'pk', None) != cliente.revendedor.usuario_id:
+        notificar(cliente.revendedor.usuario, f'Se eliminó a tu cliente {cliente}',
+                  'El administrador lo eliminó: ya no puede entrar a la app.', nivel=Nivel.AVISO)
+    return cliente
+
+
+@transaction.atomic
+def restaurar_cliente(cliente, por=None):
+    """Vuelve como estaba: con su código, sus pantallas y su saldo. Los aparatos entran de nuevo."""
+    if cliente.revendedor_id and cliente.revendedor.esta_eliminado:
+        raise ReventaError(f'Es de {cliente.revendedor}, que también está en la papelera: restauralo primero.')
+    cliente.restaurar(por)
+    registrar(por, Accion.EDITAR, f'Restauró al cliente {cliente}', objeto=cliente, modulo='reventa')
+    return cliente
+
+
+@transaction.atomic
+def eliminar_revendedor(revendedor, que_hacer, destino=None, por=None):
+    """
+    Se le cierra el panel y sus compras pendientes se cancelan. Sus clientes,
+    según `que_hacer`: 'pasar' (a `destino`), 'directos' (de la empresa) o
+    'eliminar'. Su pantalla propia se elimina siempre: es de él.
+    """
+    revendedor = _bloquear(revendedor)
+    usuario = revendedor.usuario
+    if getattr(por, 'pk', None) == usuario.pk:
+        raise ReventaError('No podés eliminarte a vos mismo.')
+    if usuario.is_superuser:
+        raise ReventaError('Es superusuario: no se le puede cerrar el panel desde acá.')
+    if que_hacer == 'pasar' and (destino is None or destino.pk == revendedor.pk):
+        raise ReventaError('Elegí a qué otro revendedor pasan sus clientes.')
+    # Primero él: los clientes que se van con él quedan con una fecha igual o posterior (ver restaurar_revendedor)
+    revendedor.eliminar(por)
+    for cliente in Cliente.objects.filter(revendedor=revendedor):
+        if que_hacer == 'eliminar' or cliente.propio:
+            eliminar_cliente(cliente, por=por)
+        else:
+            pasar_a_revendedor(cliente, destino if que_hacer == 'pasar' else None, por=por)
+    for compra in revendedor.compras.filter(estado=Compra.Estado.PENDIENTE):
+        cancelar_compra(compra, por=por)
+    usuario_servicios.cambiar_estado(usuario, False, por)
+    registrar(por, Accion.ELIMINAR, f'Eliminó al revendedor {revendedor}', objeto=revendedor, modulo='reventa')
+    return revendedor
+
+
+@transaction.atomic
+def restaurar_revendedor(revendedor, por=None):
+    """Vuelve con su saldo y su panel, y con los clientes que se eliminaron junto con él (no los de antes)."""
+    desde = revendedor.eliminado_en
+    revendedor.restaurar(por)
+    usuario_servicios.cambiar_estado(revendedor.usuario, True, por)
+    for cliente in Cliente.todos.filter(revendedor=revendedor, eliminado_en__gte=desde):
+        restaurar_cliente(cliente, por=por)
+    registrar(por, Accion.EDITAR, f'Restauró al revendedor {revendedor}', objeto=revendedor, modulo='reventa')
+    return revendedor
+
+
+def eliminar_paquete(paquete, por=None):
+    """Deja de ofrecerse. Las compras ya hechas guardan sus créditos y su precio."""
+    paquete.eliminar(por)
+    registrar(por, Accion.ELIMINAR, f'Eliminó el paquete {paquete}', objeto=paquete, modulo='reventa')
+    return paquete
+
+
+def restaurar_paquete(paquete, por=None):
+    paquete.restaurar(por)
+    registrar(por, Accion.EDITAR, f'Restauró el paquete {paquete}', objeto=paquete, modulo='reventa')
+    return paquete
 
 
 # ── Créditos ─────────────────────────────────────────────────────────

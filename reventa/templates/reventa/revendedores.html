@@ -46,7 +46,7 @@
                     <td class="texto-suave d-none d-md-table-cell">{{ r.usuario.username }}{% if not r.usuario.is_active %} <span class="chip chip-no">Inactivo</span>{% endif %}</td>
                     <td class="dato">{{ r.saldo_actual }}</td>
                     <td class="dato">{{ r.clientes_vigentes }}</td>
-                    <td class="dato d-none d-lg-table-cell">$ {{ r.precio_pantalla|floatformat:2|intcomma }}</td>
+                    <td class="dato d-none d-lg-table-cell">$ {{ r.precio_pantalla|floatformat:"2g" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

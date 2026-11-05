@@ -23,9 +23,9 @@
 <div class="metricas-bloque">
 <h3 class="metricas-bloque-titulo"><i class="bi bi-cash-stack" aria-hidden="true"></i> Balance</h3>
 <dl class="ficha-datos resumen-metricas resumen-balance">
-    <div><dt>Cobrado a clientes</dt><dd class="dato">$ {{ n.cobrado|floatformat:2|intcomma }}</dd></div>
-    <div><dt>Invertido en créditos</dt><dd class="dato">$ {{ n.invertido|floatformat:2|intcomma }}</dd></div>
-    <div><dt>Ganancia</dt><dd class="dato">$ {{ n.ganancia|floatformat:2|intcomma }}</dd></div>
+    <div><dt>Cobrado a clientes</dt><dd class="dato">$ {{ n.cobrado|floatformat:"2g" }}</dd></div>
+    <div><dt>Invertido en créditos</dt><dd class="dato">$ {{ n.invertido|floatformat:"2g" }}</dd></div>
+    <div><dt>Ganancia</dt><dd class="dato">$ {{ n.ganancia|floatformat:"2g" }}</dd></div>
 </dl>
 </div>
 </div>

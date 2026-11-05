@@ -29,8 +29,9 @@ from usuarios.permisos import chequear_permiso
 
 from . import consultas, estadisticas, servicios
 from .forms import (ActivarForm, CargarMesesForm, ClienteForm, CobroForm, CreditosForm, ElegirPaqueteForm,
-                    PantallaForm, PaqueteForm, PasarClienteForm, PrecioForm, RevendedorNuevoForm)
-from .models import DEMOS_POR_CLIENTE, HORAS_POR_DEMO, HORAS_SIN_SENAL, Compra, Paquete, Revendedor
+                    EliminarForm, EliminarRevendedorForm, PantallaForm, PaqueteForm, PasarClienteForm, PrecioForm,
+                    RevendedorNuevoForm)
+from .models import DEMOS_POR_CLIENTE, HORAS_POR_DEMO, HORAS_SIN_SENAL, Cliente, Compra, Paquete, Revendedor
 from .servicios import ReventaError
 
 POR_PAGINA = 25
@@ -185,6 +186,25 @@ def revendedor_accion(request, pk):
             _ejecutar(request, servicios.registrar_compra_pagada, revendedor, form.cleaned_data['paquete'],
                       exito='Compra cargada como pagada: los créditos ya están en su saldo.')
     return redirect('reventa:revendedor', pk=pk)
+
+
+@requiere_permiso('administrar_reventa')
+def revendedor_eliminar(request, pk):
+    revendedor = get_object_or_404(Revendedor.objects.select_related('usuario'), pk=pk)
+    en_juego = consultas.si_se_elimina_el_revendedor(revendedor)
+    form = EliminarRevendedorForm(
+        request.POST or None, revendedor=revendedor, tiene_clientes=en_juego['clientes'] > 0, nombre=str(revendedor),
+        riesgo=en_juego['riesgo'], texto_entiendo='Entiendo lo que va a pasar y quiero eliminarlo igual.')
+    if request.method == 'POST' and form.is_valid():
+        datos = form.cleaned_data
+        hecho = _ejecutar(request, servicios.eliminar_revendedor, revendedor, datos.get('que_hacer', 'directos'),
+                          destino=datos.get('destino'),
+                          exito=f'Se eliminó a {revendedor}. Queda en la papelera por si fue un error.')
+        return redirect('reventa:revendedores' if hecho else 'reventa:revendedor', **({} if hecho else {'pk': pk}))
+    return render(request, 'reventa/eliminar.html', {
+        'titulo': f'¿Eliminar a {revendedor}?', 'form': form, 'en_juego': en_juego, 'revendedor': revendedor,
+        'volver': reverse('reventa:revendedor', args=[pk]), 'boton': 'Eliminar revendedor',
+    })
 
 
 # ── Clientes ─────────────────────────────────────────────────────────
@@ -394,6 +414,22 @@ def cliente_pasar(request, pk):
     return redirect('reventa:cliente', pk=pk)
 
 
+@requiere_permiso('administrar_reventa')
+def cliente_eliminar(request, pk):
+    cliente = get_object_or_404(Cliente, pk=pk)
+    en_juego = consultas.si_se_elimina_el_cliente(cliente)
+    form = EliminarForm(request.POST or None, nombre=cliente.nombre, riesgo=en_juego['riesgo'],
+                        texto_entiendo='Entiendo que se le corta el servicio ya y que lo pagado no se devuelve solo.')
+    if request.method == 'POST' and form.is_valid():
+        servicios.eliminar_cliente(cliente, por=request.user)
+        messages.success(request, f'Se eliminó a {cliente}. Queda en la papelera por si fue un error.')
+        return redirect('reventa:clientes')
+    return render(request, 'reventa/eliminar.html', {
+        'titulo': f'¿Eliminar a {cliente}?', 'form': form, 'en_juego': en_juego, 'cliente': cliente,
+        'volver': reverse('reventa:cliente', args=[pk]), 'boton': 'Eliminar cliente',
+    })
+
+
 @require_POST
 @requiere_reventa
 def cliente_liberar(request, pk):
@@ -480,6 +516,48 @@ def paquete_editar(request, pk=None):
         'volver': reverse('reventa:paquetes'),
         'bajada': 'Cambiar el precio no afecta a las compras ya hechas.',
     })
+
+
+@requiere_permiso('gestionar_paquetes')
+def paquete_eliminar(request, pk):
+    paquete = get_object_or_404(Paquete, pk=pk)
+    form = EliminarForm(request.POST or None, nombre=paquete.nombre)
+    if request.method == 'POST' and form.is_valid():
+        servicios.eliminar_paquete(paquete, por=request.user)
+        messages.success(request, f'Se eliminó el paquete "{paquete.nombre}". Queda en la papelera por si fue un '
+                                  f'error.')
+        return redirect('reventa:paquetes')
+    return render(request, 'reventa/eliminar.html', {
+        'titulo': f'¿Eliminar el paquete "{paquete.nombre}"?', 'form': form, 'paquete': paquete,
+        'volver': reverse('reventa:paquetes'), 'boton': 'Eliminar paquete',
+    })
+
+
+# ── La papelera ──────────────────────────────────────────────────────
+
+@requiere_permiso('administrar_reventa')
+def papelera(request):
+    return render(request, 'reventa/papelera.html', {
+        **consultas.papelera(), 'puede_paquetes': chequear_permiso(request.user, 'gestionar_paquetes'),
+    })
+
+
+@require_POST
+@requiere_permiso('administrar_reventa')
+def papelera_restaurar(request, que, pk):
+    if que == 'cliente':
+        cliente = get_object_or_404(Cliente.todos, pk=pk, eliminado_en__isnull=False)
+        _ejecutar(request, servicios.restaurar_cliente, cliente, exito=f'{cliente} volvió, con su código y su saldo.')
+    elif que == 'revendedor':
+        revendedor = get_object_or_404(Revendedor.todos, pk=pk, eliminado_en__isnull=False)
+        _ejecutar(request, servicios.restaurar_revendedor, revendedor,
+                  exito=f'{revendedor} volvió, con su saldo y su panel.')
+    elif que == 'paquete':
+        if not chequear_permiso(request.user, 'gestionar_paquetes'):
+            raise PermissionDenied
+        paquete = get_object_or_404(Paquete.todos, pk=pk, eliminado_en__isnull=False)
+        _ejecutar(request, servicios.restaurar_paquete, paquete, exito=f'El paquete "{paquete.nombre}" volvió.')
+    return redirect('reventa:papelera')
 
 
 # ── Compras (confirmar pagos) ────────────────────────────────────────

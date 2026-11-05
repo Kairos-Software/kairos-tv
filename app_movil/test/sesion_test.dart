@@ -19,6 +19,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _codigo = '48219037';
 final _cliente = {'nombre': 'Ana', 'codigo': '4821 9037', 'pantallas': 1, 'conectados': 1};
@@ -26,9 +27,12 @@ final _cliente = {'nombre': 'Ana', 'codigo': '4821 9037', 'pantallas': 1, 'conec
 /// El servidor de mentira: el token viejo ya no vale, y entrar con el código
 /// responde [alEntrar] (por defecto, entra y da un token nuevo).
 class _Servidor {
-  _Servidor({this.alEntrar});
+  _Servidor({this.alEntrar, this.alPedirCliente});
 
   final http.Response Function()? alEntrar;
+
+  /// Si está, es lo que contesta "cliente/" (un error que no es de la sesión).
+  final http.Response Function()? alPedirCliente;
 
   /// Si está, "canales/" no contesta hasta que se complete (una respuesta que llega tarde).
   Completer<void>? retener;
@@ -55,6 +59,7 @@ class _Servidor {
       return alEntrar?.call() ?? _json({'token': 'c_nuevo', 'cliente': _cliente}, 200);
     }
     if (ruta == 'canales/') await retener?.future;
+    if (ruta == 'cliente/' && alPedirCliente != null) return alPedirCliente!();
     if (token == 'c_nuevo') return _json(_cliente, 200);
     return _json({'codigo': 'no_autenticado', 'detalle': 'Token inválido.'}, 401);
   }
@@ -80,6 +85,7 @@ void main() {
   late File catalogoGuardado;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     carpeta = Directory.systemTemp.createTempSync('sesion_test');
     CopiaCatalogo.carpetaDePrueba = carpeta;
     catalogoGuardado = File('${carpeta.path}/servidor/vivo.json')
@@ -194,6 +200,151 @@ void main() {
     expect(sesion.estado, EstadoSesion.sinSesion);
     expect(servidor.pedidos.where((p) => p.startsWith('POST cliente/login/')), isEmpty);
     expect(await _tokenGuardado(), isNull);
+  });
+
+  group('después de actualizar la app', () {
+    test('si se perdió lo guardado en el almacén seguro, sigue con la copia y no pide el código', () async {
+      final servidor = _Servidor();
+      final sesion = _sesion(servidor, token: 'c_nuevo');
+      addTearDown(sesion.dispose);
+      await sesion.iniciar();
+      expect(sesion.estado, EstadoSesion.conSesion);
+
+      // La versión nueva abre con el almacén vacío (como cuando Android le falla la clave)
+      FlutterSecureStorage.setMockInitialValues({});
+      final despues = http.runWithClient(() => Sesion()..api, () => MockClient(servidor.responder));
+      addTearDown(despues.dispose);
+      await despues.iniciar();
+
+      expect(despues.estado, EstadoSesion.conSesion);
+      expect(despues.ultimoCodigo, _codigo);
+      expect(await _tokenGuardado(), 'c_nuevo', reason: 'vuelve a quedar en el almacén seguro');
+      expect(servidor.pedidos.where((p) => p.startsWith('POST')), isEmpty, reason: 'no ocupa otra pantalla');
+    });
+
+    test('un error que no es de la sesión no la borra: muestra Reintentar', () async {
+      var conProblema = true;
+      final servidor = _Servidor(
+        alPedirCliente: () => conProblema
+            ? http.Response('<html>Forbidden</html>', 403)
+            : http.Response(jsonEncode(_cliente), 200, headers: {'content-type': 'application/json; charset=utf-8'}),
+      );
+      final sesion = _sesion(servidor, token: 'c_nuevo');
+      addTearDown(sesion.dispose);
+
+      await sesion.iniciar();
+
+      expect(sesion.estado, EstadoSesion.sinConexion);
+      expect(await _tokenGuardado(), 'c_nuevo');
+
+      conProblema = false;
+      await sesion.reintentar();
+      expect(sesion.estado, EstadoSesion.conSesion);
+    });
+
+    test('"Cerrar sesión" borra también la copia: al abrir de nuevo pide el código', () async {
+      final servidor = _Servidor();
+      final sesion = _sesion(servidor, token: 'c_nuevo');
+      addTearDown(sesion.dispose);
+      await sesion.iniciar();
+      await sesion.salir();
+
+      final despues = http.runWithClient(() => Sesion()..api, () => MockClient(servidor.responder));
+      addTearDown(despues.dispose);
+      await despues.iniciar();
+
+      expect(despues.estado, EstadoSesion.sinSesion);
+      expect(despues.ultimoCodigo, _codigo, reason: 'el login lo muestra ya escrito');
+    });
+  });
+
+  group('escribir el código de nuevo', () {
+    /// El login con un código completo que el servidor rechaza: OK y queda el error.
+    Future<Sesion> codigoRechazado(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final sesion = _sesion(
+        _Servidor(
+          alEntrar: () => http.Response(
+            jsonEncode({'codigo': 'codigo_invalido', 'detalle': 'El código no es correcto.'}),
+            400,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+      addTearDown(sesion.dispose);
+      sesion.ultimoCodigo = _codigo;
+      await tester.pumpWidget(
+        SesionScope(
+          sesion: sesion,
+          child: const MaterialApp(home: Scaffold(body: PantallaAcceso())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      sesion.api.token = null;
+      for (final tecla in [
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.select,
+      ]) {
+        await tester.sendKeyEvent(tecla);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Código incorrecto'), findsOneWidget);
+      return sesion;
+    }
+
+    setUp(() => Aparato.esTv = true);
+    tearDown(() => Aparato.esTv = false);
+
+    testWidgets('con el código rechazado, un número nuevo empieza otro código', (tester) async {
+      await codigoRechazado(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.pumpAndSettle();
+
+      expect(find.text('5___  ____'), findsOneWidget);
+      expect(find.text('Código incorrecto'), findsNothing);
+    });
+
+    testWidgets('con las teclas de la pantalla también: elegir un número empieza otro código', (tester) async {
+      await codigoRechazado(tester);
+
+      // Del OK a la fila de arriba: el 9
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      expect(find.text('9___  ____'), findsOneWidget);
+    });
+
+    testWidgets('si el foco queda en el aire (se cerró un cartel encima), vuelve a los números', (tester) async {
+      await codigoRechazado(tester);
+
+      // Como el cartel de actualización: suelta el foco, se abre y se cierra con "Más tarde"
+      FocusManager.instance.primaryFocus?.unfocus();
+      final contexto = tester.element(find.byType(PantallaAcceso));
+      unawaited(
+        showDialog<void>(
+          context: contexto,
+          builder: (_) => const AlertDialog(content: Text('Versión nueva')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Navigator.of(contexto).pop();
+      await tester.pumpAndSettle();
+
+      expect(FocusManager.instance.primaryFocus, isNot(isA<FocusScopeNode>()));
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit7);
+      await tester.pumpAndSettle();
+      expect(find.text('7___  ____'), findsOneWidget);
+    });
   });
 
   group('el login en la TV', () {

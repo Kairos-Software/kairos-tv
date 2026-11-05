@@ -9,7 +9,7 @@ from django.db.models import Count, OuterRef, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from .models import Cliente, Compra, CreditoCliente, Movimiento, Pantalla, Revendedor
+from .models import Cliente, Compra, CreditoCliente, Dispositivo, Movimiento, Pantalla, Paquete, Revendedor
 
 DIAS_POR_VENCER = 7
 
@@ -70,6 +70,48 @@ def resumen_revendedor(revendedor):
         'invertido': invertido,
         'ganancia': cobrado - invertido,
         'compras_pendientes': revendedor.compras.filter(estado=Compra.Estado.PENDIENTE).count(),
+    }
+
+
+def si_se_elimina_el_cliente(cliente):
+    """Lo que está en juego si se elimina: `riesgo` = hay algo en uso o pagado, que pide una confirmación más."""
+    datos = {
+        'puede_ver': cliente.puede_ver,
+        'vence': cliente.demo_hasta if cliente.en_demo else cliente.vence,
+        'en_demo': cliente.en_demo,
+        'conectados': cliente.dispositivos.count(),
+        'pantallas': cliente.pantallas.count(),
+        'saldo': cliente.saldo,
+        'cobrado': _suma(cliente.creditos.all(), 'monto_cobrado'),
+    }
+    datos['riesgo'] = bool(datos['puede_ver'] or datos['conectados'] or datos['saldo'] > 0)
+    return datos
+
+
+def si_se_elimina_el_revendedor(revendedor):
+    """Lo mismo para un revendedor. `clientes` no cuenta su pantalla propia: esa se va con él."""
+    clientes = Cliente.objects.filter(revendedor=revendedor, propio=False)
+    datos = {
+        'clientes': clientes.count(),
+        'viendo': sum(1 for cliente in clientes if cliente.puede_ver),
+        'conectados': Dispositivo.objects.filter(cliente__revendedor=revendedor, cliente__propio=False).count(),
+        'saldo': revendedor.saldo,
+        'saldo_clientes': _suma(CreditoCliente.objects.filter(cliente__in=clientes), 'cantidad'),
+        'compras_pendientes': revendedor.compras.filter(estado=Compra.Estado.PENDIENTE).count(),
+    }
+    datos['riesgo'] = bool(datos['clientes'] or datos['saldo'] > 0 or datos['compras_pendientes'])
+    return datos
+
+
+def papelera():
+    """Lo eliminado, lo último primero."""
+    return {
+        'clientes': (Cliente.todos.filter(eliminado_en__isnull=False)
+                     .select_related('revendedor__usuario', 'eliminado_por').order_by('-eliminado_en')),
+        'revendedores': (Revendedor.todos.filter(eliminado_en__isnull=False)
+                         .select_related('usuario', 'eliminado_por').order_by('-eliminado_en')),
+        'paquetes': (Paquete.todos.filter(eliminado_en__isnull=False)
+                     .select_related('eliminado_por').order_by('-eliminado_en')),
     }
 
 

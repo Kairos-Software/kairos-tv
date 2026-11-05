@@ -10,6 +10,7 @@ import '../widgets/imagen_guardada.dart';
 import 'datos.dart';
 import 'estilo.dart';
 import 'logo_legible.dart';
+import 'movimiento.dart';
 
 /// Iniciales de un nombre ("Canal 26" -> "C2"), lo que se ve si no hay imagen.
 String inicialesDe(String nombre) =>
@@ -469,78 +470,80 @@ class TarjetaPoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Tono.capa,
-      borderRadius: BorderRadius.circular(Curva.grande),
-      clipBehavior: Clip.antiAlias,
-      elevation: 4,
-      shadowColor: Colors.black54,
-      child: InkWell(
-        onTap: alTocar,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AspectRatio(
-              aspectRatio: 2 / 3,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Imagen(url: imagen, nombre: titulo),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Color(0xCC1F1F24), Colors.transparent],
-                        stops: [0, .5],
+    return Presionable(
+      child: Material(
+        color: Tono.capa,
+        borderRadius: BorderRadius.circular(Curva.tarjeta),
+        clipBehavior: Clip.antiAlias,
+        elevation: 4,
+        shadowColor: Colors.black54,
+        child: InkWell(
+          onTap: alTocar,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 2 / 3,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Imagen(url: imagen, nombre: titulo),
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Color(0xCC1F1F24), Colors.transparent],
+                          stops: [0, .5],
+                        ),
                       ),
                     ),
-                  ),
-                  if (etiqueta != null && etiqueta!.isNotEmpty)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      right: 52,
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: Etiqueta(etiqueta!, color: Tono.celesteClaro),
+                    if (etiqueta != null && etiqueta!.isNotEmpty)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        right: 52,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Etiqueta(etiqueta!, color: Tono.celesteClaro),
+                        ),
                       ),
+                    if (esquina != null) Positioned(top: 8, right: 8, child: Etiqueta(esquina!, color: Tono.dorado)),
+                    if (progreso != null)
+                      Positioned(left: 0, right: 0, bottom: 0, child: BarraAvance(fraccion: progreso!)),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Letra.etiqueta.copyWith(fontWeight: FontWeight.w700),
                     ),
-                  if (esquina != null) Positioned(top: 8, right: 8, child: Etiqueta(esquina!, color: Tono.dorado)),
-                  if (progreso != null)
-                    Positioned(left: 0, right: 0, bottom: 0, child: BarraAvance(fraccion: progreso!)),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitulo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Letra.cuerpo.copyWith(fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titulo,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Letra.etiqueta.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitulo,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Letra.cuerpo.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Tarjeta 16:9 de "Directos Destacados Ahora" (un canal en vivo).
+/// Tarjeta de un canal en vivo: el logo sobre una luz, EN VIVO, el número en dorado y el nombre.
 class TarjetaEnVivo extends StatelessWidget {
   const TarjetaEnVivo({super.key, required this.canal, required this.alTocar, this.ancho = 288, this.numero});
 
@@ -554,97 +557,95 @@ class TarjetaEnVivo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final categoria = categoriaLegible(canal.categoria);
+    final elNumero = numero ?? canal.numero;
+    final forma = BorderRadius.circular(Curva.tarjeta);
     return SizedBox(
       width: ancho,
-      child: Material(
-        color: Tono.capaBaja,
-        borderRadius: BorderRadius.circular(Curva.grande),
-        clipBehavior: Clip.antiAlias,
-        elevation: 6,
-        shadowColor: Colors.black54,
-        child: InkWell(
-          onTap: alTocar,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // No hay captura del vivo: el logo del canal sobre un fondo con luz
-                    DecoratedBox(
-                      decoration: const BoxDecoration(
-                        gradient: RadialGradient(
-                          center: Alignment(0, -.2),
-                          radius: 1.1,
-                          colors: [Color(0xFF2A292E), Tono.capaMinima],
-                        ),
-                      ),
-                      child: Imagen(
-                        url: canal.logo,
-                        nombre: canal.nombre,
-                        ajuste: BoxFit.contain,
-                        relleno: const EdgeInsets.fromLTRB(56, 30, 56, 30),
-                        fondo: Colors.transparent,
-                        tamanioIniciales: 34,
-                      ),
-                    ),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [Tono.capaMinima, Colors.transparent],
-                          stops: [0, .45],
-                        ),
-                      ),
-                    ),
-                    const Positioned(top: 10, left: 10, child: InsigniaEnVivo()),
-                    if ((numero ?? canal.numero).isNotEmpty)
-                      Positioned(bottom: 10, right: 10, child: Etiqueta('CH ${numero ?? canal.numero}')),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      child: Presionable(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: forma,
+            border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E2A2E), Color(0xFF17171C)],
+              stops: [0, .72],
+            ),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            borderRadius: forma,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: alTocar,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(color: Tono.celeste, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            categoria.isEmpty ? 'TV EN VIVO' : categoria.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Letra.mini.copyWith(
-                              color: Tono.celeste,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: .6,
+                        // No hay captura del vivo: el logo del canal sobre una luz
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              center: const Alignment(0, .1),
+                              radius: .8,
+                              colors: [Tono.celeste.withValues(alpha: .16), Colors.transparent],
                             ),
                           ),
+                          child: Imagen(
+                            url: canal.logo,
+                            nombre: canal.nombre,
+                            ajuste: BoxFit.contain,
+                            relleno: EdgeInsets.fromLTRB(ancho * .22, ancho * .1, ancho * .22, ancho * .06),
+                            fondo: Colors.transparent,
+                            tamanioIniciales: 34,
+                          ),
                         ),
-                        Text('En Directo', style: Letra.numeros),
+                        const Positioned(top: 8, left: 8, child: InsigniaEnVivo()),
+                        if (elNumero.isNotEmpty)
+                          Positioned(
+                            top: 10,
+                            right: 12,
+                            child: Text(
+                              elNumero,
+                              style: Letra.numeros.copyWith(
+                                color: Tono.dorado,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      canal.nombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Letra.titulo.copyWith(fontSize: 16, height: 20 / 16),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          canal.nombre,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Letra.titulo.copyWith(fontSize: 15, height: 20 / 15),
+                        ),
+                        Text(
+                          categoria.isEmpty ? 'TV en vivo' : categoria,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Letra.cuerpo.copyWith(fontSize: 12, height: 16 / 12),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -677,85 +678,87 @@ class TarjetaContinuar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 256,
-      child: Material(
-        color: Tono.capa,
-        borderRadius: BorderRadius.circular(Curva.grande),
-        clipBehavior: Clip.antiAlias,
-        elevation: 4,
-        shadowColor: Colors.black54,
-        child: InkWell(
-          onTap: alTocar,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Imagen(url: imagen, nombre: titulo),
-                    ColoredBox(color: Tono.fondo.withValues(alpha: .4)),
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Tono.capaMinima.withValues(alpha: .8),
-                          shape: BoxShape.circle,
-                          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 12)],
+      child: Presionable(
+        child: Material(
+          color: Tono.capa,
+          borderRadius: BorderRadius.circular(Curva.tarjeta),
+          clipBehavior: Clip.antiAlias,
+          elevation: 4,
+          shadowColor: Colors.black54,
+          child: InkWell(
+            onTap: alTocar,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Imagen(url: imagen, nombre: titulo),
+                      ColoredBox(color: Tono.fondo.withValues(alpha: .4)),
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Tono.capaMinima.withValues(alpha: .8),
+                            shape: BoxShape.circle,
+                            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 12)],
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded, size: 24, color: Tono.celeste),
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, size: 24, color: Tono.celeste),
                       ),
-                    ),
-                    Positioned(top: 8, right: 8, child: Etiqueta(etiqueta)),
-                    Positioned(left: 0, right: 0, bottom: 0, child: BarraAvance(fraccion: progreso.fraccion)),
-                  ],
+                      Positioned(top: 8, right: 8, child: Etiqueta(etiqueta)),
+                      Positioned(left: 0, right: 0, bottom: 0, child: BarraAvance(fraccion: progreso.fraccion)),
+                    ],
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 4, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            titulo,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Letra.etiqueta.copyWith(fontWeight: FontWeight.w700),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 4, 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              titulo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Letra.etiqueta.copyWith(fontWeight: FontWeight.w700),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Text(
-                            '${(progreso.fraccion * 100).round()}%',
-                            style: Letra.numeros.copyWith(color: Tono.celeste),
+                          const SizedBox(width: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Text(
+                              '${(progreso.fraccion * 100).round()}%',
+                              style: Letra.numeros.copyWith(color: Tono.celeste),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(subtitulo, maxLines: 1, overflow: TextOverflow.ellipsis, style: Letra.cuerpo),
-                    Row(
-                      children: [
-                        const Icon(Icons.schedule_rounded, size: 14, color: Tono.textoSuave),
-                        const SizedBox(width: 4),
-                        Expanded(child: Text('${duracionLegible(progreso.falta)} restantes', style: Letra.numeros)),
-                        IconButton(
-                          tooltip: 'Quitar de Continuar viendo',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: alQuitar,
-                          icon: const Icon(Icons.more_vert_rounded, size: 16, color: Tono.textoSuave),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(subtitulo, maxLines: 1, overflow: TextOverflow.ellipsis, style: Letra.cuerpo),
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule_rounded, size: 14, color: Tono.textoSuave),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text('${duracionLegible(progreso.falta)} restantes', style: Letra.numeros)),
+                          IconButton(
+                            tooltip: 'Quitar de Continuar viendo',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: alQuitar,
+                            icon: const Icon(Icons.more_vert_rounded, size: 16, color: Tono.textoSuave),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

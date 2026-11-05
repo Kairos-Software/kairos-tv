@@ -1,6 +1,8 @@
 /// Inicio de la TV (diseno_kairos_tv: tv-04). TV en vivo primero:
 ///
-///   portada con un canal (el último visto, un favorito o uno con logo):
+///   portada con el portal de la marca (movil/portal.dart) y un canal: el último
+///   visto, un favorito o uno con logo. Al pasar el foco por las tarjetas de
+///   canales, la portada pasa a ese canal (cada tira del portal corre por su lado):
 ///     Ver en vivo · Favorito · Abrir guía
 ///   Tus canales favoritos · Últimos canales vistos · Continuar viendo ·
 ///   una fila por categoría de TV · Películas · Series · una fila por sección
@@ -16,6 +18,7 @@ import '../api/modelos.dart';
 import '../movil/componentes.dart' show reloj;
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
+import '../movil/portal.dart';
 import '../sesion.dart';
 import 'mi_agenda.dart';
 import 'detalle.dart';
@@ -24,8 +27,29 @@ import 'foco.dart';
 import 'piezas.dart';
 import 'reproductor.dart';
 
-class InicioTv extends StatelessWidget {
+class InicioTv extends StatefulWidget {
   const InicioTv({super.key});
+
+  @override
+  State<InicioTv> createState() => _InicioTvState();
+
+  static String _saludo(Sesion sesion) {
+    final hora = DateTime.now().hour;
+    final saludo = hora < 6 || hora >= 20 ? 'Buenas noches' : (hora < 13 ? 'Buen día' : 'Buenas tardes');
+    final nombre = (sesion.cliente?.nombre ?? sesion.perfil?.nombreCompleto ?? '').split(' ').first;
+    return nombre.isEmpty ? saludo : '$saludo, $nombre';
+  }
+}
+
+class _InicioTvState extends State<InicioTv> {
+  /// El último canal por el que pasó el foco: el que muestra la portada.
+  final ValueNotifier<int?> _canalEnFoco = ValueNotifier(null);
+
+  @override
+  void dispose() {
+    _canalEnFoco.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +83,9 @@ class InicioTv extends StatelessWidget {
                 favorito: biblioteca.estaEnMiLista(Biblioteca.claveDe(canal)),
                 alOk: () => verCanalTv(context, canal, lista: canales),
                 alOkLargo: () => alternarFavoritoTv(context, Biblioteca.claveDe(canal)),
+                alEnfocar: (enfocada) {
+                  if (enfocada) _canalEnFoco.value = canal.id;
+                },
               ),
           ],
         );
@@ -68,7 +95,7 @@ class InicioTv extends StatelessWidget {
           children: [
             EncabezadoTv(
               sobretitulo: 'Inicio',
-              titulo: _saludo(SesionScope.of(context)),
+              titulo: InicioTv._saludo(SesionScope.of(context)),
               accion: BotonTv(
                 texto: 'Buscar',
                 icono: Icons.search_rounded,
@@ -76,7 +103,12 @@ class InicioTv extends StatelessWidget {
               ),
             ),
             if (hayQueSeguir) _SeguirAca(seguir: seguir),
-            if (destacado != null) _Portada(canal: destacado, foco: !hayQueSeguir),
+            if (destacado != null)
+              ValueListenableBuilder<int?>(
+                valueListenable: _canalEnFoco,
+                builder: (context, id, _) =>
+                    _Portada(canal: (id == null ? null : catalogo.canalPorId(id)) ?? destacado, foco: !hayQueSeguir),
+              ),
             // Lo que cada uno anotó con "Recordarme" (tv/mi_agenda.dart)
             const FilaMiAgendaTv(),
             if (catalogo.canales.isEmpty &&
@@ -130,16 +162,9 @@ class InicioTv extends StatelessWidget {
       },
     );
   }
-
-  static String _saludo(Sesion sesion) {
-    final hora = DateTime.now().hour;
-    final saludo = hora < 6 || hora >= 20 ? 'Buenas noches' : (hora < 13 ? 'Buen día' : 'Buenas tardes');
-    final nombre = (sesion.cliente?.nombre ?? sesion.perfil?.nombreCompleto ?? '').split(' ').first;
-    return nombre.isEmpty ? saludo : '$saludo, $nombre';
-  }
 }
 
-/// La portada: el canal destacado, con su logo grande a la derecha sobre una luz celeste.
+/// La portada: el canal destacado y, a la derecha, el portal de la marca con sus iniciales.
 class _Portada extends StatelessWidget {
   const _Portada({required this.canal, this.foco = true});
 
@@ -179,35 +204,94 @@ class _Portada extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Row(
-                      children: [
-                        const InsigniaEnVivoTv(grande: true),
-                        if (categoria.isNotEmpty) ...[
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: Tono.capaAlta,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
-                            ),
-                            child: Text(
-                              categoria,
-                              style: const TextStyle(
-                                fontFamily: Letra.texto,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: Tono.texto,
+                    // Al pasar de canal, los datos nuevos suben y los viejos se van
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 380),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      layoutBuilder: (actual, anteriores) =>
+                          Stack(alignment: Alignment.centerLeft, children: [...anteriores, ?actual]),
+                      transitionBuilder: (hijo, avance) => FadeTransition(
+                        opacity: avance,
+                        child: SlideTransition(
+                          position: Tween(begin: const Offset(0, .12), end: Offset.zero).animate(avance),
+                          child: hijo,
+                        ),
+                      ),
+                      child: Column(
+                        key: ValueKey(canal.id),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              const InsigniaEnVivoTv(grande: true),
+                              if (categoria.isNotEmpty) ...[
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: Tono.capaAlta,
+                                    borderRadius: BorderRadius.circular(99),
+                                    border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
+                                  ),
+                                  child: Text(
+                                    categoria,
+                                    style: const TextStyle(
+                                      fontFamily: Letra.texto,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: Tono.texto,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 22),
+                          Row(
+                            children: [
+                              if (canal.logo.isNotEmpty) ...[
+                                Container(
+                                  width: 112,
+                                  height: 112,
+                                  decoration: BoxDecoration(
+                                    color: Tono.capaMinima.withValues(alpha: .7),
+                                    borderRadius: BorderRadius.circular(Curva.tarjeta),
+                                    border: Border.all(color: Tono.celeste.withValues(alpha: .25)),
+                                  ),
+                                  child: LogoCanalTv(
+                                    canal: canal,
+                                    tamanioIniciales: 34,
+                                    relleno: const EdgeInsets.all(14),
+                                  ),
+                                ),
+                                const SizedBox(width: 22),
+                              ],
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      canal.nombre,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: LetraTv.portada,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      [if (numero.isNotEmpty) 'Canal $numero', 'Señal en vivo'].join(' · '),
+                                      style: LetraTv.cuerpo,
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ],
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 22),
-                    Text(canal.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: LetraTv.portada),
-                    const SizedBox(height: 10),
-                    Text([if (numero.isNotEmpty) 'Canal $numero', 'Señal en vivo'].join(' · '), style: LetraTv.cuerpo),
                     const SizedBox(height: 30),
                     FocusTraversalGroup(
                       child: Row(
@@ -241,20 +325,9 @@ class _Portada extends StatelessWidget {
             ),
             Expanded(
               flex: 9,
-              child: Center(
-                child: Container(
-                  width: 360,
-                  height: 230,
-                  decoration: BoxDecoration(
-                    color: Tono.capaMinima.withValues(alpha: .7),
-                    borderRadius: BorderRadius.circular(Curva.portada),
-                    border: Border.all(color: Tono.celeste.withValues(alpha: .25)),
-                    boxShadow: [
-                      BoxShadow(color: Tono.celeste.withValues(alpha: .18), blurRadius: 80, spreadRadius: 10),
-                    ],
-                  ),
-                  child: LogoCanalTv(canal: canal, tamanioIniciales: 84, relleno: const EdgeInsets.all(34)),
-                ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 18, 36, 18),
+                child: PortalCanal(letras: letrasDelPortal(canal.nombre)),
               ),
             ),
           ],

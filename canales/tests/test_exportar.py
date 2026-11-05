@@ -112,6 +112,16 @@ class ListaM3UTests(TestCase):
                          [("Canal '26'", 'https://x/Canal"26"-1.m3u8', ''),
                           ("Canal '26'", 'https://x/Canal"26"-2.m3u8', 'VLC/3.0')])
 
+    def test_una_pagina_con_reproductor_va_marcada(self):
+        # El analizador de canales de la PC no la tiene que mirar como video (ni darla por caída)
+        canal = _canal('Canal web', Categoria.objects.create(nombre='Web'), fuentes=2)
+        canal.fuentes.filter(prioridad=1).update(tipo=Fuente.Tipo.WEB)
+        texto = exportar.lista_m3u(exportar.elegir(exportar.Eleccion(canales=[canal.pk])))
+        web, comun = [linea for linea in texto.splitlines() if linea.startswith('#EXTINF')]
+        self.assertTrue(web.endswith('kairos-seccion="vivo" kairos-tipo="web",Canal web'))
+        self.assertNotIn('kairos-tipo', comun)
+        self.assertEqual(len(leer_m3u(texto)), 2)   # las otras apps la siguen leyendo igual
+
     def test_exportar_borrar_y_volver_a_importar_deja_todo_igual(self):
         secciones.crear('Música', Seccion.Forma.A_DEMANDA)
         cine = Categoria.objects.create(nombre='Cine', contenido=Contenido.PELICULA)

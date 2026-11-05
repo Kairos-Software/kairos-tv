@@ -14,6 +14,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api/cliente.dart';
 import 'aparato.dart';
@@ -35,6 +36,14 @@ class Sesion extends ChangeNotifier {
   /// borra al cerrar sesión: el login lo muestra ya escrito (por si lo olvida).
   static const _claveUltimoCodigo = 'ultimo_codigo';
   String ultimoCodigo = '';
+
+  /// Copia del token y del código en las preferencias de la app (privadas, no
+  /// cifradas). Si el aparato pierde el almacén seguro (la clave de Android
+  /// falla y el almacén se vacía solo: resetOnError), la sesión sigue igual y
+  /// no hace falta volver a poner el código ni ocupar otra pantalla. El token
+  /// se puede liberar desde el panel y la copia se borra al cerrar sesión.
+  static const _copiaToken = 'sesion_token';
+  static const _copiaCodigo = 'sesion_ultimo_codigo';
 
   /// Cada cuánto el cliente le avisa al servidor "sigo acá". El servidor
   /// libera la pantalla si no recibe señales en 2 horas: con esto, una TV
@@ -88,9 +97,13 @@ class Sesion extends ChangeNotifier {
   /// Al abrir la app: ¿quedó una sesión guardada de la vez anterior?
   Future<void> iniciar() async {
     // El servidor es siempre el de esta versión de la app (config.dart)
-    await _almacen.delete(key: _claveServidorViejo);
-    api.token = await _almacen.read(key: _claveToken);
-    ultimoCodigo = await _almacen.read(key: _claveUltimoCodigo) ?? '';
+    try {
+      await _almacen.delete(key: _claveServidorViejo);
+    } catch (_) {
+      // Si el almacén falla, se sigue con la copia (ver abajo)
+    }
+    api.token = await _recuperar(_claveToken, _copiaToken);
+    ultimoCodigo = await _recuperar(_claveUltimoCodigo, _copiaCodigo) ?? '';
     if (api.token == null) {
       _cambiar(EstadoSesion.sinSesion);
       return;
@@ -122,13 +135,15 @@ class Sesion extends ChangeNotifier {
       }
       _cambiar(EstadoSesion.conSesion);
     } on ApiError catch (error) {
-      if (error.sinConexion || error.status >= 500) {
+      if (error.sinServicio) {
+        _servicioPerdido(error);
+      } else if (error.sesionVencida) {
+        if (!await _volverAEntrar()) await _olvidarSesion();
+      } else {
+        // Sin conexión o cualquier otro problema del servidor: la sesión sigue
+        // siendo buena. Solo un 401 dice que el token ya no vale.
         errorConexion = error.detalle;
         _cambiar(EstadoSesion.sinConexion);
-      } else if (error.sinServicio) {
-        _servicioPerdido(error);
-      } else if (!error.sesionVencida || !await _volverAEntrar()) {
-        await _olvidarSesion();
       }
     }
   }
@@ -186,7 +201,7 @@ class Sesion extends ChangeNotifier {
     _codigoSinServicio = null;
     await _guardarToken(datos['token'] as String);
     ultimoCodigo = codigo.replaceAll(RegExp(r'\D'), '');
-    await _almacen.write(key: _claveUltimoCodigo, value: ultimoCodigo);
+    await _guardar(_claveUltimoCodigo, _copiaCodigo, ultimoCodigo);
     cliente = DatosCliente(datos['cliente'] as Map<String, dynamic>);
     _empezarSenal();
     _cambiar(EstadoSesion.conSesion);
@@ -214,7 +229,41 @@ class Sesion extends ChangeNotifier {
 
   Future<void> _guardarToken(String token) async {
     api.token = token;
-    await _almacen.write(key: _claveToken, value: token);
+    await _guardar(_claveToken, _copiaToken, token);
+  }
+
+  /// Guarda en el almacén seguro y en la copia. Con que ande uno, alcanza.
+  Future<void> _guardar(String clave, String copia, String valor) async {
+    try {
+      await _almacen.write(key: clave, value: valor);
+    } catch (_) {
+      // Queda la copia
+    }
+    try {
+      await (await SharedPreferences.getInstance()).setString(copia, valor);
+    } catch (_) {
+      // Queda el almacén seguro
+    }
+  }
+
+  /// Lee del almacén seguro y, si no está, de la copia. Deja los dos iguales:
+  /// la primera vez que abre esta versión, crea la copia.
+  Future<String?> _recuperar(String clave, String copia) async {
+    String? seguro;
+    try {
+      seguro = await _almacen.read(key: clave);
+    } catch (_) {
+      // Se sigue con la copia
+    }
+    String? copiado;
+    try {
+      copiado = (await SharedPreferences.getInstance()).getString(copia);
+    } catch (_) {
+      // Se sigue con el almacén seguro
+    }
+    final valor = seguro ?? copiado;
+    if (valor != null && (seguro == null || copiado != valor)) await _guardar(clave, copia, valor);
+    return valor;
   }
 
   /// La "señal" del cliente: mantiene ocupada su pantalla y trae su estado
@@ -265,7 +314,16 @@ class Sesion extends ChangeNotifier {
     api.token = null;
     perfil = null;
     cliente = null;
-    await _almacen.delete(key: _claveToken);
+    try {
+      await _almacen.delete(key: _claveToken);
+    } catch (_) {
+      // Lo importante es la copia: sin las dos, no vuelve a entrar sola
+    }
+    try {
+      await (await SharedPreferences.getInstance()).remove(_copiaToken);
+    } catch (_) {
+      // Sin preferencias tampoco hay copia que borrar
+    }
     // El catálogo guardado tiene las direcciones de los videos: no queda en el aparato
     unawaited(CopiaCatalogo.borrarTodo());
     _cambiar(EstadoSesion.sinSesion);

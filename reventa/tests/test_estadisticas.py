@@ -51,6 +51,13 @@ class EstadisticasTests(TestCase):
         self.assertEqual((actual['renovaciones'], actual['creditos_usados'], actual['cobrado']), (1, 2, Decimal('9000')))
         self.assertEqual(actual['ganancia'], Decimal('-11000'))
         self.assertNotIn('ingresos', actual)
+
+    def test_la_plata_se_escribe_como_en_argentina(self):
+        """Punto para los miles y coma para los decimales: `floatformat:2|intcomma` escribía $ 27,000,00."""
+        self.client.force_login(self.admin)
+        pagina = self.client.get(reverse('reventa:inicio')).content.decode()
+        self.assertIn('$ 27.000,00', pagina)
+        self.assertNotIn('27,000', pagina)
         self.assertEqual(estadisticas.totales(estadisticas.por_mes(self.juan))['renovaciones'], 1)
 
     def test_ranking(self):

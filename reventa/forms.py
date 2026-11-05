@@ -19,7 +19,11 @@ class RevendedorNuevoForm(EstiloBootstrapMixin, forms.Form):
 
     def clean_username(self):
         username = self.cleaned_data['username'].strip()
-        if Usuario.objects.filter(username__iexact=username).exists():
+        existente = Usuario.objects.filter(username__iexact=username).first()
+        if existente and Revendedor.todos.filter(usuario=existente, eliminado_en__isnull=False).exists():
+            raise forms.ValidationError('Ese usuario es de un revendedor que está en la papelera: restauralo desde ahí '
+                                        'o elegí otro nombre.')
+        if existente:
             raise forms.ValidationError('Ya existe un usuario con ese nombre.')
         return username
 
@@ -27,6 +31,69 @@ class RevendedorNuevoForm(EstiloBootstrapMixin, forms.Form):
         password = self.cleaned_data['password']
         validate_password(password)
         return password
+
+
+def _sin_diferencias(texto):
+    """Para comparar lo que se escribió: sin mayúsculas ni espacios de más."""
+    return ' '.join(texto.split()).casefold()
+
+
+class EliminarForm(EstiloBootstrapMixin, forms.Form):
+    """
+    Para que no se elimine por accidente: hay que escribir el nombre y, si tiene
+    algo en uso o pagado (`riesgo`), marcar además que se entiende.
+    """
+
+    confirmacion = forms.CharField(label='Escribí el nombre para confirmar', max_length=200,
+                                   widget=forms.TextInput(attrs={'autocomplete': 'off'}))
+    entiendo = forms.BooleanField(required=False)
+
+    def __init__(self, *args, nombre, riesgo=False, texto_entiendo='', **kwargs):
+        super().__init__(*args, **kwargs)
+        self.nombre = nombre
+        self.riesgo = riesgo
+        self.fields['confirmacion'].help_text = f'Tiene que decir: {nombre}'
+        if riesgo:
+            self.fields['entiendo'].label = texto_entiendo
+            self.fields['entiendo'].required = True
+            self.fields['entiendo'].error_messages['required'] = 'Marcá que lo entendés para poder eliminar.'
+        else:
+            del self.fields['entiendo']
+
+    def clean_confirmacion(self):
+        confirmacion = self.cleaned_data['confirmacion']
+        if _sin_diferencias(confirmacion) != _sin_diferencias(self.nombre):
+            raise forms.ValidationError('No coincide con el nombre. No se eliminó nada.')
+        return confirmacion
+
+
+class EliminarRevendedorForm(EliminarForm):
+    """Además, qué pasa con sus clientes: se elige siempre, no hay una opción marcada de entrada."""
+
+    PASAR, DIRECTOS, ELIMINAR = 'pasar', 'directos', 'eliminar'
+
+    que_hacer = forms.ChoiceField(label='¿Qué pasa con sus clientes?', widget=forms.RadioSelect, choices=[
+        (PASAR, 'Pasan a otro revendedor y siguen viendo'),
+        (DIRECTOS, 'Quedan como clientes directos de la empresa y siguen viendo'),
+        (ELIMINAR, 'Se eliminan también: se les corta el servicio ya'),
+    ], error_messages={'required': 'Elegí qué pasa con sus clientes.'})
+    destino = forms.ModelChoiceField(label='Pasarlos a', queryset=Revendedor.objects.none(), required=False)
+    field_order = ['que_hacer', 'destino', 'entiendo', 'confirmacion']
+
+    def __init__(self, *args, revendedor, tiene_clientes=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tiene_clientes:
+            self.fields['destino'].queryset = (Revendedor.objects.exclude(pk=revendedor.pk)
+                                               .select_related('usuario'))
+        else:
+            del self.fields['que_hacer']
+            del self.fields['destino']
+
+    def clean(self):
+        datos = super().clean()
+        if datos.get('que_hacer') == self.PASAR and not datos.get('destino'):
+            self.add_error('destino', 'Elegí a qué revendedor pasan.')
+        return datos
 
 
 class PrecioForm(EstiloBootstrapMixin, forms.ModelForm):

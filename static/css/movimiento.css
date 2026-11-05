@@ -1,0 +1,185 @@
+/* ═══════════════════════════════════════════════════════════════════
+   movimiento.css — el movimiento sutil del panel
+
+   El diseño de diseno_kairos_tv/propuesta-interactiva.html (vista Panel)
+   llevado a las pantallas reales. Es solo una capa visual: no cambia datos,
+   vistas ni URLs. Si se quita de base_html.html, el panel queda como antes.
+   Aparte de kairos.css (que se edita en paralelo): solo usa sus colores.
+
+   Lo que necesita JavaScript lo arma static/js/movimiento.js.
+
+   Índice
+     1. Menú lateral       4. Inicio: entrada y herramientas
+     2. Campanita          5. Cifras y estado de clientes
+     3. Inicio: la onda    6. Estadísticas: el gráfico
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root { --mov-curva: cubic-bezier(.2, .75, .2, 1); }
+
+/* ── 1. MENÚ LATERAL ──────────────────────────────────────────────── */
+
+/* La luz: un solo recuadro que se desliza hasta la opción que señalás */
+.menu-nav.con-luz { position: relative; }
+.menu-nav.con-luz .menu-link:not(.activo):hover { background: transparent; }
+.menu-luz {
+    position: absolute; top: 0; left: 0;
+    border-radius: var(--radio); background: var(--capa-alta);
+    opacity: 0; pointer-events: none;
+    transition: transform .26s var(--mov-curva), width .26s var(--mov-curva), height .26s var(--mov-curva), opacity .18s ease-out;
+}
+
+/* El símbolo en chico: el PNG tiene líneas tan finas que a 38 px se apagan. Este es el mismo
+   dibujo con las medidas de lib/marca.dart y la línea más gruesa, como hace la app. */
+.marca-isotipo img, .barra-marca img {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-108 -108 216 216'%3E%3Cg fill='%2316161B' stroke='%2300F0FF' stroke-width='9'%3E%3Cpolygon points='-100,43.7 -58,67.9 -58,-67.9 -100,-43.7'/%3E%3Cpolygon points='-50.2,72.4 -10.2,95.5 -10.2,-95.5 -50.2,-72.4'/%3E%3Cpolygon points='10.2,95.5 50.2,72.4 50.2,-72.4 10.2,-95.5'/%3E%3Cpolygon points='58,67.9 100,43.7 100,-43.7 58,-67.9'/%3E%3C/g%3E%3Ccircle r='15' fill='%23DF0041'/%3E%3C/svg%3E");
+}
+
+/* Cuando hay más opciones que lugar, el final se funde en vez de cortarse */
+.menu-nav {
+    padding-bottom: 1.5rem;
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(#000 calc(100% - 1.5rem), transparent);
+}
+
+/* ── 2. CAMPANITA ─────────────────────────────────────────────────── */
+
+/* scale y translate (no transform): Bootstrap ya usa transform para ubicar el desplegable */
+.campanita-menu.show { transform-origin: top right; animation: mov-despliega .22s var(--mov-curva); }
+@keyframes mov-despliega { from { opacity: 0; scale: .96; translate: 0 -6px; } }
+
+/* ── 3. INICIO: LA ONDA ───────────────────────────────────────────── */
+
+.inicio-encabezado.con-onda::after { display: none; }   /* la onda reemplaza al anillo */
+.inicio-encabezado.con-onda > :not(.inicio-onda) { position: relative; z-index: 1; }
+.inicio-onda {
+    position: absolute; inset: 0;
+    display: block; width: 100%; height: 100%;
+    pointer-events: none;
+    animation: mov-aparece 1.6s linear;
+}
+@keyframes mov-aparece { from { opacity: 0; } }
+
+/* ── 4. INICIO: ENTRADA Y HERRAMIENTAS ────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+    /* backwards y translate: al terminar no pisan el hover de las tarjetas */
+    .inicio-encabezado, .modulos-panel > .seccion-encabezado, .acceso-rapido, .cuenta-panel,
+    .pagina-reventa .pagina-encabezado, .pagina-reventa .tarjeta,
+    .pagina-estadisticas-reventa .pagina-encabezado, .pagina-estadisticas-reventa .tarjeta {
+        animation: mov-entra .6s var(--mov-curva) backwards;
+    }
+    .modulos-panel > .seccion-encabezado { animation-delay: .06s; }
+    .modulos-grid > :nth-child(1) { animation-delay: .1s; }
+    .modulos-grid > :nth-child(2) { animation-delay: .145s; }
+    .modulos-grid > :nth-child(3) { animation-delay: .19s; }
+    .modulos-grid > :nth-child(4) { animation-delay: .235s; }
+    .modulos-grid > :nth-child(5) { animation-delay: .28s; }
+    .modulos-grid > :nth-child(n+6) { animation-delay: .325s; }
+    .cuenta-panel { animation-delay: .18s; }
+    .pagina-reventa .tarjeta + .tarjeta, .pagina-estadisticas-reventa .tarjeta + .tarjeta { animation-delay: .1s; }
+    .pagina-reventa .tarjeta + .tarjeta + .tarjeta, .pagina-estadisticas-reventa .tarjeta + .tarjeta + .tarjeta { animation-delay: .2s; }
+}
+@keyframes mov-entra { from { opacity: 0; translate: 0 14px; } }
+
+.acceso-rapido-icono, .acceso-rapido-flecha, .cuenta-enlace i { transition: transform .18s var(--mov-curva), color .14s ease-out; }
+.cuenta-enlace:hover i { transform: translateX(3px); }
+
+@media (hover: hover) {
+    /* La luz del borde sigue al cursor por toda la grilla, no tarjeta por tarjeta */
+    .acceso-rapido::before {
+        content: ''; position: absolute; inset: -1px;
+        border-radius: inherit; padding: 1px;
+        background: radial-gradient(240px circle at var(--luz-x, -100px) var(--luz-y, -100px), rgba(0, 240, 255, .85), rgba(0, 240, 255, 0) 72%);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor; mask-composite: exclude;
+        opacity: 0; pointer-events: none;
+        transition: opacity .2s ease-out;
+    }
+    .modulos-grid:hover .acceso-rapido::before { opacity: 1; }
+    .acceso-rapido:hover { border-color: var(--borde); box-shadow: 0 12px 30px rgba(0, 0, 0, .28); }
+    .acceso-rapido:hover .acceso-rapido-icono { transform: translateY(-1px); }
+    .acceso-rapido:hover .acceso-rapido-flecha { transform: translate(2px, -2px); }
+}
+
+/* ── 5. CIFRAS Y ESTADO DE CLIENTES ───────────────────────────────── */
+
+/* Un monto entero no entraba en la casilla de 140 px y se cortaba con "…" */
+.pagina-reventa .reventa-resumen .resumen-metricas { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); }
+.pagina-reventa .reventa-resumen .resumen-clientes { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+
+.resumen-balance > div:last-child dd.negativo { color: var(--rubi-claro); }
+
+/* El estado lo dicen el ícono y la barra, y la cifra queda en el color del texto */
+.resumen-clientes > div:nth-child(n) dd { color: var(--texto); }
+.resumen-clientes dt::before {
+    margin-right: .35rem;
+    font-family: 'bootstrap-icons'; font-size: .95em; font-weight: 400; letter-spacing: 0;
+    vertical-align: -.1em;
+}
+.resumen-clientes > div:nth-child(1) dt::before { content: '\f26a'; color: var(--verde); }
+.resumen-clientes > div:nth-child(2) dt::before { content: '\f291'; color: var(--dorado); }
+.resumen-clientes > div:nth-child(3) dt::before { content: '\f622'; color: var(--rubi); }
+.resumen-clientes > div:nth-child(4) dt::before { content: '\f2e5'; color: var(--texto-apagado); }
+.resumen-clientes:has(+ .barra-estados) { margin-bottom: .75rem; }
+
+.barra-estados { display: flex; gap: 2px; height: .5rem; border-radius: 4px; overflow: hidden; background: var(--capa-baja); }
+.barra-estados i { display: block; min-width: 2px; transition: opacity .18s ease-out; }
+.barra-estados i[data-estado="0"] { background: var(--verde); }
+.barra-estados i[data-estado="1"] { background: var(--dorado); }
+.barra-estados i[data-estado="2"] { background: var(--rubi); }
+.barra-estados i[data-estado="3"] { background: var(--texto-apagado); }
+.barra-estados.resalta i:not(.si) { opacity: .28; }
+@media (prefers-reduced-motion: no-preference) {
+    .barra-estados { animation: mov-crece 1s var(--mov-curva) .15s backwards; }
+}
+@keyframes mov-crece { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* "Ahora mismo": lo que se está mirando en este momento late, como el punto rubí */
+.resumen-en-vivo dt::before {
+    content: ''; display: inline-block; width: 7px; height: 7px; margin-right: .4rem;
+    border-radius: 50%; background: var(--rubi); box-shadow: 0 0 8px var(--rubi);
+    vertical-align: .08em;
+    animation: mov-latido 1.8s ease-in-out infinite;
+}
+@keyframes mov-latido { 50% { opacity: .45; scale: .78; } }
+
+/* ── 6. ESTADÍSTICAS: EL GRÁFICO ──────────────────────────────────── */
+
+.grafico-mes { padding: 0 1.5rem 1.25rem; }
+.grafico-mes-opciones { margin-bottom: 1rem; }
+.grafico-mes-opciones button {
+    min-height: 40px; padding: 0 .95rem;
+    border: 1px solid transparent; border-radius: var(--radio-chico);
+    background: none; color: var(--texto-suave); font-size: .875rem; font-weight: 600; white-space: nowrap;
+}
+.grafico-mes-opciones button:hover { color: var(--texto); background: var(--capa-alta); }
+.grafico-mes-opciones button[aria-pressed="true"] { color: var(--celeste-claro); background: var(--celeste-fondo); border-color: rgba(0, 240, 255, .28); }
+
+.grafico-mes-lienzo { position: relative; height: clamp(210px, 28vh, 280px); border-radius: 10px; touch-action: pan-y; }
+.grafico-mes-lienzo svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.grafico-eje { font: 500 .72rem var(--fuente-texto); fill: var(--texto-apagado); }
+.grafico-rejilla { stroke: rgba(59, 73, 75, .45); stroke-width: 1; }
+.grafico-linea { fill: none; stroke: var(--celeste); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.grafico-punto { fill: var(--celeste); stroke: var(--capa); stroke-width: 2; }
+.grafico-guia { stroke: var(--texto-apagado); stroke-width: 1; stroke-dasharray: 3 3; }
+.grafico-rotulo { font: 700 .78rem var(--fuente-texto); fill: var(--texto); paint-order: stroke; stroke: var(--capa); stroke-width: 4px; stroke-linejoin: round; }   /* el contorno lo separa de la línea */
+.grafico-burbuja {
+    position: absolute; top: 0; left: 0;
+    padding: .45rem .7rem;
+    background: var(--capa-minima); border: 1px solid var(--borde-fuerte); border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .4);
+    font-size: .78rem; line-height: 1.35; white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    transition: opacity .12s ease-out;
+}
+.grafico-burbuja span { color: var(--texto-suave); }
+.grafico-burbuja b { display: block; font-size: .95rem; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 575.98px) {
+    .grafico-mes { padding: 0 1rem 1rem; }
+    .grafico-mes-opciones { display: flex; flex-wrap: nowrap; width: 100%; }
+    .grafico-mes-opciones button { flex: 1 1 auto; min-height: 44px; padding: 0 .35rem; font-size: .78rem; }
+}
+@media (pointer: coarse) {
+    .grafico-mes-opciones button { min-height: 44px; }
+}

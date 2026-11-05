@@ -30,9 +30,9 @@
     <h3 class="metricas-bloque-titulo"><i class="bi bi-activity" aria-hidden="true"></i> Operación general</h3>
     <dl class="ficha-datos resumen-metricas resumen-negocio">
         <div><dt>Revendedores</dt><dd class="dato">{{ general.revendedores }}</dd></div>
-        <div><dt>Ingresos totales</dt><dd class="dato">$ {{ general.ingresos|floatformat:2|intcomma }}</dd></div>
-        <div><dt>Por paquetes</dt><dd class="dato">$ {{ general.ingresos_paquetes|floatformat:2|intcomma }}</dd></div>
-        <div><dt>Por clientes directos</dt><dd class="dato">$ {{ general.ingresos_directos|floatformat:2|intcomma }}</dd></div>
+        <div><dt>Ingresos totales</dt><dd class="dato">$ {{ general.ingresos|floatformat:"2g" }}</dd></div>
+        <div><dt>Por paquetes</dt><dd class="dato">$ {{ general.ingresos_paquetes|floatformat:"2g" }}</dd></div>
+        <div><dt>Por clientes directos</dt><dd class="dato">$ {{ general.ingresos_directos|floatformat:"2g" }}</dd></div>
         <div><dt>Créditos vendidos</dt><dd class="dato">{{ general.creditos_vendidos }}</dd></div>
         <div><dt>Créditos regalados</dt><dd class="dato">{{ general.creditos_regalados }}</dd></div>
         <div><dt>Créditos usados</dt><dd class="dato">{{ general.creditos_usados }}</dd></div>

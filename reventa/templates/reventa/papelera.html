@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% comment %} Lo eliminado de la reventa: se ve quién y cuándo, y se puede restaurar. {% endcomment %}
+
+{% block titulo %}Papelera{% endblock %}
+{% block clase_body %}pagina-listado pagina-papelera{% endblock %}
+
+{% block encabezado %}
+<div class="pagina-encabezado">
+    <h1 class="pagina-titulo">Papelera</h1>
+    <p class="pagina-bajada">Lo eliminado ya no se ve ni se puede usar. Si fue un error, se restaura tal como estaba.</p>
+</div>
+{% endblock %}
+
+{% block contenido %}
+{% if not revendedores and not clientes and not paquetes %}
+<div class="tarjeta p-0">
+    <div class="vacio">
+        <i class="bi bi-trash3" aria-hidden="true"></i>
+        <p>La papelera está vacía.</p>
+    </div>
+</div>
+{% endif %}
+
+{% if revendedores %}
+<section class="tarjeta p-0 mb-4">
+    <h2 class="tarjeta-titulo px-4 pt-4">Revendedores</h2>
+    <ul class="papelera-lista">
+        {% for r in revendedores %}
+        <li>
+            <div class="papelera-dato">
+                <strong>{{ r }}</strong>
+                <span class="texto-suave small">Usuario <span class="dato">{{ r.usuario.username }}</span> · eliminado el {{ r.eliminado_en|date:"j/m/Y H:i" }}{% if r.eliminado_por %} por {{ r.eliminado_por.username }}{% endif %}</span>
+            </div>
+            <form method="post" action="{% url 'reventa:papelera_restaurar' 'revendedor' r.pk %}">
+                {% csrf_token %}<button type="submit" class="btn btn-outline-secondary">Restaurar</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if clientes %}
+<section class="tarjeta p-0 mb-4">
+    <h2 class="tarjeta-titulo px-4 pt-4">Clientes</h2>
+    <ul class="papelera-lista">
+        {% for c in clientes %}
+        <li>
+            <div class="papelera-dato">
+                <strong>{{ c.nombre }}</strong>
+                <span class="texto-suave small">{% if c.revendedor %}De {{ c.revendedor }}{% else %}Directo{% endif %} · eliminado el {{ c.eliminado_en|date:"j/m/Y H:i" }}{% if c.eliminado_por %} por {{ c.eliminado_por.username }}{% endif %}</span>
+            </div>
+            <form method="post" action="{% url 'reventa:papelera_restaurar' 'cliente' c.pk %}">
+                {% csrf_token %}<button type="submit" class="btn btn-outline-secondary">Restaurar</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if paquetes and puede_paquetes %}
+<section class="tarjeta p-0 mb-4">
+    <h2 class="tarjeta-titulo px-4 pt-4">Paquetes</h2>
+    <ul class="papelera-lista">
+        {% for p in paquetes %}
+        <li>
+            <div class="papelera-dato">
+                <strong>{{ p.nombre }}</strong>
+                <span class="texto-suave small">{{ p.creditos }} créditos · eliminado el {{ p.eliminado_en|date:"j/m/Y H:i" }}{% if p.eliminado_por %} por {{ p.eliminado_por.username }}{% endif %}</span>
+            </div>
+            <form method="post" action="{% url 'reventa:papelera_restaurar' 'paquete' p.pk %}">
+                {% csrf_token %}<button type="submit" class="btn btn-outline-secondary">Restaurar</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+{% endblock %}

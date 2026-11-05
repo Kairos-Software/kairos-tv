@@ -24,7 +24,7 @@
             {% if p.activo %}<span class="chip chip-si">A la venta</span>{% else %}<span class="chip">Inactivo</span>{% endif %}
         </div>
         <h2>{{ p.nombre }}</h2>
-        <div class="paquete-precio">$ {{ p.precio|floatformat:2|intcomma }}</div>
+        <div class="paquete-precio">$ {{ p.precio|floatformat:"2g" }}</div>
         <dl class="paquete-datos">
             <div><dt>Créditos</dt><dd>{{ p.creditos }}</dd></div>
             <div><dt>Por crédito</dt><dd>$ {% widthratio p.precio p.creditos 1 %}</dd></div>
@@ -32,6 +32,7 @@
         <a href="{% url 'reventa:paquete_editar' p.pk %}" class="btn btn-outline-secondary w-100">
             <i class="bi bi-pencil" aria-hidden="true"></i> Editar paquete
         </a>
+        <a href="{% url 'reventa:paquete_eliminar' p.pk %}" class="btn btn-link btn-sm text-danger w-100 mt-1">Eliminar paquete</a>
     </article>
     {% endfor %}
 </div>

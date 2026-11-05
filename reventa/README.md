@@ -11,6 +11,27 @@ Revendedor 1 ──< Cliente 1 ──< Pantalla 1 ──< Dispositivo  (el apara
      └──< Compra >── Paquete
 ```
 
+## Eliminar
+
+Clientes, revendedores y paquetes se pueden eliminar aunque tengan créditos en
+uso o pagados. Lo hace solo el administrador (permiso `administrar_reventa`;
+los paquetes, `gestionar_paquetes`), en dos pasos: una página que dice qué va a
+pasar y una confirmación (escribir el nombre y, si hay algo en uso o pagado,
+marcar que se entiende). Se valida en el servidor (`forms.EliminarForm`).
+
+Es una **baja lógica** (`herramientas/modelos.py`), no un borrado:
+
+- **Cliente:** su código deja de valer y sus aparatos se desconectan ya. Lo
+  cargado no vuelve solo al revendedor (si corresponde, con un ajuste).
+- **Revendedor:** se le cierra el panel y sus compras pendientes se cancelan. Sus
+  clientes pasan a otro, quedan directos o se eliminan: se elige siempre. Sus
+  créditos sin usar quedan en su libreta. Eliminar el usuario de un revendedor
+  desde Usuarios lleva acá.
+- Las cuentas no cambian: lo cobrado y las compras siguen en las estadísticas.
+- **La papelera** (`/reventa/papelera/`) muestra lo eliminado y lo restaura tal
+  como estaba. Un revendedor vuelve con los clientes que se eliminaron junto con
+  él, no con los que se eliminaron antes.
+
 ## Reglas del negocio
 
 - **1 crédito = 1 pantalla durante 30 días.** Una pantalla es un lugar para

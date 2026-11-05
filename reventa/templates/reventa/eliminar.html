@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% comment %}
+    Eliminar un cliente, un revendedor o un paquete: qué pasa, en palabras, y
+    una confirmación que no se hace por accidente (ver forms.EliminarForm).
+{% endcomment %}
+
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block clase_body %}pagina-reventa-eliminar{% endblock %}
+
+{% block contenido %}
+<div class="eliminar tarjeta">
+    <div class="eliminar-cabeza">
+        <span class="confirmacion-icono peligro"><i class="bi bi-trash" aria-hidden="true"></i></span>
+        <h1 class="h3 mb-0">{{ titulo }}</h1>
+    </div>
+
+    {% if cliente %}
+    <h2 class="eliminar-subtitulo">Qué va a pasar</h2>
+    <ul class="eliminar-lista">
+        <li>Su código de acceso deja de valer y no puede entrar más a la app.</li>
+        {% if en_juego.puede_ver %}
+        <li class="grave">{% if en_juego.en_demo %}Está usando una prueba gratis{% else %}Tiene el servicio activo{% endif %} hasta el {{ en_juego.vence|date:"j/m/Y H:i" }}: <strong>se le corta ya</strong>.</li>
+        {% endif %}
+        {% if en_juego.conectados %}
+        <li class="grave"><strong>{{ en_juego.conectados }} aparato{{ en_juego.conectados|pluralize }}</strong> conectado{{ en_juego.conectados|pluralize }} se desconecta{{ en_juego.conectados|pluralize:"n" }} en este momento.</li>
+        {% endif %}
+        {% if en_juego.saldo > 0 %}
+        <li class="grave">Le quedan <strong>{{ en_juego.saldo }} crédito{{ en_juego.saldo|pluralize }}</strong> cargado{{ en_juego.saldo|pluralize }} para los próximos meses. <strong>No vuelve{{ en_juego.saldo|pluralize:"n" }} solo{{ en_juego.saldo|pluralize }}</strong>{% if cliente.revendedor %} a {{ cliente.revendedor }}{% endif %}: si corresponde devolverlos, se hace aparte con un ajuste.</li>
+        {% endif %}
+    </ul>
+    <p class="eliminar-queda"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Lo cobrado{% if en_juego.cobrado %} ($ {{ en_juego.cobrado|floatformat:"2g" }}){% endif %} sigue en las estadísticas. Queda en la <strong>papelera</strong>: si fue un error, se restaura con su código y su saldo.</p>
+
+    {% elif revendedor %}
+    <h2 class="eliminar-subtitulo">Qué va a pasar</h2>
+    <ul class="eliminar-lista">
+        <li>Se le cierra el panel: el usuario <span class="dato">{{ revendedor.usuario.username }}</span> no puede entrar más.</li>
+        {% if en_juego.clientes %}
+        <li class="grave">Tiene <strong>{{ en_juego.clientes }} cliente{{ en_juego.clientes|pluralize }}</strong>{% if en_juego.viendo %}, {{ en_juego.viendo }} con servicio activo{% endif %}{% if en_juego.conectados %} y {{ en_juego.conectados }} aparato{{ en_juego.conectados|pluralize }} conectado{{ en_juego.conectados|pluralize }}{% endif %}. Abajo elegís qué pasa con ellos.</li>
+        {% endif %}
+        {% if en_juego.saldo_clientes > 0 %}
+        <li>Entre todos tienen {{ en_juego.saldo_clientes }} crédito{{ en_juego.saldo_clientes|pluralize }} cargado{{ en_juego.saldo_clientes|pluralize }}: si siguen, los conservan.</li>
+        {% endif %}
+        {% if en_juego.saldo > 0 %}
+        <li class="grave">Tiene <strong>{{ en_juego.saldo }} crédito{{ en_juego.saldo|pluralize }} sin usar</strong>: ya no los puede usar nadie, y no se devuelven solos.</li>
+        {% endif %}
+        {% if en_juego.compras_pendientes %}
+        <li class="grave"><strong>{{ en_juego.compras_pendientes }} compra{{ en_juego.compras_pendientes|pluralize }} pendiente{{ en_juego.compras_pendientes|pluralize }}</strong> se cancela{{ en_juego.compras_pendientes|pluralize:"n" }}. Si ya te pagó, cargala antes de eliminarlo.</li>
+        {% endif %}
+    </ul>
+    <p class="eliminar-queda"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Sus compras y su libreta siguen en las estadísticas. Queda en la <strong>papelera</strong>: si fue un error, se restaura con su saldo, su panel y los clientes que se eliminen ahora.</p>
+
+    {% else %}
+    <h2 class="eliminar-subtitulo">Qué va a pasar</h2>
+    <ul class="eliminar-lista">
+        <li>Los revendedores dejan de poder comprarlo.</li>
+        <li>Las compras ya hechas no cambian: guardan sus créditos y su precio.</li>
+    </ul>
+    <p class="eliminar-queda"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Queda en la <strong>papelera</strong>: si fue un error, se restaura.</p>
+    {% endif %}
+
+    <form method="post" novalidate class="eliminar-formulario">
+        {% csrf_token %}
+        {% if form.que_hacer %}
+        <fieldset class="eliminar-campo">
+            <legend class="form-label">{{ form.que_hacer.label }} <span class="obligatorio" aria-hidden="true">*</span></legend>
+            {% for opcion in form.que_hacer %}
+            <div class="form-check">
+                {{ opcion.tag }}
+                <label class="form-check-label" for="{{ opcion.id_for_label }}">{{ opcion.choice_label }}</label>
+            </div>
+            {% endfor %}
+            {% for error in form.que_hacer.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </fieldset>
+        <div class="eliminar-campo">
+            <label class="form-label" for="{{ form.destino.id_for_label }}">{{ form.destino.label }}</label>
+            {{ form.destino }}
+            {% if form.destino.errors %}{% for error in form.destino.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            {% else %}<div class="form-text">Solo si pasan a otro revendedor.</div>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if form.entiendo %}
+        <div class="eliminar-campo eliminar-entiendo">
+            <div class="form-check">
+                {{ form.entiendo }}
+                <label class="form-check-label" for="{{ form.entiendo.id_for_label }}">{{ form.entiendo.label }}</label>
+            </div>
+            {% for error in form.entiendo.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="eliminar-campo">
+            <label class="form-label" for="{{ form.confirmacion.id_for_label }}">{{ form.confirmacion.label }} <span class="obligatorio" aria-hidden="true">*</span></label>
+            {{ form.confirmacion }}
+            {% if form.confirmacion.errors %}{% for error in form.confirmacion.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            {% else %}<div class="form-text">{{ form.confirmacion.help_text }}</div>{% endif %}
+        </div>
+
+        <div class="eliminar-acciones">
+            <a href="{{ volver }}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-danger">{{ boton }}</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

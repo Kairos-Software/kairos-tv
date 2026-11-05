@@ -35,6 +35,8 @@ from .models import Canal, Contenido, Fuente
 
 # Las señales de YouTube no se exportan (las abre solo el reproductor de YouTube)
 TIPOS_DE_YOUTUBE = {Fuente.Tipo.YT_VIDEO, Fuente.Tipo.YOUTUBE}
+# Las que no son una señal de video: van con kairos-tipo (ver lista_m3u)
+TIPOS_DE_PAGINA = {Fuente.Tipo.WEB, Fuente.Tipo.PAGINA}
 
 # Los filtros de Organizar contenido que se pueden aplicar (ver consultas.canales_filtrados)
 FILTROS = ('texto', 'mostrar', 'origen', 'sin_logo', 'idioma')
@@ -177,7 +179,10 @@ def lista_m3u(exportacion):
         extinf = ' '.join(f'{clave}="{_atributo(valor)}"' for clave, valor in atributos if valor)
         nombre = ' '.join(canal.nombre.split())
         for fuente in fuentes:
-            lineas.append(f'#EXTINF:-1 {extinf},{nombre}')
+            # Una página con reproductor (la app la abre como página) o una página de video: lo dice, para que
+            # el analizador de canales de la PC no la mire como si fuera una señal de video
+            tipo = f' kairos-tipo="{fuente.tipo}"' if fuente.tipo in TIPOS_DE_PAGINA else ''
+            lineas.append(f'#EXTINF:-1 {extinf}{tipo},{nombre}')
             if fuente.user_agent:
                 lineas.append(f'#EXTVLCOPT:http-user-agent={" ".join(fuente.user_agent.split())}')
             if fuente.referer:

@@ -37,7 +37,7 @@
                 <div><dt>Cliente desde</dt><dd>{{ numeros.activo_desde|date:"j/m/Y"|default:"—" }}</dd></div>
                 <div><dt>Meses de servicio</dt><dd class="dato">{{ numeros.renovaciones }}</dd></div>
                 <div><dt>Créditos usados</dt><dd class="dato">{{ numeros.creditos }}</dd></div>
-                <div><dt>Pagó en total</dt><dd class="dato">$ {{ numeros.cobrado|floatformat:2|intcomma }}</dd></div>
+                <div><dt>Pagó en total</dt><dd class="dato">$ {{ numeros.cobrado|floatformat:"2g" }}</dd></div>
             </dl>
             <details class="reventa-ayuda">
                 <summary><i class="bi bi-info-circle" aria-hidden="true"></i> Cómo usar el código e instalar la app</summary>
@@ -69,7 +69,7 @@
                 {% include "parciales/_campo.html" with campo=form_cargar.monto_cobrado ancho="col-sm-8" %}
                 {% include "parciales/_campo.html" with campo=form_cargar.cortesia ancho="col-12" %}
                 {% if form_cargar.de_la_empresa %}{% include "parciales/_campo.html" with campo=form_cargar.de_la_empresa ancho="col-12" %}{% endif %}
-                <p class="col-12 form-text mb-0">Precio sugerido: $ {{ precio_pantalla|floatformat:2|intcomma }} por pantalla por mes.</p>
+                <p class="col-12 form-text mb-0">Precio sugerido: $ {{ precio_pantalla|floatformat:"2g" }} por pantalla por mes.</p>
                 <div class="col-12"><button type="submit" class="btn btn-primary">Cargar</button></div>
             </form>
             <details class="reventa-accion-plegable mt-3">
@@ -99,7 +99,7 @@
                 {% include "parciales/_campo.html" with campo=form_activar.monto_cobrado ancho="col-12" %}
                 {% include "parciales/_campo.html" with campo=form_activar.cortesia ancho="col-12" %}
                 {% if form_activar.de_la_empresa %}{% include "parciales/_campo.html" with campo=form_activar.de_la_empresa ancho="col-12" %}{% endif %}
-                <p class="col-12 form-text mb-0">Precio sugerido: $ {{ precio_pantalla|floatformat:2|intcomma }} por pantalla por mes.</p>
+                <p class="col-12 form-text mb-0">Precio sugerido: $ {{ precio_pantalla|floatformat:"2g" }} por pantalla por mes.</p>
                 <div class="col-12"><button type="submit" class="btn btn-primary">Activar</button></div>
             </form>
             {% endif %}
@@ -219,7 +219,7 @@
                     <td>{{ c.get_tipo_display }}{% if c.detalle %}<br><span class="texto-suave small">{{ c.detalle }}</span>{% endif %}</td>
                     <td class="dato">{{ c.cantidad|stringformat:"+d" }}</td>
                     <td class="small">{% if c.tipo == 'carga' %}{% if c.revendedor %}{{ c.revendedor }}{% else %}La empresa{% endif %}{% else %}—{% endif %}</td>
-                    <td class="dato">{% if c.tipo == 'carga' %}{% if c.cortesia %}<span class="chip">Cortesía</span>{% else %}$ {{ c.monto_cobrado|floatformat:2|intcomma }}{% endif %}{% else %}—{% endif %}</td>
+                    <td class="dato">{% if c.tipo == 'carga' %}{% if c.cortesia %}<span class="chip">Cortesía</span>{% else %}$ {{ c.monto_cobrado|floatformat:"2g" }}{% endif %}{% else %}—{% endif %}</td>
                     <td class="texto-suave small">{{ c.hecho_por.username|default:"automático" }}</td>
                 </tr>
             {% endfor %}
@@ -230,4 +230,13 @@
     <p class="texto-suave px-4 pb-4 mb-0">Todavía no se activó.</p>
     {% endif %}
 </section>
+{% if request.es_admin %}
+<section class="tarjeta zona-eliminar mt-4">
+    <div>
+        <h2 class="tarjeta-titulo mb-1">Eliminar este cliente</h2>
+        <p class="texto-suave small mb-0">Deja de poder entrar a la app. Antes de confirmar, te dice qué tiene en uso o pagado.</p>
+    </div>
+    <a href="{% url 'reventa:cliente_eliminar' cliente.pk %}" class="btn btn-outline-danger">Eliminar cliente</a>
+</section>
+{% endif %}
 {% endblock %}

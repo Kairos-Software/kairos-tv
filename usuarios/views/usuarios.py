@@ -138,6 +138,16 @@ def restablecer_password(request, pk):
 @requiere_permiso('eliminar_usuarios')
 def eliminar(request, pk):
     usuario = _obtener_usuario(request, pk)
+    # Un revendedor tiene clientes y una libreta de créditos: se elimina por su propio camino
+    from reventa.models import Revendedor
+    revendedor = Revendedor.objects.filter(usuario=usuario).first()
+    if revendedor is not None:
+        if chequear_permiso(request.user, 'administrar_reventa'):
+            messages.info(request, f'{usuario.get_full_name() or usuario} es revendedor: al eliminarlo se decide qué '
+                                   f'pasa con sus clientes.')
+            return redirect('reventa:revendedor_eliminar', pk=revendedor.pk)
+        messages.error(request, 'Es revendedor: lo puede eliminar quien administra la reventa.')
+        return redirect('usuarios:detalle', pk=usuario.pk)
     if request.method == 'POST':
         nombre = usuario.get_full_name()
         try:

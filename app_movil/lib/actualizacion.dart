@@ -4,7 +4,8 @@
 /// cuál es la última versión publicada en el panel (GET /api/v1/app/). Si la
 /// instalada es más vieja, aparece un cartel con lo que cambió y el botón
 /// "Actualizar": la app baja la APK nueva y abre el instalador de Android
-/// (MainActivity.kt -> "instalar"). Se instala encima: no se pierde el login.
+/// (MainActivity.kt -> "instalar"). Se instala encima: la sesión sigue (y si el
+/// aparato pierde el almacén seguro, queda su copia: ver lib/sesion.dart).
 ///
 /// Es la única forma de actualizar sin reinstalar a mano, así que tiene que
 /// andar aunque el resto de la app falle (como el login trabado de la 1.2.0

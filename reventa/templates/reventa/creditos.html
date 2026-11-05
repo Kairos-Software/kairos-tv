@@ -29,7 +29,7 @@
                 {% csrf_token %}<input type="hidden" name="paquete" value="{{ p.pk }}">
                 <span class="paquete-compra-nombre">{{ p.nombre }}</span>
                 <strong>{{ p.creditos }} <small>créditos</small></strong>
-                <span class="paquete-compra-precio">$ {{ p.precio|floatformat:2|intcomma }}</span>
+                <span class="paquete-compra-precio">$ {{ p.precio|floatformat:"2g" }}</span>
                 <button type="submit" class="btn btn-primary">Pedir paquete</button>
             </form>
         {% endfor %}
