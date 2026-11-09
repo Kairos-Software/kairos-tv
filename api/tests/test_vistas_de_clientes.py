@@ -27,6 +27,8 @@ SOLO_DEL_PANEL = {
     'notificacion_leida', 'notificaciones_marcar_todas',
     # Sin sesión (las usa cualquiera): la última versión de la app y entrar con el código
     'app', 'cliente_login',
+    # Sin sesión: los analizadores de canales instalados, que se presentan con la huella de su instalador
+    'analizador', 'analizador_descargar',
 }
 
 

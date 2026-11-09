@@ -1,19 +1,38 @@
 {% extends "base.html" %}
 {% comment %}
-    La app Android: link de descarga, cómo instalarla y (con publicar_app)
-    subir versiones nuevas. Diseño provisorio, con las clases del panel.
+    Lo que se descarga desde el panel:
+      - la app Android: link de descarga, cómo instalarla y (con publicar_app)
+        subir versiones nuevas;
+      - SOLO SUPERUSUARIOS (?ver=analizador): el analizador de canales para
+        PC, sus versiones y las PCs donde está instalado (_analizador.html).
 {% endcomment %}
+{% load static %}
 
-{% block titulo %}App Android{% endblock %}
+{% block titulo %}{% if user.is_superuser %}Descargas{% else %}App Android{% endif %}{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
+    {% if user.is_superuser %}
+    <h1 class="pagina-titulo">Descargas</h1>
+    <p class="pagina-bajada">La app de Kairos TV para los clientes y el analizador de canales para tus PCs.</p>
+    {% else %}
     <h1 class="pagina-titulo">App Android</h1>
     <p class="pagina-bajada">Kairos TV para celulares y televisores Android. El cliente entra con el código de 8 números que figura en su ficha.</p>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block contenido %}
+{% if user.is_superuser %}
+<nav class="pestanias mb-4" aria-label="Qué descargar">
+    <a href="{% url 'descargas:pagina' %}" {% if ver != 'analizador' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-android2" aria-hidden="true"></i> App Android</a>
+    <a href="{% url 'descargas:pagina' %}?ver=analizador" {% if ver == 'analizador' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-pc-display" aria-hidden="true"></i> Analizador para PC</a>
+</nav>
+{% endif %}
+
+{% if ver == 'analizador' %}
+{% include "descargas/_analizador.html" %}
+{% else %}
 <section class="tarjeta descarga-hero mb-4">
     <div class="descarga-hero-icono" aria-hidden="true"><i class="bi bi-android2"></i></div>
     <div class="descarga-hero-contenido">
@@ -104,6 +123,7 @@
     {% endif %}
 </section>
 {% endif %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -117,4 +137,5 @@
         });
     });
 </script>
+{% if ver == 'analizador' %}<script src="{% static 'js/subir_analizador.js' %}?v=1"></script>{% endif %}
 {% endblock %}

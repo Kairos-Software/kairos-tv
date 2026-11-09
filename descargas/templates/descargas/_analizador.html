@@ -1,0 +1,119 @@
+{% comment %}
+    El analizador de canales para PC (solo superusuarios: views._pagina_del_analizador).
+    El instalador se sube de a pedazos (static/js/subir_analizador.js) y los
+    analizadores instalados lo bajan solos para actualizarse (api/v1/analizador.py).
+{% endcomment %}
+<section class="tarjeta descarga-hero mb-4">
+    <div class="descarga-hero-icono" aria-hidden="true"><i class="bi bi-pc-display"></i></div>
+    <div class="descarga-hero-contenido">
+        <h2 class="tarjeta-titulo">Analizador de canales</h2>
+        {% if analizador %}
+        <p class="descarga-version">Versión <strong>{{ analizador.version }}</strong> <span class="texto-suave">· {{ analizador.tamanio|filesizeformat }} · publicada el {{ analizador.subida|date:"j/m/Y" }}</span></p>
+        <a href="{% url 'descargas:analizador_descargar' %}" class="btn btn-primary descarga-boton"><i class="bi bi-download" aria-hidden="true"></i> Descargar el instalador</a>
+        <p class="texto-suave small mb-0">Para Windows 10 y 11 de 64 bits. Se instala para tu usuario, sin permiso de administrador. Ya instalado, se actualiza solo: cada hora pregunta acá si hay una versión nueva y la instala cuando no está midiendo nada.</p>
+        {% if analizador.notas %}<p class="texto-suave small mt-2 mb-0">Qué cambió: {{ analizador.notas|linebreaksbr }}</p>{% endif %}
+        {% else %}
+        <div class="vacio descarga-vacio">
+            <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+            <p>Todavía no se subió ningún instalador. Subilo abajo, en «Publicar una versión nueva».</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="tarjeta mb-4">
+    <h2 class="tarjeta-titulo">Cómo instalarlo</h2>
+    <ol class="analizador-pasos">
+        <li><strong>Bajá el instalador y abrilo.</strong> Como no está firmado, el navegador y Windows avisan que no lo conocen, igual que con la APK: en el navegador elegí <em>Conservar</em> y, al abrirlo, <em>Más información → Ejecutar de todas formas</em>. Si la PC tiene prendido el <em>Control inteligente de aplicaciones</em> (Windows 11), no da esa opción: apagalo antes en <em>Seguridad de Windows → Control de aplicaciones y del explorador → Configuración del Control inteligente de aplicaciones → Desactivado</em>.</li>
+        <li><strong>Abrí «Analizador de canales»</strong> desde el menú Inicio o el escritorio. La primera vez baja de Google el Android virtual (unos 1,1 GB) y recién después empieza a medir.</li>
+        <li><strong>Listo.</strong> La PC aparece sola abajo, en «PCs con el analizador», y desde ahí se actualiza sola cada vez que publicás una versión.</li>
+    </ol>
+</section>
+
+<section class="tarjeta p-0 mb-4">
+    <h2 class="tarjeta-titulo px-4 pt-4">PCs con el analizador</h2>
+    {% if pcs %}
+    <div class="table-responsive">
+        <table class="table tabla mb-0 tabla-pcs">
+            <thead><tr><th scope="col">PC</th><th scope="col">Versión</th><th scope="col">Preguntó por última vez</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+            <tbody>
+            {% for pc in pcs %}
+                <tr>
+                    <td><strong>{{ pc.nombre }}</strong><span class="d-block texto-suave small">desde el {{ pc.primera_vez|date:"j/m/Y" }}</span></td>
+                    <td><span class="dato">{{ pc.version }}</span>
+                        {% if pc.desconectada %}<span class="chip chip-no">Desconectada</span>{% elif pc.al_dia %}<span class="chip chip-si">Al día</span>{% else %}<span class="chip chip-descartada">Por actualizarse</span>{% endif %}</td>
+                    <td class="small">hace {{ pc.ultima_vez|timesince }}<span class="d-block texto-suave">{{ pc.ultima_vez|date:"j/m H:i" }}</span></td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'descargas:analizador_pc' pc.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">{% if pc.desconectada %}Volver a conectar{% else %}Desconectar{% endif %}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="texto-suave small px-4 py-3 mb-0">Una PC desconectada sigue andando, pero ya no recibe versiones nuevas.</p>
+    {% else %}
+    <p class="texto-suave px-4 pb-4 mb-0">Ninguna todavía. Cada PC aparece sola cuando su analizador pregunta por una versión nueva (al abrirlo y después cada hora).</p>
+    {% endif %}
+</section>
+
+<section class="tarjeta mb-4">
+    <h2 class="tarjeta-titulo">Publicar una versión nueva</h2>
+    <p class="texto-suave small">Armalo en la PC de desarrollo con <code>entorno\Scripts\python instalador\armar.py</code> y subí <code>instalador\salida\KairosAnalizador-&lt;versión&gt;.exe</code>. Desde que lo publicás, cada analizador instalado lo baja e instala solo.</p>
+    <form class="row g-3" id="form-analizador" novalidate
+          data-pedazo="{% url 'descargas:analizador_pedazo' %}" data-publicar="{% url 'descargas:analizador_publicar' %}"
+          data-tamanio-pedazo="{{ pedazo_maximo }}">
+        {% csrf_token %}
+        <div class="col-md-8">
+            <label class="form-label" for="analizador-archivo">Instalador <span class="obligatorio" aria-hidden="true">*</span></label>
+            <input class="form-control" type="file" id="analizador-archivo" name="archivo" accept=".exe" required>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="analizador-version">Versión <span class="obligatorio" aria-hidden="true">*</span></label>
+            <input class="form-control dato" type="text" id="analizador-version" name="version" inputmode="decimal" placeholder="Sale del nombre del archivo" required>
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="analizador-notas">Qué cambió</label>
+            <textarea class="form-control" id="analizador-notas" name="notas" rows="2"></textarea>
+        </div>
+        <div class="col-12 analizador-subida" data-subida hidden>
+            <span class="analizador-barra" role="progressbar" aria-label="Avance de la subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></span>
+            <span class="analizador-subida-texto" data-subida-texto aria-live="polite"></span>
+        </div>
+        <div class="col-12"><button type="submit" class="btn btn-primary"><i class="bi bi-upload" aria-hidden="true"></i> Publicar</button></div>
+    </form>
+</section>
+
+<section class="tarjeta p-0">
+    <h2 class="tarjeta-titulo px-4 pt-4">Versiones</h2>
+    {% if versiones_analizador %}
+    <div class="table-responsive">
+        <table class="table tabla mb-0">
+            <thead><tr><th scope="col">Versión</th><th scope="col">Tamaño</th><th scope="col">Subida</th><th scope="col">Por</th><th scope="col">Estado</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+            <tbody>
+            {% for v in versiones_analizador %}
+                <tr>
+                    <td><a class="dato" href="{% url 'descargas:analizador_descargar_version' v.pk %}">{{ v.version }}</a></td>
+                    <td class="small">{{ v.tamanio|filesizeformat }}</td>
+                    <td class="small">{{ v.subida|date:"j/m/Y H:i" }}</td>
+                    <td class="texto-suave small">{{ v.subida_por.username|default:"—" }}</td>
+                    <td>{% if v.publicada %}<span class="chip chip-si">Publicada</span>{% else %}<span class="chip">Oculta</span>{% endif %}</td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'descargas:analizador_publicada' v.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">{% if v.publicada %}Ocultar{% else %}Publicar{% endif %}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="texto-suave small px-4 py-3 mb-0">Los analizadores instalan la publicada con el número más alto. Ocultar la última hace que ya no se instale en las PCs que todavía no la tienen.</p>
+    {% else %}
+    <p class="texto-suave px-4 pb-4 mb-0">Sin versiones todavía.</p>
+    {% endif %}
+</section>

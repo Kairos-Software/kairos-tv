@@ -211,6 +211,9 @@ STATICFILES_DIRS = [
 # Media files (uploads: fotos de perfil, adjuntos, etc.)
 MEDIA_URL = os.environ.get('MEDIA_URL', '/media/')
 MEDIA_ROOT = BASE_DIR / 'media'
+# Lo que no se sirve a cualquiera (nginx solo sirve media/): el instalador del analizador para PC, que solo bajan los
+# superusuarios y los analizadores instalados (descargas/analizador.py). No va al repo (.gitignore: privado/).
+ARCHIVOS_PRIVADOS = BASE_DIR / 'privado'
 
 # API (Django REST Framework) — ver api/README.md
 REST_FRAMEWORK = {
