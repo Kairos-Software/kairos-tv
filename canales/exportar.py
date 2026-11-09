@@ -2,18 +2,21 @@
 Exportar el contenido cargado (capa Base): una lista M3U8 o una planilla de
 Excel, con lo que se elija en Organizar contenido.
 
-  - Lista M3U8: la abre VLC (u otra app de listas) y se puede volver a
-    importar acá. Un canal con varias señales sale una vez por señal, con el
-    mismo nombre: al importarla se juntan de nuevo en un canal con sus
-    fuentes. Lleva el nombre, el logo, la categoría (group-title), el número,
-    el país, el idioma, el User-Agent / Referer que pida cada señal y la
-    sección (kairos-seccion: así vuelve a la misma, ver m3u.py).
+  - Lista M3U8: la abre VLC (u otra app de listas), la mira el analizador de
+    canales de la PC y se puede volver a importar acá. Un canal con varias
+    señales sale una vez por señal, con el mismo nombre: al importarla se
+    juntan de nuevo en un canal con sus fuentes. Lleva el nombre, el logo, la
+    categoría (group-title), el número, el país, el idioma, el User-Agent /
+    Referer que pida cada señal, la sección (kairos-seccion: así vuelve a la
+    misma) y el tipo de cada señal (kairos-tipo: hls, directo, web, yt_video...;
+    así vuelve como lo que es, sin tener que averiguarlo). Ver m3u.py.
   - Excel: dos hojas. "Contenido", una fila por canal, película o capítulo
     (con si la ve la app y, si no, por qué) y "Fuentes", una fila por señal
     (estado, formato, códec, error, cuándo se probó, de qué lista salió...).
 
-Lo de YouTube (los videos del reproductor oficial y los vivos de YouTube) NO
-se exporta: no son direcciones de video que otra app pueda abrir.
+Lo de YouTube (los videos del reproductor oficial y los vivos de YouTube)
+también sale: otra app quizás no lo abra, pero así la lista lleva todo junto
+y, al volver a importarla, cada cosa vuelve a su lugar.
 
     eleccion = Eleccion(secciones=['vivo'], filtros={'mostrar': 'app'})
     exportacion = elegir(eleccion)
@@ -31,12 +34,7 @@ from django.utils.timezone import localtime
 from herramientas.excel import planilla
 
 from . import clasificar, consultas, imagenes, organizar, secciones
-from .models import Canal, Contenido, Fuente
-
-# Las señales de YouTube no se exportan (las abre solo el reproductor de YouTube)
-TIPOS_DE_YOUTUBE = {Fuente.Tipo.YT_VIDEO, Fuente.Tipo.YOUTUBE}
-# Las que no son una señal de video: van con kairos-tipo (ver lista_m3u)
-TIPOS_DE_PAGINA = {Fuente.Tipo.WEB, Fuente.Tipo.PAGINA}
+from .models import Canal, Contenido
 
 # Los filtros de Organizar contenido que se pueden aplicar (ver consultas.canales_filtrados)
 FILTROS = ('texto', 'mostrar', 'origen', 'sin_logo', 'idioma')
@@ -65,7 +63,7 @@ class Eleccion:
 @dataclass
 class Exportacion:
     canales: list            # [(canal, [fuentes que se exportan]), ...] en el orden de la app
-    sin_senales: int = 0     # los que quedaron afuera: sin señales para exportar (solo de YouTube, o ninguna andaba)
+    sin_senales: int = 0     # los que quedaron afuera: sin señales para exportar (ninguna andaba)
     nombres_de_secciones: dict = field(default_factory=dict)
     portadas: dict = field(default_factory=dict)        # {nombre de la serie: portada propia}
 
@@ -101,13 +99,7 @@ def para_elegir():
     return resultado
 
 
-def es_de_youtube(fuente):
-    return fuente.tipo in TIPOS_DE_YOUTUBE or clasificar.formato(fuente.url) == 'youtube'
-
-
 def _se_exporta(fuente, solo_las_que_andan):
-    if es_de_youtube(fuente):
-        return False
     return not solo_las_que_andan or (fuente.usable() and fuente.tipo in consultas.TIPOS_QUE_REPRODUCE_LA_APP)
 
 
@@ -164,7 +156,7 @@ def lista_m3u(exportacion):
     ahora = localtime(timezone.now())
     lineas = ['#EXTM3U',
               f'# Kairos TV · exportada el {ahora:%d/%m/%Y %H:%M} · {len(exportacion.canales)} canales, '
-              f'películas o capítulos con {exportacion.cantidad_de_senales} señales (sin lo de YouTube)']
+              f'películas o capítulos con {exportacion.cantidad_de_senales} señales']
     for canal, fuentes in exportacion.canales:
         atributos = [
             ('tvg-id', canal.tvg_id),
@@ -179,10 +171,9 @@ def lista_m3u(exportacion):
         extinf = ' '.join(f'{clave}="{_atributo(valor)}"' for clave, valor in atributos if valor)
         nombre = ' '.join(canal.nombre.split())
         for fuente in fuentes:
-            # Una página con reproductor (la app la abre como página) o una página de video: lo dice, para que
-            # el analizador de canales de la PC no la mire como si fuera una señal de video
-            tipo = f' kairos-tipo="{fuente.tipo}"' if fuente.tipo in TIPOS_DE_PAGINA else ''
-            lineas.append(f'#EXTINF:-1 {extinf}{tipo},{nombre}')
+            # Qué es cada señal (una página con reproductor, un video de YouTube, HLS...): el analizador de canales
+            # de la PC no mira una página como si fuera video, y al volver a importarla acá no hay que averiguarlo
+            lineas.append(f'#EXTINF:-1 {extinf} kairos-tipo="{fuente.tipo}",{nombre}')
             if fuente.user_agent:
                 lineas.append(f'#EXTVLCOPT:http-user-agent={" ".join(fuente.user_agent.split())}')
             if fuente.referer:

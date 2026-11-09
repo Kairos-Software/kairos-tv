@@ -19,7 +19,9 @@ indican de dos maneras, y las dos se leen:
 
 Las listas que exporta este sistema (exportar.py) llevan además la sección
 de cada cosa (kairos-seccion="pelicula"), para que al volver a importarlas
-vaya a la misma aunque la dirección no diga si es una película.
+vaya a la misma aunque la dirección no diga si es una película, y qué tipo
+de señal es (kairos-tipo="web", "yt_video", "hls"...: EntradaM3U.tipo_lista),
+para que vuelva como lo que es aunque la dirección no lo diga.
 
 Las listas limpias del ANALIZADOR DE CANALES (el programa de la PC que mira
 cada señal un minuto y medio: KAIROS TV\\analizador-canales) traen al final,
@@ -29,6 +31,21 @@ en comentarios que las otras apps no leen, las señales que no sirven:
 
 Esas las lee leer_las_que_no_sirven (y servicios.quitar_las_que_no_sirven las
 saca de la app al importar la lista).
+
+Desde su versión 4 trae también lo que midió de cada señal que va en la lista
+(leer_analisis), y las que fallaron una sola vez con otra marca (un panel
+viejo, que apaga las NO-SIRVE sin preguntar, no la lee):
+
+    #KAIROS-ANALISIS version="5" fecha="2026-11-08T21:30:00-03:00"
+    #KAIROS-ANDA url="http://servidor/canal.m3u8" medida="2026-11-08T21:00:00-03:00" version="5" estado="anda" vence=""
+                 tipo="hls" codec="h264" calidad="1080p · H.264 · audio AAC (es)" idioma="es"
+    #KAIROS-POR-CONFIRMAR url="http://servidor/otro.m3u8" motivo="Falló una vez: error 403" causa="otro_horario"
+
+estado: anda, a_mano (aprobada a mano), dudosa, sin_confirmar (una página que
+la PC no pudo mirar entera) o sin_juzgar (sin lugar en la cuenta, sin medir),
+con su motivo si no es "anda". Lo que anda o no anda lo decide el analizador:
+con esto el panel no la vuelve a juzgar. Una lista sin esas líneas se importa
+como siempre.
 
     from canales.m3u import leer_m3u
     for entrada in leer_m3u(texto):
@@ -45,6 +62,11 @@ _ATRIBUTO = re.compile(r'([\w-]+)\s*=\s*"([^"]*)"')
 _MARCAS = re.compile(r'[ⓎⒼⓈ]')
 # Una señal que el analizador de canales dio como que no sirve (ver arriba)
 NO_SIRVE = '#KAIROS-NO-SIRVE'
+POR_CONFIRMAR = '#KAIROS-POR-CONFIRMAR'
+ANALISIS = '#KAIROS-ANALISIS'
+ANDA = '#KAIROS-ANDA'
+# Lo que trae cada #KAIROS-ANDA, además de la dirección
+_DEL_SELLO = ('medida', 'estado', 'vence', 'motivo', 'tipo', 'codec', 'calidad', 'idioma')
 
 
 @dataclass
@@ -60,6 +82,7 @@ class EntradaM3U:
     referer: str = ''
     idioma: str = ''   # el tvg-language tal cual viene ("Spanish", "es"...)
     seccion: str = ''  # kairos-seccion: la sección que tenía al exportarla de este sistema
+    tipo_lista: str = ''   # kairos-tipo: el tipo de señal que tenía acá (Fuente.Tipo: 'hls', 'web', 'yt_video'...)
 
     @property
     def tipo(self):
@@ -103,6 +126,7 @@ def leer_m3u(texto):
                 pais=atributos.get('tvg-country', '').strip().upper()[:2],
                 idioma=atributos.get('tvg-language', '').strip(),
                 seccion=atributos.get('kairos-seccion', '').strip()[:10],
+                tipo_lista=atributos.get('kairos-tipo', '').strip().lower()[:10],
             )
         elif linea.upper().startswith('#EXTVLCOPT:') and pendiente is not None:
             opcion, _, valor = linea[len('#EXTVLCOPT:'):].partition('=')
@@ -141,3 +165,34 @@ def leer_las_que_no_sirven(texto):
             if url:
                 malas[url] = atributos.get('motivo', '').strip()
     return malas
+
+
+def leer_analisis(texto):
+    """
+    Lo que midió el analizador de canales, o None si la lista no lo trae (se importa como siempre):
+    {'version': 5, 'fecha': '...',
+     'anda': {dirección: {medida, version, estado, vence, motivo, tipo, codec, calidad, idioma}},  (las de la lista)
+     'no_sirven': {dirección: {motivo, causa}}, 'por_confirmar': {dirección: {motivo, causa}}}.
+    """
+    analisis = None
+    anda, no_sirven, por_confirmar = {}, {}, {}
+    for linea in (texto or '').splitlines():
+        linea = linea.strip()
+        if not linea.startswith('#KAIROS-'):
+            continue
+        atributos = dict(_ATRIBUTO.findall(linea))
+        url = atributos.get('url', '').strip()
+        marca = linea.upper().split(' ', 1)[0]
+        if marca == ANALISIS:
+            version = atributos.get('version', '')
+            analisis = {'version': int(version) if version.isdigit() else 0, 'fecha': atributos.get('fecha', '')}
+        elif marca == ANDA and url:
+            version = atributos.get('version', '')
+            anda[url] = {**{clave: atributos.get(clave, '').strip() for clave in _DEL_SELLO},
+                         'version': int(version) if version.isdigit() else 0}
+        elif marca in (NO_SIRVE, POR_CONFIRMAR) and url:
+            (no_sirven if marca == NO_SIRVE else por_confirmar)[url] = {
+                'motivo': atributos.get('motivo', '').strip(), 'causa': atributos.get('causa', '').strip()}
+    if analisis is None:
+        return None
+    return {**analisis, 'anda': anda, 'no_sirven': no_sirven, 'por_confirmar': por_confirmar}

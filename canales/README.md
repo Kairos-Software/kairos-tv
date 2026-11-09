@@ -28,8 +28,8 @@ siguiente. Si una fuente se cae, el canal sigue andando.
 | `models.py` | Base | `Categoria`, `Canal` (con idioma, baja lógica y "quitado" con motivo), `Fuente` (dirección, formato, prioridad, estado) e `Importacion` / `EntradaImportada` (cada lista subida y qué pasó con cada canal). `Visto` y `FavoritoAgregado`: cuánto se miró cada cosa y cuántas veces se agregó a favoritos, por día y sumando todos los aparatos (sin saber quién). `PortadaDeSerie`: la portada propia de una serie, por su nombre (ver `imagenes.py`). **De qué serie es cada capítulo** (migración 0030): `Canal.serie` (el nombre de la serie en minúsculas), `temporada` y `capitulo`, sacados del nombre con `clasificar.episodio` (la regla de la app) y guardados para que la base agrupe por serie sin releer todos los nombres; los anota `save()` y, lo que se cambia sin `save()`, `consultas.anotar_series` (`serie_leida_de`: de qué nombre se sacaron; un índice tiene solo los que cambiaron). Si cambia la regla de `clasificar.episodio`, una migración tiene que vaciar `serie_leida_de` en todos: se vuelven a anotar solos. `LogoParejo`: la copia pareja del logo de cada dirección (ver `imagenes.py`, "Logos parejos"). |
 | `imagenes.py` | Base | **Imágenes puestas a mano** en Organizar contenido → Editar. `guardar_subida()`: una imagen subida desde la compu (JPG, PNG o WEBP, hasta 8 MB) se achica a 1600 de lado, se guarda en `media/canales/imagenes/` con un nombre al azar y queda en `logo` como dirección completa, igual que un link pegado (con transparencia queda PNG). `sacar_cuadritos()`: muchos "PNG sin fondo" bajados de internet traen los cuadritos grises PINTADOS; si el borde los tiene (dos grises que se alternan), ese fondo pasa a transparente (solo lo pegado al borde: un gris adentro del logo se queda). Se sube desde Organizar contenido → Editar o desde la página Editar de cada canal. `soltar()` borra una subida vieja cuando ya nadie la usa. **Portada de serie** (`portada_de`, `portadas_de`, `poner_portada`, `mover_portada`): la imagen de la serie aparte de la de sus capítulos (cada capítulo conserva la que trajo YouTube); sin portada, la serie usa la del primer capítulo. Va con la serie al renombrarla o unirla y se borra al eliminarla. La API la manda en `portadas` con `?contenido=serie` (app 1.2.11 o más nueva). **Logos parejos** (canales en vivo y radios): los logos vienen de cualquier lado, unos con mucho borde vacío (Comarca TV, 25 % a cada costado), otros justo al borde, de 100 o de 3840 px; centrados "tal cual" unos se veían chiquitos y otros enormes. `emparejar()` recorta lo que sobra alrededor (lo transparente; o el fondo de un solo color, dejándole un margen de ese color: sacárselo dejaría invisible un logo oscuro sobre blanco), deja un margen chico e igual para todos y lo achica a 512 px (WEBP en `media/canales/logos/`, una por dirección: `LogoParejo`). **Rotos**: si imgur lo borró (manda su cartel "The image you are requesting does not exist") o da 404, no se manda ninguno y la app muestra las iniciales; el panel de detalles de Organizar lo avisa. `emparejar_logos()` lo corre el cron (`verificar_fuentes`, hasta 4 minutos por pasada; reintenta los fallados a los 7 días y borra las copias que ya no usa nadie) y `emparejar_logo_al_guardar()` lo hace en el momento al cambiar un logo en el panel. La API (`CanalSerializer.logo`) y el panel (`logos_parejos()`) muestran la copia: la app no necesita versión nueva. SVG: queda el original. |
 | `secciones.py` | Base | **Secciones nuevas de la app** (Música, Radio...). `Seccion` tiene nombre, ícono, orden y su **forma**: "a demanda" (`pelicula`: funciona como Películas, se elige un video, ej. música de YouTube) o "en vivo" (`vivo`: como En vivo, ej. radios). Lo que está en una sección guarda su `clave` ("musica") en `contenido` (igual que "vivo", "pelicula" o "serie"), así importar, organizar, probar y la API sirven igual. `todas()`, `nombre()`, `forma()`, `es_valida()`, `crear()` (arma la clave del nombre; no deja repetir ni pisar las fijas), `editar()` (nombre, ícono, orden; la clave y la forma no cambian) y `borrar()` (si tiene algo, solo "con todo lo que tiene"). Las series no van en secciones nuevas. En el panel: Organizar contenido → pestaña "Nueva sección". |
-| `m3u.py` | Base | Lector de listas M3U/M3U8: saca nombre, logo, categoría, número, tvg-id, país, idioma (`tvg-language`), cabeceras y dirección. También `kairos-seccion`, la sección que anotan las listas exportadas de acá (así cada cosa vuelve a su sección), y aparte (`leer_las_que_no_sirven`) las líneas `#KAIROS-NO-SIRVE` de las listas limpias del analizador de canales (ver "La lista limpia del analizador"). No toca la base. |
-| `exportar.py` | Base | **Exportar** desde Organizar contenido. `Eleccion`: secciones enteras, categorías (de una o varias secciones), lo sin categoría, canales y series sueltos, con o sin los filtros de la página y "solo las señales que andan". `elegir()` lo junta en el orden de la app; `lista_m3u()` (una entrada por señal con el mismo nombre, logo, categoría, número, país, idioma, User-Agent/Referer y `kairos-seccion`: al volver a importarla queda igual) y `planilla_excel()` (hojas "Contenido" y "Fuentes", con si la ve la app y por qué no). Lo de YouTube no se exporta. Una lista exportada se importa como `Importacion.de_kairos`: sus series entran aunque tengan menos de 3 capítulos. |
+| `m3u.py` | Base | Lector de listas M3U/M3U8: saca nombre, logo, categoría, número, tvg-id, país, idioma (`tvg-language`), cabeceras y dirección. También `kairos-seccion` y `kairos-tipo` (`tipo_lista`), la sección y el tipo de señal que anotan las listas exportadas de acá (así cada cosa vuelve a su sección y como lo que es), y aparte las líneas de las listas limpias del analizador de canales: `leer_analisis` (`#KAIROS-ANALISIS`, `#KAIROS-ANDA`, `#KAIROS-NO-SIRVE`, `#KAIROS-POR-CONFIRMAR`) y `leer_las_que_no_sirven` (ver "La lista limpia del analizador"). No toca la base. |
+| `exportar.py` | Base | **Exportar** desde Organizar contenido. `Eleccion`: secciones enteras, categorías (de una o varias secciones), lo sin categoría, canales y series sueltos, con o sin los filtros de la página y "solo las señales que andan". `elegir()` lo junta en el orden de la app; `lista_m3u()` (una entrada por señal con el mismo nombre, logo, categoría, número, país, idioma, User-Agent/Referer, `kairos-seccion` y `kairos-tipo`: al volver a importarla queda igual) y `planilla_excel()` (hojas "Contenido" y "Fuentes", con si la ve la app y por qué no). Lo de YouTube también sale (con su `kairos-tipo`: `yt_video`, `youtube`), para que la lista lleve todo junto. Una lista exportada se importa como `Importacion.de_kairos`: sus series entran aunque tengan menos de 3 capítulos. |
 | `clasificar.py` | Base | Conclusiones sobre cada entrada: idioma y país, si es en vivo / película / serie, si es para adultos, el formato que parece y el nombre limpio (`ES: (HD REPUESTO) DAZN F1` → `DAZN F1`). `episodio()`: "Arrow S02 E05" → serie, temporada y capítulo (la misma regla que la app). |
 | `paginas.py` | Base | YouTube y páginas de video (Twitch, Dailymotion, Vimeo, Kick...) con **yt-dlp**: `verificar()` (¿hay video?) y `resolver()` (la dirección real en este momento). |
 | `verificacion.py` | Base | Prueba si una fuente responde y **qué formato es** mirando los bytes (como VLC): HLS, DASH, video directo (MPEG-TS/MP4/MKV) o RTSP. Si el servidor rechaza al "navegador", reintenta como VLC. Además averigua el **códec** del video (h264, h265, mpeg2...) por la lista HLS o los primeros bytes (`Fuente.codec`), y si es de **10 bits** (`h264_10` / `h265_10`, mirando el perfil: la mayoría de los TV box no leen H.264 de 10 bits y lo muestran con franjas verdes). La app lo compara con lo que sabe mostrar su aparato y no muestra lo que no puede ver. Máximo 2 pedidos a la vez al mismo servidor y un tiempo límite por tanda. |
@@ -641,24 +641,44 @@ El analizador de canales es un programa aparte, para la PC
 (`KAIROS TV\analizador-canales\`): mira cada señal un minuto y medio (imagen,
 sonido, cortes, idioma) y exporta una lista limpia. El ida y vuelta:
 
-1. **Exportar** desde Organizar (secciones, categorías o todo) → lista M3U8.
-   Las páginas con reproductor (`Fuente.Tipo.WEB`) y las páginas de video
-   (`PAGINA`) salen con `kairos-tipo="web"` / `"pagina"` en su `#EXTINF`
-   (`exportar.TIPOS_DE_PAGINA`): así el analizador no las mira como una señal
-   de video ni las da por caídas. Las otras apps ignoran ese atributo.
-2. El analizador la mira y baja la lista limpia: las buenas con sus líneas de
-   siempre y, al final, las que no sirven en comentarios que las otras apps no
-   leen: `#KAIROS-NO-SIRVE url="..." motivo="Se cortó a los 40 s y no volvió"`.
-3. **Importar** esa lista acá. Antes de importar,
-   `servicios.quitar_las_que_no_sirven` saca de la app las señales cargadas
-   con esas direcciones (en cualquier canal): quedan apagadas como "Quitar
-   esta señal" (no se borran, no vuelven solas, aunque antes las hubiera
-   retirado la limpieza) con lo que dijo el analizador en
-   `Fuente.motivo_quitada` (migración 0034). Se ven en Señales → «Quitadas a
-   mano» y en el panel de edición, con el motivo. «Volver a mostrar esta
-   señal» las devuelve y borra el motivo. Las buenas que ya estaban quedan
-   como repetidas; las nuevas se prueban e importan como siempre. Una lista que
-   solo trae las que no sirven no crea importación: lleva directo a Señales.
+1. **Exportar** desde Organizar (secciones, categorías o todo) → lista M3U8,
+   con todo junto: señales de video, páginas web y YouTube. Cada señal lleva
+   su sección (`kairos-seccion`) y su tipo (`kairos-tipo="hls"`, `"web"`,
+   `"yt_video"`...): así el analizador no mira una página como si fuera video
+   y, al volver, cada cosa entra como lo que es. Las otras apps ignoran esos
+   atributos.
+2. El analizador la mira y baja la lista limpia con lo que se elija (por
+   resultado o una por una): las que van como señales con sus líneas de
+   siempre y, en comentarios que las otras apps no leen, lo que midió de cada
+   una (`#KAIROS-ANDA url="..." estado="anda|a_mano|dudosa|sin_confirmar|sin_juzgar"`
+   con motivo, tipo, códec, calidad e idioma), las que no sirven
+   (`#KAIROS-NO-SIRVE`) y las que fallaron una sola vez (`#KAIROS-POR-CONFIRMAR`).
+3. **Importar** esa lista acá (`preparar_importacion` guarda el análisis en
+   `Importacion.analisis`). Como salió de este panel, ya se sabe dónde va cada
+   cosa (sección, categoría, serie, canal) y el panel **no vuelve a probar ni
+   a juzgar** lo medido en la PC (`_con_el_analisis`): solo revisa lo que la
+   PC no puede saber (`_hay_que_mirarla`, `por_que_mirarla`):
+   - ya estaba cargada → «Ya estaban», queda como está;
+   - el canal está quitado a mano → no vuelve;
+   - a una serie le falta el capítulo 1 → no entra (como siempre);
+   - lo medido tiene más de 7 días, una versión vieja del analizador o venció
+     el permiso de la dirección → «Para mirar» (se puede «Cargar igual»);
+   - un video de YouTube (`yt_video`): se pregunta a YouTube si existe y si el
+     dueño deja verlo fuera de YouTube;
+   - si la lista no dice el tipo (una lista vieja, una Xtream sin extensión),
+     una mirada corta desde el servidor para saberlo (un fallo no la desmiente).
+
+   Lo demás entra con lo que midió la PC (códec, calidad, idioma). Las dudosas
+   entran con la duda en el motivo; las sin juzgar quedan «Para mirar». Las
+   opciones de la subida (solo español, sin logo...) no descartan lo que ya se
+   aceptó acá. **Antes de apagar** las que no sirven (`Importacion.por_apagar`,
+   las que fallaron una sola vez sin marcar) y **antes de volver a prender**
+   las cargadas pero apagadas que en la PC anduvieron (`Importacion.por_prender`,
+   migración 0036: vienen marcadas las que apagó el analizador o retiró la
+   limpieza, no las que apagaste a mano), la tarjeta de la importación muestra
+   cuáles. Apagar queda como «Quitar esta señal» (`Fuente.motivo_quitada`,
+   migración 0034) y prender como «Volver a mostrar esta señal». Una lista que
+   solo trae las que no sirven y ninguna está cargada no crea importación.
 
 ### Las pantallas de trabajo (desde el 20/10/2026)
 
@@ -789,3 +809,23 @@ https://servidor/canal26/main.m3u8
 - Qué canales ve cada cliente según su plan / créditos.
 - Secciones de películas y series en la app (agrupar capítulos por serie y temporada).
 - Guía de programación (EPG) con el `tvg-id`.
+
+## La lista limpia del analizador de canales
+
+El analizador de la PC (`KAIROS TV\analizador-canales`) hace el 90 % del trabajo:
+mide cada fuente y decide cuál anda. La lista que exporta trae lo medido en
+comentarios (`#KAIROS-ANALISIS`, `#KAIROS-ANDA`, `#KAIROS-NO-SIRVE`: `m3u.leer_analisis`)
+que VLC ignora. Una lista sin esas líneas se importa como siempre.
+
+Con esos datos el panel **no vuelve a juzgar** (`juzgar` no corre: nada de duplicar
+reglas) y comprueba solo esto, en `servicios._con_el_analisis`:
+
+| Qué | Por qué | Qué hace |
+|---|---|---|
+| ¿Lo medido está viejo (más de 7 días) o es de una versión vieja? | La señal pudo cambiar | «Para mirar», se puede «Cargar igual» |
+| ¿Venció el permiso de la dirección? | Es seguro que ya no anda | «Para mirar» |
+| ¿Sigue respondiendo? (lectura corta, sin video completo) | Avisa, no decide: hay proveedores que bloquean las IP de datacenter | Si no responde, igual queda lista y se dice; `estado` = sin verificar |
+| ¿Ya está cargada? | Duplicados contra el catálogo, como siempre | «Ya estaba» |
+| ¿Qué se apagaría? | Apagar es lo único que le saca algo a la app | Nada se apaga hasta que se elige en la pantalla (`importacion_apagar`) |
+
+Lo que no comprueba a propósito: imagen, sonido, cortes, idioma. Eso es del analizador.

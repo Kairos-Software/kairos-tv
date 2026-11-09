@@ -35,6 +35,7 @@ from django.core.cache import cache
 from django.db import DatabaseError, transaction
 from django.db.models import Count, F, Max, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from actividad.models import Accion
 from actividad.registro import registrar
@@ -42,7 +43,7 @@ from actividad.registro import registrar
 from . import clasificar, organizar, salud, secciones, youtube
 from .analisis import NOMBRES_DE_IDIOMAS
 from .consultas import anotar_series, fuentes_usables
-from .m3u import EntradaM3U, leer_las_que_no_sirven, leer_m3u, normalizar
+from .m3u import EntradaM3U, leer_analisis, leer_las_que_no_sirven, leer_m3u, normalizar
 from .models import (OCULTA_POR, Canal, Categoria, Contenido, EntradaImportada, Fuente, Importacion,
                      medidas_de_calidad)
 from .verificacion import NOMBRES_DE_CODECS, Resultado
@@ -111,8 +112,13 @@ def _sin_nombre(nombre):
     return not any(c.isalpha() for c in simple) or simple in ('canal', 'channel', 'sin nombre')
 
 
-def _motivo_de_descarte(entrada, importacion, contenido, tipo, idioma, pais, nombre):
-    """Por qué se descarta sin verificarla ('' = no se descarta)."""
+def _motivo_de_descarte(entrada, importacion, contenido, tipo, idioma, pais, nombre, de_la_pc=False):
+    """
+    Por qué se descarta sin verificarla ('' = no se descarta). Lo que ya midió el analizador de la PC salió de
+    acá y ya se aceptó (idioma, adultos, logo...): solo se descarta lo que la app no puede abrir.
+    """
+    if de_la_pc:
+        return 'Es RTMP: la app todavía no reproduce ese formato.' if tipo == 'rtmp' else ''
     if importacion.descartar_vod and contenido != EntradaImportada.Contenido.VIVO:
         que = 'una película' if contenido == EntradaImportada.Contenido.PELICULA else 'un capítulo de serie'
         return f'Es {que}, no un canal en vivo.'
@@ -144,22 +150,25 @@ def crear_importacion(texto, archivo='', usuario=None, solo_espanol=False, desca
     idioma, país y si son capítulos de series.
     `seccion`: todo va a esa sección nueva (Radio, Música...) en vez de a En
     vivo, Películas o Series según lo que sea cada uno.
-    Una lista exportada de acá (trae kairos-seccion) queda `de_kairos`.
+    Una lista exportada de acá (trae kairos-seccion) queda `de_kairos`. Una lista limpia del analizador de la PC
+    (trae lo que midió: m3u.leer_analisis) queda con su `analisis`, y lo que midió no se vuelve a juzgar.
     """
-    leidas = leer_m3u(texto)
-    importacion = _nueva_importacion(leidas, archivo, usuario, solo_espanol=solo_espanol,
+    leidas, analisis = leer_m3u(texto), leer_analisis(texto)
+    importacion = _nueva_importacion(leidas, archivo, usuario, analisis, solo_espanol=solo_espanol,
                                      descartar_sin_logo=descartar_sin_logo, descartar_vod=descartar_vod,
                                      descartar_adultos=descartar_adultos, a_fondo=a_fondo, seccion=seccion)
     pendientes = _guardar_entradas(importacion, leidas, 1, categoria, set(Fuente.objects.values_list('url', flat=True)))
     importacion.total, importacion.para_verificar = len(leidas), pendientes
     _terminar_de_leer(importacion)
+    _anotar_analisis(importacion, analisis)
     return importacion
 
 
-def _nueva_importacion(leidas, archivo='', usuario=None, **opciones):
+def _nueva_importacion(leidas, archivo='', usuario=None, analisis=None, **opciones):
     return Importacion.objects.create(
         archivo=archivo[:150], usuario=usuario if getattr(usuario, 'pk', None) else None,
-        de_kairos=any(entrada.seccion for entrada in leidas), **opciones,
+        de_kairos=any(entrada.seccion for entrada in leidas),
+        analisis={clave: analisis[clave] for clave in ('version', 'fecha', 'anda')} if analisis else {}, **opciones,
     )
 
 
@@ -182,6 +191,7 @@ def _guardar_entradas(importacion, leidas, desde, categoria, ya_guardadas, vista
     """
     seccion = importacion.seccion
     validas = {clave for clave, _ in secciones.todas()}
+    sellos = (importacion.analisis or {}).get('anda') or {}
     vistas = set() if vistas is None else vistas
     entradas = []
     for posicion, entrada in enumerate(leidas, start=desde):
@@ -192,17 +202,20 @@ def _guardar_entradas(importacion, leidas, desde, categoria, ya_guardadas, vista
         # Si no, la que dice una lista exportada de acá (si esa sección existe) o la que parece por la dirección.
         contenido = (seccion or (entrada.seccion if entrada.seccion in validas else '')
                      or clasificar.contenido(entrada.url, entrada.categoria))
-        tipo = clasificar.formato(entrada.url)
+        sello = sellos.get(entrada.url)
+        tipo = _tipo_de(entrada, sello)
 
         estado, motivo = Estado.PENDIENTE, ''
         if entrada.url in vistas:
             estado, motivo = Estado.REPETIDA, 'La misma dirección aparece antes en esta lista.'
         elif entrada.url in ya_guardadas:
             estado, motivo = Estado.REPETIDA, 'Esta dirección ya estaba cargada.'
+            if sello:
+                motivo = f'Ya estaba cargada: queda como está. {lo_que_dijo_la_pc(sello)}'[:200]
         else:
             # (descartar películas y series no aplica: se eligió a qué sección va todo)
             motivo = _motivo_de_descarte(entrada, importacion, Contenido.VIVO if seccion else contenido, tipo,
-                                         idioma, pais, nombre)
+                                         idioma, pais, nombre, de_la_pc=bool(sello))
             if motivo:
                 estado = Estado.DESCARTADA
         vistas.add(entrada.url)
@@ -217,6 +230,18 @@ def _guardar_entradas(importacion, leidas, desde, categoria, ya_guardadas, vista
         ))
     EntradaImportada.objects.bulk_create(entradas, batch_size=1000)
     return sum(1 for e in entradas if e.estado == Estado.PENDIENTE)
+
+
+def _tipo_de(entrada, sello=None):
+    """
+    El tipo de señal: el que tenía acá si la lista salió de este panel (kairos-tipo), si no el que usó el reproductor
+    de la app en la PC, si no lo que parece por la dirección ('' = no se sabe: lo averigua la verificación).
+    """
+    validos = set(Fuente.Tipo.values)
+    for tipo in (entrada.tipo_lista, (sello or {}).get('tipo', '')):
+        if tipo in validos:
+            return tipo
+    return clasificar.formato(entrada.url)
 
 
 # ── Una lista grande: se lee de a tandas ─────────────────────────────
@@ -240,13 +265,99 @@ def preparar_importacion(texto, archivo='', usuario=None, categoria='', **opcion
     leidas = leer_m3u(texto)
     if len(leidas) <= LEER_DE_UNA:
         return crear_importacion(texto, archivo, usuario, categoria=categoria, **opciones)
-    importacion = _nueva_importacion(leidas, archivo, usuario, total=len(leidas), por_leer=len(leidas), **opciones)
+    analisis = leer_analisis(texto)
+    importacion = _nueva_importacion(leidas, archivo, usuario, analisis, total=len(leidas), por_leer=len(leidas),
+                                     **opciones)
     CARPETA_DE_LISTAS.mkdir(parents=True, exist_ok=True)
     with _lista_guardada(importacion).open('w', encoding='utf-8') as guardada:
         guardada.write(json.dumps({'categoria': categoria}) + '\n')
         for entrada in leidas:
             guardada.write(json.dumps(asdict(entrada), ensure_ascii=False) + '\n')
+    _anotar_analisis(importacion, analisis)
     return importacion
+
+
+def _anotar_analisis(importacion, analisis):
+    """Una lista limpia del analizador: qué se apagaría y qué se volvería a prender, para decidirlo en la pantalla."""
+    if analisis is None:
+        return
+    importacion.por_apagar = lo_que_se_apagaria(analisis['no_sirven'], analisis.get('por_confirmar'))
+    importacion.por_prender = lo_que_se_prenderia(analisis['anda'])
+    importacion.save(update_fields=['por_apagar', 'por_prender'])
+
+
+def lo_que_se_apagaria(no_sirven, por_confirmar=None):
+    """
+    [{url, motivo, causa, canal}] de las señales cargadas y prendidas que el analizador dio como que no sirven. Las
+    que fallaron una sola vez (`por_confirmar`) van con sin_marcar: se ofrecen, pero no vienen elegidas.
+    """
+    anotadas = {url: {**dato, 'sin_marcar': True} for url, dato in (por_confirmar or {}).items()}
+    anotadas.update(no_sirven or {})
+    if not anotadas:
+        return []
+    filas, urls = [], list(anotadas)
+    for desde in range(0, len(urls), 2000):
+        fuentes = (Fuente.objects.filter(Q(activa=True) | Q(retirada__isnull=False), url__in=urls[desde:desde + 2000])
+                   .select_related('canal'))
+        filas += [{'url': fuente.url, 'canal': fuente.canal.nombre, **anotadas[fuente.url]} for fuente in fuentes]
+    return sorted(filas, key=lambda fila: (bool(fila.get('sin_marcar')), fila['causa'], fila['canal']))
+
+
+def apagar_lo_elegido(importacion, urls, usuario=None):
+    """Apaga las señales elegidas de lo que dijo el analizador (como "Quitar esta señal"). Devuelve cuántas."""
+    elegidas = {fila['url']: fila['motivo'] for fila in importacion.por_apagar if fila['url'] in set(urls)}
+    cuantas = _quitar_de_la_app(elegidas, usuario)
+    no_apagar(importacion)
+    return cuantas
+
+
+def no_apagar(importacion):
+    importacion.por_apagar = []
+    importacion.save(update_fields=['por_apagar'])
+
+
+# Lo que dijo la PC que alcanza para volver a prender una señal apagada
+ANDUVO_EN_LA_PC = ('anda', 'a_mano')
+
+
+def lo_que_se_prenderia(sellos):
+    """
+    [{url, canal, por_que, sin_marcar}] de las señales que ya están cargadas pero apagadas (el canal no) y que en la
+    PC anduvieron hace poco. Las que apagó el analizador o retiró la limpieza vienen elegidas para prender; las que se
+    apagaron a mano, no (alguien lo decidió por algo).
+    """
+    urls = [url for url, sello in (sellos or {}).items()
+            if sello.get('estado') in ANDUVO_EN_LA_PC and not por_que_mirarla(sello)]
+    filas = []
+    for desde in range(0, len(urls), 2000):
+        for fuente in Fuente.objects.filter(activa=False, canal__activo=True,
+                                            url__in=urls[desde:desde + 2000]).select_related('canal'):
+            if fuente.retirada:
+                por_que = 'La retiró la limpieza: desde el servidor no anduvo en una semana.'
+            else:
+                por_que = fuente.motivo_quitada or 'La apagaste a mano.'
+            filas.append({'url': fuente.url, 'canal': fuente.canal.nombre, 'por_que': por_que[:200],
+                          'sin_marcar': not (fuente.retirada or fuente.motivo_quitada)})
+    return sorted(filas, key=lambda fila: (fila['sin_marcar'], fila['canal']))
+
+
+def prender_lo_elegido(importacion, urls, usuario=None):
+    """Vuelve a prender las elegidas de lo_que_se_prenderia (como "Volver a mostrar esta señal"). Devuelve cuántas."""
+    elegidas = {fila['url'] for fila in importacion.por_prender if fila['url'] in set(urls)}
+    fuentes = list(Fuente.objects.filter(url__in=elegidas, activa=False))
+    for fuente in fuentes:
+        _otra_oportunidad(fuente)
+    Fuente.objects.bulk_update(fuentes, CAMPOS_DE_OTRA_OPORTUNIDAD, batch_size=1000)
+    if fuentes:
+        registrar(usuario, Accion.EDITAR, f'Volvió a prender {len(fuentes)} señal(es) apagada(s) que en el analizador '
+                                          f'de canales de la PC anduvieron.', modulo='canales')
+    no_prender(importacion)
+    return len(fuentes)
+
+
+def no_prender(importacion):
+    importacion.por_prender = []
+    importacion.save(update_fields=['por_prender'])
 
 
 def _lista_guardada(importacion):
@@ -777,18 +888,31 @@ def procesar_lote(importacion, verificar=None, tamanio=TAMANIO_LOTE, segundos=SE
                 a_verificar.append(entrada)
 
         resultados = {}
+        sellos = (importacion.analisis or {}).get('anda') or {}
         if verificar and a_verificar:
             hasta = time.monotonic() + segundos if segundos else None
-            resultados = verificar(
-                {e.url: e.tipo or 'hls' for e in a_verificar},
-                cabeceras={e.url: (e.user_agent, e.referer) for e in a_verificar if e.user_agent or e.referer},
-                hasta=hasta,
-            )
+            # Lo que ya midió el analizador no se vuelve a probar: solo se mira, corto, lo que la PC no puede saber
+            # (ver _hay_que_mirarla)
+            for tanda, extra in (([e for e in a_verificar if e.url not in sellos], {}),
+                                 ([e for e in a_verificar if e.url in sellos and _hay_que_mirarla(e)],
+                                  {'a_fondo': False})):
+                if tanda:
+                    resultados.update(verificar(
+                        {e.url: e.tipo or 'hls' for e in tanda},
+                        cabeceras={e.url: (e.user_agent, e.referer) for e in tanda if e.user_agent or e.referer},
+                        hasta=hasta, **extra,
+                    ))
 
         for entrada in a_verificar:
             resultado = resultados.get(entrada.url)
+            if entrada.url in sellos and not _hay_que_mirarla(entrada):
+                _con_el_analisis(entrada, sellos[entrada.url], None)
+                continue
             if verificar and resultado is None:
                 continue   # no llegó a probarse: sigue pendiente para la próxima tanda
+            if entrada.url in sellos:
+                _con_el_analisis(entrada, sellos[entrada.url], resultado)
+                continue
             if resultado and resultado.estado == Fuente.Estado.CAIDA:
                 entrada.estado, entrada.motivo = Estado.CAIDA, resultado.error[:200]
                 entrada.tipo = resultado.tipo or entrada.tipo
@@ -817,6 +941,124 @@ def procesar_lote(importacion, verificar=None, tamanio=TAMANIO_LOTE, segundos=SE
             # Terminó de probar esta parte (una categoría...): sus series ya se pueden revisar y cargar
             _revisar_series(importacion)
     return progreso(importacion, seleccion)
+
+
+# Lo medido en la PC vale esto: después, la señal pudo haber cambiado
+DIAS_QUE_VALE_EL_ANALISIS = 7
+# Desde esta versión el analizador mide en dos horarios antes de condenar y distingue la cuenta caída del canal caído
+VERSION_MINIMA_DEL_ANALIZADOR = 4
+
+
+def por_que_mirarla(sello, ahora=None):
+    """Lo único que el panel le discute a lo medido en la PC: que esté viejo o vencido. '' si está todo bien."""
+    ahora = ahora or timezone.now()
+    vence = parse_datetime(sello.get('vence') or '')
+    if vence and vence <= ahora:
+        return f'Venció el permiso de la dirección ({timezone.localtime(vence):%d/%m %H:%M}): volvé a medirla.'
+    if (sello.get('version') or 0) < VERSION_MINIMA_DEL_ANALIZADOR:
+        return 'Se midió con una versión vieja del analizador: volvé a medirla.'
+    medida = parse_datetime(sello.get('medida') or '')
+    if medida is None:
+        return 'La lista no dice cuándo se midió: volvé a medirla.'
+    dias = (ahora - medida).days
+    if dias > DIAS_QUE_VALE_EL_ANALISIS:
+        return f'Se midió hace {dias} días: pudo haber cambiado. Volvé a medirla.'
+    return ''
+
+
+def _hay_que_mirarla(entrada):
+    """
+    De lo que midió el analizador, el panel solo mira lo que la PC no puede saber: si un video de YouTube se deja ver
+    fuera de YouTube (el reproductor oficial de la app lo necesita) y, si la lista no dice qué tipo de señal es (una
+    lista vieja, una Xtream sin extensión), cuál es. Todo lo demás ya lo decidió la PC.
+    """
+    return entrada.tipo in ('', Fuente.Tipo.YT_VIDEO)
+
+
+# Lo que la PC vio andar (las páginas sin confirmar las prueba la app)
+SE_VIO_EN_LA_PC = ('anda', 'a_mano', 'dudosa')
+
+
+def lo_que_dijo_la_pc(sello):
+    """'Anduvo en tu PC el 08/11 21:30.': lo que dijo el analizador de una señal, en una frase."""
+    medida = parse_datetime(sello.get('medida') or '')
+    cuando = f' el {timezone.localtime(medida):%d/%m %H:%M}' if medida else ''
+    motivo = (sello.get('motivo') or '').rstrip('.')
+    estado = sello.get('estado')
+    if estado == 'anda':
+        return f'Anduvo en tu PC{cuando}.'
+    if estado == 'a_mano':
+        return f'La aprobaste en el analizador{cuando}.'
+    if estado == 'dudosa':
+        return f'Dudosa en tu PC{cuando}: {motivo or "sin detalle"}.'
+    if estado == 'sin_confirmar':
+        return 'En tu PC no se pudo confirmar (página): se prueba en la app.'
+    return f'En tu PC no se pudo juzgar: {motivo or "sin medir"}.'
+
+
+def _con_el_analisis(entrada, sello, resultado):
+    """
+    Una que ya midió el analizador: lo que anda o no anda lo decidió la PC y no se vuelve a juzgar. Se queda con lo
+    que midió (códec, calidad) y el panel solo le discute lo que la PC no puede saber: que lo medido esté viejo o
+    vencido, que no se haya podido juzgar o, en un video de YouTube, que ya no exista o que el dueño no lo deje ver
+    fuera de YouTube. Un fallo desde el servidor no la desmiente: el servidor no es la PC (hay proveedores que
+    bloquean las IP de datacenter). `resultado`: la mirada corta desde el servidor, si se hizo (_hay_que_mirarla).
+    """
+    if resultado:
+        _anotar_prueba(entrada, resultado)
+        if entrada.tipo == Fuente.Tipo.YT_VIDEO and resultado.estado == Fuente.Estado.CAIDA:
+            entrada.estado, entrada.motivo = Estado.CAIDA, resultado.error[:200]
+            return
+    entrada.codec = sello.get('codec') or entrada.codec
+    entrada.calidad = sello.get('calidad') or entrada.calidad
+    if sello.get('idioma'):   # el que escuchó la PC manda sobre lo que se dedujo del nombre
+        entrada.idioma = 'es' if sello['idioma'] == 'es' else 'otro'
+    no_responde = bool(resultado) and resultado.estado == Fuente.Estado.CAIDA
+    # Sin mirarla desde el servidor, la palabra la tiene la PC; si se miró y no anduvo, queda "sin verificar"
+    anduvo = resultado.estado == Fuente.Estado.FUNCIONA if resultado else sello.get('estado') in SE_VIO_EN_LA_PC
+    entrada.estado_fuente = Fuente.Estado.FUNCIONA if anduvo else Fuente.Estado.SIN_VERIFICAR
+    if sello.get('estado') not in (*SE_VIO_EN_LA_PC, 'sin_confirmar'):
+        entrada.estado, entrada.causa = Estado.RECHAZADA, Causa.PARA_MIRAR
+        entrada.motivo = f'{lo_que_dijo_la_pc(sello)} Mirala antes de cargarla.'[:200]
+        return
+    motivo = por_que_mirarla(sello)
+    if motivo:
+        entrada.estado, entrada.causa, entrada.motivo = Estado.RECHAZADA, Causa.PARA_MIRAR, motivo[:200]
+        return
+    texto = lo_que_dijo_la_pc(sello)
+    if no_responde:
+        texto += f' Desde el servidor no responde ({resultado.error or "sin detalle"}): eso no la desmiente.'
+    entrada.estado, entrada.causa, entrada.motivo = Estado.APTA, '', texto[:200]
+
+
+def resumen_del_analisis(importacion):
+    """
+    Lo que muestra la pantalla: cuántas están listas para cargar, cuáles mirar y por qué, cuántas ya estaban, y qué
+    se apagaría o se volvería a prender.
+    """
+    if not importacion.analisis:
+        return None
+    entradas = importacion.entradas
+    para_mirar = entradas.filter(estado=Estado.RECHAZADA, causa=Causa.PARA_MIRAR)
+    return {
+        'fecha': parse_datetime(importacion.analisis.get('fecha') or ''),
+        'version': importacion.analisis.get('version'),
+        'listas': entradas.filter(estado=Estado.APTA).count(),
+        'dudosas': entradas.filter(estado__in=[Estado.APTA, Estado.AGREGADA],
+                                   motivo__startswith='Dudosa en tu PC').count(),
+        'cargadas': entradas.filter(estado=Estado.AGREGADA).count(),
+        'por_comprobar': entradas.filter(estado=Estado.PENDIENTE).count(),
+        'para_mirar': para_mirar.count(),
+        'motivos': list(para_mirar.values_list('motivo', flat=True).order_by('motivo').distinct()[:6]),
+        'no_responden': entradas.filter(estado=Estado.APTA, motivo__contains='Desde el servidor no responde').count(),
+        'otras': entradas.exclude(estado__in=[Estado.APTA, Estado.AGREGADA, Estado.PENDIENTE, Estado.REPETIDA])
+                         .exclude(estado=Estado.RECHAZADA, causa=Causa.PARA_MIRAR).count(),
+        'por_apagar': importacion.por_apagar,
+        'fallaron_una_vez': sum(1 for fila in importacion.por_apagar if fila.get('sin_marcar')),
+        'por_prender': importacion.por_prender,
+        'apagadas_a_mano': sum(1 for fila in importacion.por_prender if fila.get('sin_marcar')),
+        'repetidas': entradas.filter(estado=Estado.REPETIDA).count(),
+    }
 
 
 def falta_probar(importacion, seleccion):
@@ -1540,7 +1782,11 @@ def quitar_las_que_no_sirven(texto, usuario=None):
     retirado antes). Queda anotado lo que dijo el analizador; "Volver a
     mostrar esta señal" las devuelve. Devuelve cuántas se quitaron.
     """
-    malas = leer_las_que_no_sirven(texto)
+    return _quitar_de_la_app(leer_las_que_no_sirven(texto), usuario)
+
+
+def _quitar_de_la_app(malas, usuario=None):
+    """{dirección: motivo}: esas señales dejan de llegar a la app (no se borran). Devuelve cuántas."""
     if not malas:
         return 0
     hoy = f'{timezone.localtime():%d/%m}'
@@ -1567,6 +1813,19 @@ def mostrar_fuente(fuente, usuario=None):
     probar) y se olvida desde cuándo fallaba (la limpieza cuenta una semana
     desde ahora).
     """
+    _otra_oportunidad(fuente)
+    fuente.save()
+    registrar(usuario, Accion.EDITAR, f'Volvió a mostrar una señal de "{fuente.canal}" '
+                                      f'({fuente.origen or "sin origen"}).', objeto=fuente.canal, modulo='canales')
+
+
+CAMPOS_DE_OTRA_OPORTUNIDAD = ['activa', 'retirada', 'motivo_quitada', 'oculta_desde', 'oculta_hasta', 'primer_aviso',
+                              'veces_oculta', 'avisos_de_aparatos', 'falla_en_aparatos', 'falla_desde',
+                              'fallas_seguidas', 'estado']
+
+
+def _otra_oportunidad(fuente):
+    """Lo que hace "Volver a mostrar esta señal" (mostrar_fuente), sin guardar: CAMPOS_DE_OTRA_OPORTUNIDAD."""
     fuente.activa, fuente.retirada, fuente.motivo_quitada = True, None, ''
     fuente.oculta_desde = fuente.oculta_hasta = fuente.primer_aviso = None
     fuente.veces_oculta = fuente.avisos_de_aparatos = 0
@@ -1574,9 +1833,6 @@ def mostrar_fuente(fuente, usuario=None):
     fuente.falla_desde, fuente.fallas_seguidas = None, 0
     if fuente.estado == Fuente.Estado.CAIDA:
         fuente.estado = Fuente.Estado.SIN_VERIFICAR
-    fuente.save()
-    registrar(usuario, Accion.EDITAR, f'Volvió a mostrar una señal de "{fuente.canal}" '
-                                      f'({fuente.origen or "sin origen"}).', objeto=fuente.canal, modulo='canales')
 
 
 def probar_fuente(fuente, verificar_url):

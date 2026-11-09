@@ -468,6 +468,13 @@ class Importacion(models.Model):
     # Una lista grande (más de servicios.LEER_DE_UNA entradas) se lee de a tandas,
     # desde la pantalla de la importación: cuántas faltan leer (0 = ya se leyó toda)
     por_leer = models.PositiveIntegerField('faltan leer', default=0)
+    # Una lista limpia del analizador de canales (m3u.leer_analisis): de cuándo es lo que midió y, de cada dirección
+    # que anda, qué se midió. Con esto el panel no vuelve a juzgar: lo que anda o no anda lo decide el analizador.
+    analisis = models.JSONField('análisis de la PC', default=dict, blank=True)
+    # Las señales cargadas que el analizador dio como que no sirven, para decidir antes de apagarlas
+    por_apagar = models.JSONField('por apagar', default=list, blank=True)
+    # Las señales cargadas pero apagadas que en la PC anduvieron, para decidir si se vuelven a prender
+    por_prender = models.JSONField('por prender', default=list, blank=True)
 
     class Meta:
         verbose_name = 'importación'
@@ -506,6 +513,7 @@ class EntradaImportada(models.Model):
         LENTA = 'lenta', 'Llega lenta (se cortaría)'
         SE_CORTA = 'se_corta', 'Se corta o está congelada'
         SERIE_INCOMPLETA = 'serie_incompleta', 'Serie incompleta'
+        PARA_MIRAR = 'para_mirar', 'Para mirar antes de cargar'
 
     Contenido = Contenido
 

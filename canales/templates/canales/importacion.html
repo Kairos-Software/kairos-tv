@@ -15,7 +15,7 @@
 
 {% block titulo %}{{ importacion.archivo }} · Contenido{% endblock %}
 {% block clase_body %}pagina-listado pagina-importacion{% endblock %}
-{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261021"><link rel="stylesheet" href="{% static 'css/importacion_partes.css' %}?v=20261021">{% endblock %}
+{% block estilos %}<link rel="stylesheet" href="{% static 'css/trabajo.css' %}?v=20261105"><link rel="stylesheet" href="{% static 'css/importacion_partes.css' %}?v=20261021">{% endblock %}
 
 {% block encabezado %}
 {% barra_contenido 'inicio' %}
@@ -60,6 +60,8 @@
      data-contenido="{{ seleccion.contenido }}" data-categoria="{{ seleccion.categoria }}" data-q="{{ seleccion.texto }}"
      {% if puede_importar %}data-puede{% endif %} {% if empezar and puede_importar %}data-empezar{% endif %}>
 {% csrf_token %}
+
+{% if analisis %}{% include "canales/_importacion_analisis.html" %}{% endif %}
 
 {# 1. Qué trae la lista, por partes: tocar una es trabajar solo con ella #}
 <nav class="imp-partes" id="imp-partes" data-refrescar aria-label="Qué trae esta lista">

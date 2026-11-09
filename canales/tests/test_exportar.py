@@ -65,7 +65,8 @@ class ElegirTests(TestCase):
         eleccion.filtros = {'idioma': 'es'}
         self.assertEqual(_nombres(exportar.elegir(eleccion)), ['Canal 26'])
 
-    def test_lo_de_youtube_no_sale(self):
+    def test_lo_de_youtube_tambien_sale_con_su_tipo(self):
+        # La lista lleva todo junto: al analizador de la PC y al volver a importarla, cada cosa vuelve como lo que es
         pelicula = _canal('Tormenta Blanca', self.accion, Contenido.PELICULA, fuentes=0)
         Fuente.objects.create(canal=pelicula, url='https://www.youtube.com/watch?v=abcdefghijk',
                               tipo=Fuente.Tipo.YT_VIDEO)
@@ -73,10 +74,16 @@ class ElegirTests(TestCase):
         Fuente.objects.create(canal=mixto, url='https://www.youtube.com/@tn/live', tipo=Fuente.Tipo.YOUTUBE,
                               prioridad=0)
         resultado = exportar.elegir(exportar.Eleccion(secciones=['vivo', 'pelicula']))
-        self.assertNotIn('Tormenta Blanca', _nombres(resultado))
-        self.assertEqual(resultado.sin_senales, 1)
-        tn = dict(resultado.canales)[mixto]
-        self.assertEqual([f.url for f in tn], ['https://x/TN-1.m3u8'])   # sale con la que no es de YouTube
+        self.assertIn('Tormenta Blanca', _nombres(resultado))
+        self.assertEqual(resultado.sin_senales, 0)
+        self.assertEqual([f.url for f in dict(resultado.canales)[mixto]],
+                         ['https://www.youtube.com/@tn/live', 'https://x/TN-1.m3u8'])
+        texto = exportar.lista_m3u(resultado)
+        self.assertIn('kairos-tipo="yt_video",Tormenta Blanca', texto)
+        self.assertIn('kairos-tipo="youtube",TN', texto)
+        self.assertEqual({(e.url, e.tipo_lista) for e in leer_m3u(texto) if 'youtube' in e.url},
+                         {('https://www.youtube.com/watch?v=abcdefghijk', 'yt_video'),
+                          ('https://www.youtube.com/@tn/live', 'youtube')})
 
     def test_solo_las_senales_que_andan(self):
         canal = _canal('Dos señales', self.noticias, fuentes=2)
@@ -103,7 +110,7 @@ class ListaM3UTests(TestCase):
         self.assertEqual(lineas[0], '#EXTM3U')
         self.assertIn('#EXTINF:-1 tvg-id="Canal26.ar" tvg-name="Canal \'26\'" tvg-logo="https://img/26.png" '
                       'tvg-chno="26" tvg-country="AR" tvg-language="Spanish" group-title="Noticias" '
-                      'kairos-seccion="vivo",Canal "26"', lineas)
+                      'kairos-seccion="vivo" kairos-tipo="hls",Canal "26"', lineas)
         self.assertIn('#EXTVLCOPT:http-user-agent=VLC/3.0', lineas)
         self.assertIn('#EXTVLCOPT:http-referrer=https://canal26.com.ar/', lineas)
         # Otra app la lee: dos entradas con el mismo canal, cada una con su dirección
@@ -119,7 +126,7 @@ class ListaM3UTests(TestCase):
         texto = exportar.lista_m3u(exportar.elegir(exportar.Eleccion(canales=[canal.pk])))
         web, comun = [linea for linea in texto.splitlines() if linea.startswith('#EXTINF')]
         self.assertTrue(web.endswith('kairos-seccion="vivo" kairos-tipo="web",Canal web'))
-        self.assertNotIn('kairos-tipo', comun)
+        self.assertTrue(comun.endswith('kairos-seccion="vivo" kairos-tipo="hls",Canal web'))
         self.assertEqual(len(leer_m3u(texto)), 2)   # las otras apps la siguen leyendo igual
 
     def test_exportar_borrar_y_volver_a_importar_deja_todo_igual(self):

@@ -47,6 +47,7 @@ from herramientas.excel import TIPO_XLSX
 from usuarios.decoradores import requiere_permiso
 from usuarios.permisos import chequear_permiso
 
+from .m3u import leer_analisis
 from . import (consultas, estadisticas, exportar, imagenes, organizar, salud, secciones, servicios, views_importacion,
                views_organizar, youtube)
 from .clasificar import formato, idioma_y_pais, limpiar_nombre
@@ -80,13 +81,23 @@ def inicio(request):
         # Varias listas de una (static/js/importar_varias.js): la página las sube de a una y espera JSON
         de_a_varias = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if form.is_valid():
-            # Una lista limpia del analizador de canales: primero se sacan de la app las que dio como que no sirven
-            quitadas = servicios.quitar_las_que_no_sirven(form.texto, request.user)
+            # Una lista limpia del analizador de canales: las que dio como que no sirven se sacan de la app. Si trae lo
+            # que midió (desde su versión 4), primero se muestra qué se apagaría, en la pantalla de la lista.
+            analisis = leer_analisis(form.texto)
+            quitadas = 0 if analisis else servicios.quitar_las_que_no_sirven(form.texto, request.user)
+            if analisis and not form.tiene_canales and not servicios.lo_que_se_apagaria(
+                    analisis['no_sirven'], analisis['por_confirmar']):
+                messages.info(request, 'Las señales que no sirven de esa lista ya estaban quitadas (o no están '
+                                       'cargadas acá).')
+                quitadas_url = f"{reverse('canales:senales')}?problema=apagadas"
+                if de_a_varias:
+                    return JsonResponse({'ok': True, 'url': quitadas_url, 'total': 0})
+                return redirect(quitadas_url)
             if quitadas:
                 messages.info(request, f'La lista trae {quitadas} señal(es) que el analizador de canales dio como que '
                                        f'no sirven: se quitaron de la app (no se borraron). Están en Señales → '
                                        f'«Quitadas a mano», con el motivo.')
-            if not form.tiene_canales:
+            if not form.tiene_canales and not analisis:
                 # Solo traía las que no sirven: no hay nada que importar; se va a verlas
                 quitadas_url = f"{reverse('canales:senales')}?problema=apagadas"
                 if de_a_varias:
@@ -267,6 +278,7 @@ def importacion(request, pk):
         'empezar': request.GET.get('empezar') == '1',
         'tamanio_lote': servicios.TAMANIO_LOTE,
         'falta_probar': servicios.falta_probar(importacion, seleccion),
+        'analisis': servicios.resumen_del_analisis(importacion),
     })
 
 
@@ -381,6 +393,35 @@ def importacion_lote(request, pk):
         trabajos.avance(clave, avance['porcentaje'],
                         f'{avance["verificadas"]:,} de {avance["para_verificar"]:,} probados'.replace(',', '.'))
     return JsonResponse(avance)
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_apagar(request, pk):
+    """Lo que el analizador dio como que no sirve: se apagan las elegidas, o ninguna."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    if request.POST.get('accion') == 'apagar':
+        cuantas = servicios.apagar_lo_elegido(importacion, request.POST.getlist('urls'), request.user)
+        messages.success(request, f'Se apagaron {cuantas} señal(es). Están en Señales → «Quitadas a mano», con el '
+                                  f'motivo: «Volver a mostrar esta señal» las devuelve.')
+    else:
+        servicios.no_apagar(importacion)
+        messages.info(request, 'No se apagó ninguna señal.')
+    return redirect(importacion_url(importacion))
+
+
+@require_POST
+@requiere_permiso('importar_canales')
+def importacion_prender(request, pk):
+    """Las que estaban apagadas y en la PC anduvieron: se prenden las elegidas, o ninguna."""
+    importacion = get_object_or_404(Importacion, pk=pk)
+    if request.POST.get('accion') == 'prender':
+        cuantas = servicios.prender_lo_elegido(importacion, request.POST.getlist('urls'), request.user)
+        messages.success(request, f'Se volvieron a prender {cuantas} señal(es): la app ya las puede usar.')
+    else:
+        servicios.no_prender(importacion)
+        messages.info(request, 'No se prendió ninguna señal.')
+    return redirect(importacion_url(importacion))
 
 
 @require_POST

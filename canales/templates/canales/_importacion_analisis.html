@@ -1,0 +1,58 @@
+{# Una lista limpia del analizador de canales: lo que midió la PC, sin volver a juzgarlo (servicios.resumen_del_analisis) #}
+<section class="tarjeta imp-analisis" id="imp-analisis" data-refrescar aria-labelledby="imp-analisis-titulo">
+    <div class="imp-trabajo-cabecera">
+        <div class="imp-trabajo-que">
+            <p class="imp-trabajo-sobretitulo">Viene del analizador de tu PC{% if analisis.fecha %} · {{ analisis.fecha|date:"j/m H:i" }}{% endif %}</p>
+            <h2 class="tarjeta-titulo mb-0" id="imp-analisis-titulo">
+                {% if analisis.por_comprobar %}Falta revisar {{ analisis.por_comprobar }}{% elif analisis.listas %}{{ analisis.listas }} lista{{ analisis.listas|pluralize }} para cargar{% elif analisis.cargadas %}{{ analisis.cargadas }} cargada{{ analisis.cargadas|pluralize }}{% else %}Nada nuevo para cargar{% endif %}
+            </h2>
+        </div>
+        <button type="button" class="ayuda-boton" data-ayuda="Lo que anda o no anda ya lo decidió el analizador de tu PC: acá no se vuelve a probar. Solo se revisa lo que tu PC no puede saber: si la señal ya estaba cargada, si quitaste el canal, si a una serie le falta el capítulo 1, si lo medido está viejo o venció el permiso de la dirección y, en los videos de YouTube, si el dueño deja verlos fuera de YouTube. Cada cosa vuelve a su sección, su categoría y su canal, como lo tenía la lista." aria-label="¿Qué se revisa acá?"><i class="bi bi-question-circle" aria-hidden="true"></i></button>
+    </div>
+    <ul class="imp-analisis-numeros">
+        <li><strong>{{ analisis.listas }}</strong> para cargar{% if analisis.dudosas %} <span class="texto-suave">({{ analisis.dudosas }} dudosa{{ analisis.dudosas|pluralize }})</span>{% endif %}{% if analisis.cargadas %} · {{ analisis.cargadas }} ya cargada{{ analisis.cargadas|pluralize }}{% endif %}</li>
+        <li>{% if analisis.para_mirar %}<a href="?causa=para_mirar#entradas"><strong>{{ analisis.para_mirar }}</strong> para mirar</a>{% else %}<strong>0</strong> para mirar{% endif %}</li>
+        {% if analisis.repetidas %}<li><a href="?estado=repetida#entradas"><strong>{{ analisis.repetidas }}</strong> ya estaban</a> <span class="texto-suave">(quedan como están)</span></li>{% endif %}
+        {% if analisis.otras %}<li><a href="#entradas"><strong>{{ analisis.otras }}</strong> no entran</a> <span class="texto-suave">(abajo, por qué)</span></li>{% endif %}
+        <li><strong>{{ analisis.por_apagar|length }}</strong> se apagarían</li>
+        {% if analisis.por_prender %}<li><strong>{{ analisis.por_prender|length }}</strong> se volverían a prender</li>{% endif %}
+    </ul>
+    {% if analisis.motivos %}
+    <ul class="imp-analisis-motivos">{% for motivo in analisis.motivos %}<li>{{ motivo }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if analisis.no_responden %}
+    <p class="texto-suave small mb-0">{{ analisis.no_responden }} no responde{{ analisis.no_responden|pluralize:"n" }} desde el servidor: es normal con muchos proveedores y no cambia lo que se midió en tu PC. Se cargan igual.</p>
+    {% endif %}
+    {% if analisis.por_prender and puede_importar %}
+    <form method="post" action="{% url 'canales:importacion_prender' importacion.pk %}" class="imp-apagar">
+        {% csrf_token %}
+        <h3 class="imp-apagar-titulo">Estas ya están cargadas pero apagadas, y en tu PC anduvieron: ¿las volvés a prender?</h3>
+        <ul class="imp-apagar-lista">
+            {% for fila in analisis.por_prender %}
+            <li><label><input type="checkbox" name="urls" value="{{ fila.url }}"{% if not fila.sin_marcar %} checked{% endif %}> <strong>{{ fila.canal }}</strong> <span class="texto-suave">{{ fila.por_que }}</span></label></li>
+            {% endfor %}
+        </ul>
+        <div class="imp-apagar-botones">
+            <button type="submit" class="btn btn-sm btn-primary" name="accion" value="prender">Prender las marcadas</button>
+            <button type="submit" class="btn btn-sm btn-outline-secondary" name="accion" value="no">No prender ninguna</button>
+        </div>
+        <p class="texto-suave small mb-0">Quedan como con «Volver a mostrar esta señal».{% if analisis.apagadas_a_mano %} Las que apagaste a mano no vienen marcadas.{% endif %}</p>
+    </form>
+    {% endif %}
+    {% if analisis.por_apagar and puede_importar %}
+    <form method="post" action="{% url 'canales:importacion_apagar' importacion.pk %}" class="imp-apagar">
+        {% csrf_token %}
+        <h3 class="imp-apagar-titulo">Antes de apagar: estas señales ya están cargadas y el analizador dice que no sirven</h3>
+        <ul class="imp-apagar-lista">
+            {% for fila in analisis.por_apagar %}
+            <li><label><input type="checkbox" name="urls" value="{{ fila.url }}"{% if not fila.sin_marcar %} checked{% endif %}> <strong>{{ fila.canal }}</strong>{% if fila.sin_marcar %} <span class="chip">Falló una sola vez</span>{% endif %} <span class="texto-suave">{{ fila.motivo }}</span></label></li>
+            {% endfor %}
+        </ul>
+        <div class="imp-apagar-botones">
+            <button type="submit" class="btn btn-sm btn-primary" name="accion" value="apagar">Apagar las marcadas</button>
+            <button type="submit" class="btn btn-sm btn-outline-secondary" name="accion" value="no">No apagar ninguna</button>
+        </div>
+        <p class="texto-suave small mb-0">No se borran: «Volver a mostrar esta señal» las devuelve.{% if analisis.fallaron_una_vez %} Las que fallaron una sola vez no vienen marcadas: falta confirmarlo.{% endif %}</p>
+    </form>
+    {% endif %}
+</section>
