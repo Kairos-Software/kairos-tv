@@ -406,8 +406,13 @@ class _PantallaReposoTvState extends State<PantallaReposoTv> {
     });
   }
 
+  /// Ya se pidió salir: otra tecla o el mouse no vuelven a pedirlo (cerraría también la pantalla de abajo).
+  bool _saliendo = false;
+
   void _salir() {
-    if (mounted) Navigator.of(context).maybePop();
+    if (!mounted || _saliendo) return;
+    _saliendo = true;
+    Navigator.of(context).maybePop();
   }
 
   Widget _pantalla() {
@@ -446,35 +451,39 @@ class _PantallaReposoTvState extends State<PantallaReposoTv> {
         if (evento is KeyUpEvent) _salir();
         return KeyEventResult.handled;
       },
-      child: GestureDetector(
-        onTap: _salir,
-        child: Material(
-          color: Colors.black,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Un solo escenario de fondo para todas las escenas: a pleno y con
-              // el punto rubí en la del logo, más tenue detrás de las demás.
-              TweenAnimationBuilder<double>(
-                tween: Tween(end: enElLogo ? 1 : 0),
-                duration: _fundido,
-                curve: Curves.easeInOut,
-                builder: (_, logo, _) => EscenarioNeon(intensidad: .7 + .3 * logo, rubi: logo),
-              ),
-              // La escena que se va se apaga del todo antes de que aparezca la
-              // nueva: así nunca se dibujan dos a la vez (en la TV, eso traba).
-              AnimatedSwitcher(
-                duration: _fundido,
-                transitionBuilder: (hijo, animacion) => FadeTransition(
-                  opacity: CurvedAnimation(
-                    parent: animacion,
-                    curve: const Interval(.5, 1, curve: Curves.easeOut),
-                  ),
-                  child: hijo,
+      // Con el mouse (PC): moverlo o hacer clic también vuelve, como un protector de pantalla
+      child: MouseRegion(
+        onHover: (_) => _salir(),
+        child: GestureDetector(
+          onTap: _salir,
+          child: Material(
+            color: Colors.black,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Un solo escenario de fondo para todas las escenas: a pleno y con
+                // el punto rubí en la del logo, más tenue detrás de las demás.
+                TweenAnimationBuilder<double>(
+                  tween: Tween(end: enElLogo ? 1 : 0),
+                  duration: _fundido,
+                  curve: Curves.easeInOut,
+                  builder: (_, logo, _) => EscenarioNeon(intensidad: .7 + .3 * logo, rubi: logo),
                 ),
-                child: KeyedSubtree(key: ValueKey(_paso), child: _pantalla()),
-              ),
-            ],
+                // La escena que se va se apaga del todo antes de que aparezca la
+                // nueva: así nunca se dibujan dos a la vez (en la TV, eso traba).
+                AnimatedSwitcher(
+                  duration: _fundido,
+                  transitionBuilder: (hijo, animacion) => FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: animacion,
+                      curve: const Interval(.5, 1, curve: Curves.easeOut),
+                    ),
+                    child: hijo,
+                  ),
+                  child: KeyedSubtree(key: ValueKey(_paso), child: _pantalla()),
+                ),
+              ],
+            ),
           ),
         ),
       ),

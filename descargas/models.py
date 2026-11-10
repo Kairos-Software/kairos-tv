@@ -10,6 +10,10 @@ Lo que se descarga desde el panel:
   solos para actualizarse (api/v1/analizador.py).
 - PcConAnalizador: cada PC donde hay un analizador instalado, con su versión y
   la última vez que preguntó por una nueva.
+- VersionPc: el instalador de la app Kairos TV para PC (Windows). Como la APK, lo
+  baja cualquiera (sin un código de cliente no sirve) y las apps instaladas lo bajan
+  solas para actualizarse (api/v1/app_pc.py). También va a privado/ (pc/): pesa
+  cientos de MB y sale por la vista, que dice su nombre.
 """
 
 import os
@@ -64,10 +68,12 @@ def privado():
     return Privado()
 
 
-class VersionAnalizador(models.Model):
-    version = models.CharField('versión', max_length=30, unique=True,
-                               help_text='La del nombre del instalador (KairosAnalizador-2026.11.9.1530.exe).')
-    archivo = models.FileField('instalador', upload_to='analizador/', storage=privado)
+class InstaladorDeWindows(models.Model):
+    """
+    Lo común de los instaladores para Windows que se suben al panel (descargas/instaladores.py): la versión es la
+    fecha y hora en que se armó (2026.11.9.1530), y se guardan su tamaño y su huella (SHA-256).
+    """
+
     tamanio = models.PositiveBigIntegerField('tamaño (bytes)', default=0)
     sha256 = models.CharField('huella SHA-256', max_length=64, unique=True)
     notas = models.TextField('qué cambió', blank=True)
@@ -75,17 +81,16 @@ class VersionAnalizador(models.Model):
     subida = models.DateTimeField(auto_now_add=True)
     subida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='+')
 
-    class Meta:
-        verbose_name = 'versión del analizador'
-        verbose_name_plural = 'versiones del analizador'
-        ordering = ['-subida', '-pk']
+    #: El principio del nombre del archivo (KairosAnalizador-<versión>.exe).
+    PREFIJO = ''
 
-    def __str__(self):
-        return f'Analizador {self.version}'
+    class Meta:
+        abstract = True
+        ordering = ['-subida', '-pk']
 
     @property
     def nombre_descarga(self):
-        return f'KairosAnalizador-{self.version}.exe'
+        return f'{self.PREFIJO}-{self.version}.exe'
 
     @property
     def numero(self):
@@ -96,6 +101,36 @@ class VersionAnalizador(models.Model):
         """La publicada con el número más alto (no la última subida: se puede volver a publicar una vieja)."""
         publicadas = list(cls.objects.filter(publicada=True).exclude(archivo=''))
         return max(publicadas, key=lambda version: version.numero, default=None)
+
+
+class VersionAnalizador(InstaladorDeWindows):
+    version = models.CharField('versión', max_length=30, unique=True,
+                               help_text='La del nombre del instalador (KairosAnalizador-2026.11.9.1530.exe).')
+    archivo = models.FileField('instalador', upload_to='analizador/', storage=privado)
+
+    PREFIJO = 'KairosAnalizador'
+
+    class Meta(InstaladorDeWindows.Meta):
+        verbose_name = 'versión del analizador'
+        verbose_name_plural = 'versiones del analizador'
+
+    def __str__(self):
+        return f'Analizador {self.version}'
+
+
+class VersionPc(InstaladorDeWindows):
+    version = models.CharField('versión', max_length=30, unique=True,
+                               help_text='La del nombre del instalador (KairosTV-2026.11.10.1530.exe).')
+    archivo = models.FileField('instalador', upload_to='pc/', storage=privado)
+
+    PREFIJO = 'KairosTV'
+
+    class Meta(InstaladorDeWindows.Meta):
+        verbose_name = 'versión de la app para PC'
+        verbose_name_plural = 'versiones de la app para PC'
+
+    def __str__(self):
+        return f'Kairos TV para PC {self.version}'
 
 
 class PcConAnalizador(models.Model):

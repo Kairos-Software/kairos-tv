@@ -5,7 +5,10 @@
 ///
 ///   - OK corto: [alOk].  OK largo (mantener apretado): [alOkLargo] (favoritos).
 ///   - Con el dedo (celular): tocar = OK, mantener = OK largo.
-///   - Al recibir el foco, se desplaza la lista para que quede a la vista.
+///   - Con el mouse (PC): lo que se señala queda elegido (el mismo foco que con las flechas), clic = OK y clic
+///     derecho = OK largo.
+///   - Al recibir el foco, se desplaza la lista para que quede a la vista (no si lo trajo el mouse: la lista se
+///     movería sola debajo del puntero).
 library;
 
 import 'dart:async';
@@ -13,16 +16,29 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../aparato.dart';
 import '../movil/estilo.dart';
 
-/// Las teclas que valen como "OK" en un control remoto o un teclado.
-final teclasOk = {
+/// Las teclas que valen como "OK" en un control remoto o un teclado. En la PC, la barra espaciadora no: ahí
+/// pausa el video y escribe espacios en el login, como en cualquier programa.
+Set<LogicalKeyboardKey> get teclasOk => Aparato.esPc ? _teclasOkPc : _teclasOkTv;
+
+final _teclasOkPc = {
   LogicalKeyboardKey.select,
   LogicalKeyboardKey.enter,
   LogicalKeyboardKey.numpadEnter,
   LogicalKeyboardKey.gameButtonA,
-  LogicalKeyboardKey.space,
 };
+final _teclasOkTv = {..._teclasOkPc, LogicalKeyboardKey.space};
+
+/// ¿Se apretó Enter (la del teclado o la del teclado numérico)? Solo al apretarla: ni al soltarla ni mientras
+/// se mantiene apretada.
+bool esEnter(KeyEvent evento) =>
+    evento is KeyDownEvent &&
+    (evento.logicalKey == LogicalKeyboardKey.enter || evento.logicalKey == LogicalKeyboardKey.numpadEnter);
+
+/// Un texto de ayuda según dónde corre la app: el del control remoto ([tv]) o el del teclado y el mouse ([pc]).
+String enPc(String tv, String pc) => Aparato.esPc ? pc : tv;
 
 /// Lo que dura apretado OK para contar como "OK largo".
 const _esperaOkLargo = Duration(milliseconds: 650);
@@ -75,20 +91,34 @@ class _EnfocableState extends State<Enfocable> {
   /// abría sola: parecía que el botón se tocaba dos veces.
   bool _apretado = false;
 
+  /// El foco lo trajo el mouse (PC): la lista no se desplaza.
+  bool _porMouse = false;
+
   @override
   void dispose() {
     _largo?.cancel();
     super.dispose();
   }
 
+  /// El mouse se movió encima (PC): queda elegido, como si se hubiera llegado con las flechas. Solo con el mouse
+  /// moviéndose de verdad: si la lista se desplaza debajo de un puntero quieto, no se le roba el foco al teclado.
+  void _alPasarElMouse(BuildContext contexto) {
+    final nodo = Focus.maybeOf(contexto);
+    if (nodo == null || nodo.hasPrimaryFocus || !nodo.canRequestFocus) return;
+    _porMouse = true;
+    nodo.requestFocus();
+  }
+
   void _alCambiarFoco(bool enfocado) {
+    final porMouse = _porMouse;
+    _porMouse = false;
     if (!enfocado) {
       _apretado = false;
       _largo?.cancel();
     }
     setState(() => _enfocado = enfocado);
     widget.alEnfocar?.call(enfocado);
-    if (enfocado) {
+    if (enfocado && !porMouse) {
       // Que no quede tapado ni cortado al borde de una lista
       Scrollable.ensureVisible(
         context,
@@ -139,35 +169,55 @@ class _EnfocableState extends State<Enfocable> {
         autofocus: widget.autofocus,
         onFocusChange: _alCambiarFoco,
         onKeyEvent: _alTecla,
-        child: GestureDetector(
-          onTap: widget.alOk,
-          onLongPress: widget.alOkLargo,
-          child: AnimatedScale(
-            scale: _enfocado && !sinAnimar ? widget.escala : 1,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOut,
-              foregroundDecoration: _enfocado
-                  ? BoxDecoration(
-                      borderRadius: radio,
-                      border: Border.all(color: Tono.celeste, width: 3),
-                    )
-                  : null,
-              decoration: BoxDecoration(
-                borderRadius: radio,
-                boxShadow: _enfocado
-                    ? [
-                        BoxShadow(color: Tono.celesteClaro.withValues(alpha: .14), spreadRadius: 3),
-                        BoxShadow(color: Tono.celeste.withValues(alpha: .48), blurRadius: 34),
-                      ]
-                    : const [],
-              ),
-              child: ClipRRect(borderRadius: radio, child: widget.child),
+        child: Builder(
+          builder: (contexto) => _conMouse(
+            contexto,
+            GestureDetector(
+              onTap: widget.alOk,
+              onLongPress: widget.alOkLargo,
+              onSecondaryTap: widget.alOkLargo,
+              child: _dibujo(sinAnimar, radio),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// En la PC: la manito sobre lo que se puede abrir y el foco con el mouse ([_alPasarElMouse]).
+  Widget _conMouse(BuildContext contexto, Widget hijo) {
+    if (!Aparato.esPc) return hijo;
+    return MouseRegion(
+      cursor: widget.alOk != null || widget.alOkLargo != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onHover: (_) => _alPasarElMouse(contexto),
+      child: hijo,
+    );
+  }
+
+  Widget _dibujo(bool sinAnimar, BorderRadius radio) {
+    return AnimatedScale(
+      scale: _enfocado && !sinAnimar ? widget.escala : 1,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        foregroundDecoration: _enfocado
+            ? BoxDecoration(
+                borderRadius: radio,
+                border: Border.all(color: Tono.celeste, width: 3),
+              )
+            : null,
+        decoration: BoxDecoration(
+          borderRadius: radio,
+          boxShadow: _enfocado
+              ? [
+                  BoxShadow(color: Tono.celesteClaro.withValues(alpha: .14), spreadRadius: 3),
+                  BoxShadow(color: Tono.celeste.withValues(alpha: .48), blurRadius: 34),
+                ]
+              : const [],
+        ),
+        child: ClipRRect(borderRadius: radio, child: widget.child),
       ),
     );
   }

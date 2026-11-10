@@ -195,7 +195,8 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   /// Elegir un campo (OK sobre él): se escribe ahí y el foco baja al teclado.
   void _elegirCampoTv(bool password) {
     setState(() => _enPassword = password);
-    _primeraTecla.requestFocus();
+    // En la PC se escribe con el teclado de verdad: el foco no tiene que ir al de la pantalla
+    if (!Aparato.esPc) _primeraTecla.requestFocus();
   }
 
   Future<void> _ingresar() async {
@@ -236,16 +237,30 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
     if (evento is KeyUpEvent) return KeyEventResult.ignored;
     if (!_conCodigo) {
       if (!Aparato.esTv) return KeyEventResult.ignored;
+      // En la PC: Tab pasa de un campo al otro y Enter sigue (también si lo elegido no es una tecla de la pantalla)
+      if (Aparato.esPc && evento.logicalKey == LogicalKeyboardKey.tab) {
+        setState(() => _enPassword = !_enPassword);
+        return KeyEventResult.handled;
+      }
+      if (Aparato.esPc && esEnter(evento)) {
+        _siguienteTv();
+        return KeyEventResult.handled;
+      }
       if (evento.logicalKey == LogicalKeyboardKey.backspace) {
         _borrarTv();
         return KeyEventResult.handled;
       }
       final caracter = evento.character;
-      if (caracter != null && caracter.length == 1 && caracter.codeUnitAt(0) > 32) {
+      // El espacio, solo con el teclado de la PC (en la TV, la barra espaciadora es "OK")
+      if (caracter != null && caracter.length == 1 && caracter.codeUnitAt(0) > (Aparato.esPc ? 31 : 32)) {
         _escribirTv(caracter);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
+    }
+    if (Aparato.esPc && esEnter(evento)) {
+      _ingresar();
+      return KeyEventResult.handled;
     }
     final caracter = evento.character;
     if (caracter != null && RegExp(r'^\d$').hasMatch(caracter)) {
@@ -383,7 +398,10 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
         Text('Ingresá tu código', style: ancha ? LetraTv.pantalla.copyWith(fontSize: 40) : _tituloCelular),
         const SizedBox(height: 4),
         Text(switch ((_codigoCompleto, ancha)) {
-          (true, true) => 'OK para entrar · otro número empieza de nuevo.',
+          (true, true) => enPc(
+            'OK para entrar · otro número empieza de nuevo.',
+            'Enter para entrar · otro número empieza de nuevo.',
+          ),
           (true, false) => 'Tocá OK, o escribí otro código.',
           (false, true) => 'Escribí los 8 números que te dio tu vendedor.',
           (false, false) => 'Los 8 números que te dio tu vendedor.',
@@ -402,8 +420,11 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
         ),
         if (ancha) ...[
           const SizedBox(height: 18),
-          const Text(
-            '← ↑ ↓ → para moverte · OK para elegir · también podés usar los números del control',
+          Text(
+            enPc(
+              '← ↑ ↓ → para moverte · OK para elegir · también podés usar los números del control',
+              'Escribí los números con el teclado y apretá Enter, o hacé clic en los de la pantalla',
+            ),
             textAlign: TextAlign.center,
             style: LetraTv.ayuda,
           ),
@@ -509,6 +530,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _CampoTv(
+                  alEnterEnPc: _siguienteTv,
                   titulo: 'Usuario',
                   vacio: 'Usuario o email',
                   valor: _usuario.text,
@@ -523,6 +545,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
                   children: [
                     Expanded(
                       child: _CampoTv(
+                        alEnterEnPc: _siguienteTv,
                         titulo: 'Contraseña',
                         vacio: 'Tu contraseña',
                         valor: _verPassword ? _password.text : '•' * _password.text.length,
@@ -573,8 +596,11 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
             alSiguiente: _siguienteTv,
           ),
           const SizedBox(height: 12),
-          const Text(
-            '↑ elegí el campo · OK escribe · mantené OK en Borrar para limpiar · Atrás vuelve',
+          Text(
+            enPc(
+              '↑ elegí el campo · OK escribe · mantené OK en Borrar para limpiar · Atrás vuelve',
+              'Escribí con el teclado · Tab: cambiar de campo · Enter: seguir · Esc: volver',
+            ),
             textAlign: TextAlign.center,
             style: LetraTv.ayuda,
           ),
@@ -597,6 +623,7 @@ class _CampoTv extends StatelessWidget {
     required this.activo,
     required this.alActivar,
     required this.alElegir,
+    required this.alEnterEnPc,
     this.error,
   });
 
@@ -610,6 +637,9 @@ class _CampoTv extends StatelessWidget {
 
   /// OK sobre el campo: además, el foco baja al teclado.
   final VoidCallback alElegir;
+
+  /// En la PC, Enter con el campo elegido: sigue (de Usuario a Contraseña; en la contraseña, entra).
+  final VoidCallback alEnterEnPc;
   final String? error;
 
   @override
@@ -620,9 +650,13 @@ class _CampoTv extends StatelessWidget {
       children: [
         Enfocable(
           alOk: alElegir,
-          alEnfocar: (enfocado) {
-            if (enfocado && !activo) alActivar();
-          },
+          alTecla: _enterConfirma(alEnterEnPc),
+          // En la PC pasar el mouse por encima no cambia dónde se escribe: solo el clic, Tab o Enter
+          alEnfocar: Aparato.esPc
+              ? null
+              : (enfocado) {
+                  if (enfocado && !activo) alActivar();
+                },
           curva: Curva.boton,
           escala: 1.02,
           etiqueta: titulo,
@@ -733,6 +767,7 @@ class _TecladoTexto extends StatelessWidget {
           child: Enfocable(
             alOk: alOk,
             alOkLargo: alOkLargo,
+            alTecla: _enterConfirma(alSiguiente),
             nodo: nodo,
             curva: Curva.medio + 2,
             escala: 1.08,
@@ -806,6 +841,18 @@ const _tituloCelular = TextStyle(
   letterSpacing: -0.8,
   color: Tono.texto,
 );
+
+/// En la PC, Enter sobre una tecla del teclado de la pantalla (o un campo) [confirmar]: entra, o pasa a la
+/// contraseña. Se escribe con el teclado de verdad, y la tecla elegida (la "q" o el "1" del principio) no tiene
+/// nada que ver con lo escrito: antes, Enter la apretaba y escribía una "q". En la tele no cambia nada.
+KeyEventResult Function(KeyEvent)? _enterConfirma(VoidCallback confirmar) {
+  if (!Aparato.esPc) return null;
+  return (evento) {
+    if (!esEnter(evento)) return KeyEventResult.ignored;
+    confirmar();
+    return KeyEventResult.handled;
+  };
+}
 
 /// Las teclas numéricas del control remoto (algunos mandan estas y no el carácter).
 final _numerosDelControl = {
@@ -955,6 +1002,7 @@ class _TecladoNumerico extends StatelessWidget {
           padding: const EdgeInsets.all(6),
           child: Enfocable(
             alOk: alOk,
+            alTecla: _enterConfirma(this.alOk),
             autofocus: autofocus,
             nodo: nodo,
             curva: Curva.boton,

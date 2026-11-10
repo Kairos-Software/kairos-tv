@@ -1,7 +1,8 @@
 # descargas/
 
-La **app Android (APK) para descargar** desde el panel y, solo para los
-superusuarios, el **instalador para PC del analizador de canales** (ver abajo).
+La **app Android (APK) para descargar** desde el panel, la **app para PC**
+(Windows, ver abajo) y, solo para los superusuarios, el **instalador para PC
+del analizador de canales** (ver más abajo).
 
 | Ruta | Quién | Para qué |
 |---|---|---|
@@ -23,6 +24,26 @@ Se valida que sea `.apk`, que sea de verdad una APK (un ZIP: empieza con
 `PK`), que pese menos de 200 MB y que la versión no esté repetida. Los
 archivos quedan en `media/apk/` (no van al repo).
 
+## La app para PC (Windows)
+
+La página tiene pestañas: *App Android*, *App para PC* (`/app-android/?ver=pc`)
+y, para los superusuarios, *Analizador para PC*. El menú dice **Descargas**.
+
+| Ruta | Quién | Para qué |
+|---|---|---|
+| `/descargar/pc/`, `/descargar/pc/<id>/` | **Cualquiera** (las ocultas, solo quien publica) | El instalador (`KairosTV-<versión>.exe`). Público como la APK: sin un código de cliente la app no sirve. |
+| `/app-android/?ver=pc` | Usuarios del panel | Bajarla, cómo instalarla y, con `publicar_app`, subir versiones y ocultarlas |
+| `/app-android/pc/pedazo/`, `.../publicar/`, `/app-android/pc/<id>/publicada/` | `publicar_app` | La subida de a pedazos de 20 MB (`static/js/subir_instalador.js`, la misma del analizador) y ocultar o volver a publicar |
+| `/api/v1/app-pc/` | Cualquiera | La última versión con su tamaño y huella: la app instalada la consulta al abrirse y se actualiza sola (`api/v1/app_pc.py`) |
+
+- `VersionPc` (migración 0003): como `VersionAnalizador` (los dos son un
+  `InstaladorDeWindows`: tamaño, huella SHA-256, publicada). La versión es la
+  fecha y hora en que se armó; se ofrece la publicada con el número más alto.
+- Los instaladores van a `privado/pc/` y salen por la vista.
+- La subida de los dos instaladores está en `instaladores.py` (cada uno es un
+  `Tipo`: `APP_PC`, `ANALIZADOR`).
+- Cómo se arma: `app_movil/windows/instalador/README.md`.
+
 ## El analizador de canales para PC (solo superusuarios)
 
 Para los superusuarios el menú dice **Descargas** y la página tiene dos
@@ -32,7 +53,7 @@ Los revendedores y los otros roles no la ven (y las rutas les dan 403).
 | Ruta | Quién | Para qué |
 |---|---|---|
 | `/app-android/?ver=analizador` | Superusuarios | Bajar el instalador, cómo instalarlo, las PCs donde está (versión, última consulta, «Desconectar») y publicar versiones |
-| `/app-android/analizador/pedazo/`, `.../publicar/` | Superusuarios | La subida de a pedazos de 20 MB (`static/js/subir_analizador.js`: el instalador pesa cientos de MB y nginx acepta hasta 160 por pedido) y el final, que revisa que sea un `.exe` y calcula su huella |
+| `/app-android/analizador/pedazo/`, `.../publicar/` | Superusuarios | La subida de a pedazos de 20 MB (`static/js/subir_instalador.js`: el instalador pesa cientos de MB y nginx acepta hasta 160 por pedido) y el final, que revisa que sea un `.exe` y calcula su huella |
 | `/app-android/analizador/descargar/[<id>/]` | Superusuarios | El instalador (la última publicada o una puntual) |
 | `/api/v1/analizador/`, `/api/v1/analizador/descargar/<id>/` | Un analizador instalado | Cuál es la última versión y bajarla, para actualizarse solo (`api/v1/analizador.py`) |
 
@@ -52,17 +73,18 @@ Los revendedores y los otros roles no la ven (y las rutas les dan 403).
 
 | Archivo | Para qué |
 |---|---|
-| `models.py` | `VersionApp`: versión, archivo, notas, publicada, quién y cuándo. `VersionAnalizador` (el instalador para PC, en `privado/`) y `PcConAnalizador` (migración 0002). |
-| `analizador.py` | El instalador del analizador: juntar los pedazos, publicar, la huella y quién lo puede bajar. |
-| `views.py`, `urls.py`, `forms.py`, `templates/` | La descarga pública y la página del panel (`_analizador.html`: la pestaña del analizador). |
+| `models.py` | `VersionApp`: versión, archivo, notas, publicada, quién y cuándo. `VersionAnalizador` (el instalador del analizador, en `privado/`) y `PcConAnalizador` (migración 0002). `VersionPc` (la app para PC, migración 0003). |
+| `instaladores.py` | Subir un instalador para Windows de a pedazos y publicarlo (revisa que sea un programa y calcula su huella). Lo usan la app para PC y el analizador. |
+| `analizador.py` | Lo propio del analizador: el que pregunta se presenta con la huella de su instalador, sus PCs y si están al día. |
+| `views.py`, `urls.py`, `forms.py`, `templates/` | La descarga pública y la página del panel (`_app_pc.html` y `_analizador.html`: las pestañas de la app para PC y del analizador). |
 | `admin.py` | Vista técnica en `/admin/`. |
-| `tests/` | Subir, validar, descargar, ocultar y permisos; `test_analizador.py`, el analizador para PC (solo superusuarios, de a pedazos, la consulta con la huella, PCs desconectadas). |
+| `tests/` | Subir, validar, descargar, ocultar y permisos; `test_app_pc.py`, la app para PC (todos la ven, la suben los que publican, la API con la huella); `test_analizador.py`, el analizador para PC (solo superusuarios, de a pedazos, la consulta con la huella, PCs desconectadas). |
 
 ## En producción
 
 nginx tiene que aceptar archivos grandes en esa ruta
 (`client_max_body_size 200m;`) y conviene que sirva `/media/` directamente.
-El instalador del analizador no necesita nada más en nginx: se sube de a
-pedazos de 20 MB y se baja por Django (nginx guarda la respuesta mientras se
+Los instaladores para PC (la app y el analizador) no necesitan nada más en nginx: se suben de a
+pedazos de 20 MB y se bajan por Django (nginx guarda la respuesta mientras se
 entrega, así gunicorn queda libre enseguida). Hay que correr `migrate`
-(descargas 0002).
+(descargas 0002 y 0003).

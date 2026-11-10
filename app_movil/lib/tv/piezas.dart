@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/modelos.dart';
+import '../aparato.dart';
 import '../movil/componentes.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
@@ -108,16 +109,151 @@ class FilaChipsTv extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 70,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        padding: const EdgeInsets.fromLTRB(MargenTv.izquierda, 12, MargenTv.derecha, 12),
-        itemCount: opciones.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (_, i) {
-          final (valor, texto) = opciones[i];
-          return ChipTv(texto: texto, activo: valor == activa, alOk: () => alElegir(valor));
-        },
+      child: TiraTv(
+        constructor: (controlador) => ListView.separated(
+          controller: controlador,
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          padding: const EdgeInsets.fromLTRB(MargenTv.izquierda, 12, MargenTv.derecha, 12),
+          itemCount: opciones.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (_, i) {
+            final (valor, texto) = opciones[i];
+            return ChipTv(texto: texto, activo: valor == activa, alOk: () => alElegir(valor));
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Una fila que se corre de costado ([constructor] arma la lista con el controlador que le da). En la PC, al
+/// pasar el mouse por encima aparecen flechas a los costados (solo si hay más para ese lado) que la corren: la
+/// rueda del mouse mueve la pantalla para arriba y abajo, no la fila. En la tele es la fila tal cual (la corre
+/// el foco del control).
+class TiraTv extends StatefulWidget {
+  const TiraTv({
+    super.key,
+    required this.constructor,
+    this.margenIzquierdo = MargenTv.izquierda,
+    this.margenDerecho = MargenTv.derecha,
+  });
+
+  final Widget Function(ScrollController controlador) constructor;
+
+  /// Donde empiezan y terminan las tarjetas: las flechas quedan sobre ese borde.
+  final double margenIzquierdo;
+  final double margenDerecho;
+
+  @override
+  State<TiraTv> createState() => _TiraTvState();
+}
+
+class _TiraTvState extends State<TiraTv> {
+  final _controlador = ScrollController();
+  bool _encima = false;
+
+  @override
+  void dispose() {
+    _controlador.dispose();
+    super.dispose();
+  }
+
+  /// Corre la fila casi una pantalla para el [lado] (-1 izquierda, 1 derecha).
+  void _correr(int lado) {
+    if (!_controlador.hasClients) return;
+    final posicion = _controlador.position;
+    final destino = (posicion.pixels + lado * posicion.viewportDimension * .75).clamp(
+      posicion.minScrollExtent,
+      posicion.maxScrollExtent,
+    );
+    _controlador.animateTo(destino, duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lista = widget.constructor(_controlador);
+    if (!Aparato.esPc) return lista;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _encima = true),
+      onExit: (_) => setState(() => _encima = false),
+      child: Stack(
+        children: [
+          Positioned.fill(child: lista),
+          if (_encima)
+            ListenableBuilder(
+              listenable: _controlador,
+              builder: (context, _) {
+                final posicion = _controlador.hasClients ? _controlador.position : null;
+                final hayIzquierda = posicion != null && posicion.pixels > posicion.minScrollExtent + 1;
+                final hayDerecha = posicion != null && posicion.pixels < posicion.maxScrollExtent - 1;
+                return Stack(
+                  children: [
+                    if (hayIzquierda)
+                      Positioned(
+                        left: widget.margenIzquierdo - _FlechaDeFila.medida / 2,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _FlechaDeFila(icono: Icons.chevron_left_rounded, alTocar: () => _correr(-1)),
+                        ),
+                      ),
+                    if (hayDerecha)
+                      Positioned(
+                        right: widget.margenDerecho - _FlechaDeFila.medida / 2,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _FlechaDeFila(icono: Icons.chevron_right_rounded, alTocar: () => _correr(1)),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una flecha de [TiraTv]: redonda, oscura, con borde suave; con el mouse encima se llena de celeste (como los
+/// botones del reproductor). No toma el foco: es solo para el mouse.
+class _FlechaDeFila extends StatefulWidget {
+  const _FlechaDeFila({required this.icono, required this.alTocar});
+
+  static const medida = 60.0;
+
+  final IconData icono;
+  final VoidCallback alTocar;
+
+  @override
+  State<_FlechaDeFila> createState() => _FlechaDeFilaState();
+}
+
+class _FlechaDeFilaState extends State<_FlechaDeFila> {
+  bool _encima = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _encima = true),
+      onExit: (_) => setState(() => _encima = false),
+      child: GestureDetector(
+        onTap: widget.alTocar,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          width: _FlechaDeFila.medida,
+          height: _FlechaDeFila.medida,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _encima ? Tono.celeste : Tono.capaAlta.withValues(alpha: .92),
+            border: Border.all(color: Colors.white.withValues(alpha: _encima ? 0 : .22)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .55), blurRadius: 24)],
+          ),
+          child: Icon(widget.icono, size: 38, color: _encima ? Tono.sobreCelesteOscuro : Tono.texto),
+        ),
       ),
     );
   }
@@ -443,13 +579,18 @@ class FilaTv extends StatelessWidget {
           SizedBox(
             height: alto + 36,
             child: FocusTraversalGroup(
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                padding: EdgeInsets.fromLTRB(margenIzquierdo, 18, margenDerecho, 18),
-                itemCount: tarjetas.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 22),
-                itemBuilder: (_, i) => tarjetas[i],
+              child: TiraTv(
+                margenIzquierdo: margenIzquierdo,
+                margenDerecho: margenDerecho,
+                constructor: (controlador) => ListView.separated(
+                  controller: controlador,
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  padding: EdgeInsets.fromLTRB(margenIzquierdo, 18, margenDerecho, 18),
+                  itemCount: tarjetas.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 22),
+                  itemBuilder: (_, i) => tarjetas[i],
+                ),
               ),
             ),
           ),

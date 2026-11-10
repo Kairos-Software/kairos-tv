@@ -50,6 +50,13 @@ dependencies:
   # La carpeta de la app donde se guardan el catálogo y las imágenes (movil/copia_catalogo.dart,
   # widgets/imagen_guardada.dart). Ya venía adentro (lo usan otros paquetes): no suma peso.
   path_provider: ^2.1.6
+  # La app de PC (Windows): el video lo reproduce media_kit (mpv: TS, HLS, MP2, Dolby, DTS) por debajo del
+  # mismo video_player de siempre. Solo se activa en Windows (main.dart): en Android sigue el de Android.
+  video_player_media_kit: ^2.0.0
+  media_kit_libs_windows_video: ^1.0.11
+  # La huella (SHA-256) del instalador de la PC que se baja para actualizarse (lib/actualizacion.dart). Ya venía
+  # adentro (lo usan otros paquetes): no suma peso.
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +78,10 @@ dev_dependencies:
 dependency_overrides:
   video_player_android:
     path: paquetes/video_player_android
+  # La de PC (Windows), con dos cambios: que un canal en vivo arranque y que una dirección que no abre se
+  # avise enseguida (ver paquetes/README.md)
+  video_player_media_kit:
+    path: paquetes/video_player_media_kit
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -29,6 +29,12 @@
 ///   Ajustes: la calidad la elige YouTube.
 ///
 /// Las opciones y la barra se esconden solas a los 5 s (en pausa, no); la guía a los 15 s.
+///
+/// EN LA PC (Windows, [_ConMouse]): el video va a pantalla completa mientras se mira. Al mover el mouse aparecen
+///   la barra y, arriba a la derecha, Pantalla completa y Salir; con el mouse quieto 3 s se esconden y el puntero
+///   desaparece (mientras el mouse está sobre la barra o la guía, no se cierran). Clic en el video: pausa (en vivo,
+///   las opciones); doble clic: pantalla completa o ventana. La línea de tiempo se toca o se arrastra. Teclas: Esc
+///   es "Atrás", Enter es "OK" y la barra espaciadora pausa.
 library;
 
 import 'dart:async';
@@ -39,6 +45,7 @@ import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../api/modelos.dart';
+import '../aparato.dart';
 import '../movil/ajustes_video.dart';
 import '../movil/componentes.dart';
 import '../movil/control_senal.dart';
@@ -47,6 +54,7 @@ import '../movil/detalle.dart' show proximoEpisodio;
 import '../movil/estilo.dart';
 import '../movil/reproductor_youtube.dart';
 import '../movil/reproductor_web.dart';
+import '../pc.dart';
 import '../sesion.dart';
 import '../widgets/espera_larga.dart';
 import 'estructura.dart' show DialogoTv;
@@ -135,6 +143,9 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
   String _numero = '';
   Timer? _numeroListo;
 
+  /// PC: el mouse está sobre las opciones o la guía (no se cierran solas mientras tanto).
+  bool _mouseEncima = false;
+
   @override
   void initState() {
     super.initState();
@@ -203,12 +214,28 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
   void _esperarParaCerrar() {
     _cerrarCapa?.cancel();
     _cerrarCapa = Timer(_capa == _CapaVivo.guia ? _esperaGuia : _esperaControles, () {
-      if (mounted && _capa != _CapaVivo.nada) _cerrar();
+      if (mounted && _capa != _CapaVivo.nada && !_mouseEncima) _cerrar();
     });
+  }
+
+  /// PC: el mouse se movió. Si no hay nada abierto, aparecen las opciones; si hay, se espera de nuevo para cerrar.
+  void _alMoverElMouse() {
+    _capa == _CapaVivo.nada ? _abrir(_CapaVivo.opciones) : _esperarParaCerrar();
+  }
+
+  /// PC: clic en el video. Abre las opciones o cierra lo que esté abierto.
+  void _alClicEnElVideo() {
+    _capa == _CapaVivo.nada ? _abrir(_CapaVivo.opciones) : _cerrar();
+  }
+
+  void _mouseSobreLaCapa(bool encima) {
+    _mouseEncima = encima;
+    if (!encima && _capa != _CapaVivo.nada) _esperarParaCerrar();
   }
 
   void _cerrar() {
     _cerrarCapa?.cancel();
+    _mouseEncima = false;
     setState(() => _capa = _CapaVivo.nada);
     (_control.error != null && _reintentar.context != null ? _reintentar : _raiz).requestFocus();
   }
@@ -362,108 +389,118 @@ class _ReproductorVivoTvState extends State<ReproductorVivoTv> {
         body: Focus(
           focusNode: _raiz,
           onKeyEvent: _tecla,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _Video(control: _control),
-              _EstadoSenal(
-                control: _control,
-                alReintentar: _control.reintentar,
-                alGuia: () => _abrir(_CapaVivo.guia),
-                nodoReintentar: _reintentar,
-              ),
-              if (_cartel || _capa != _CapaVivo.nada)
-                const Positioned(top: MargenTv.arriba, left: MargenTv.derecha, child: InsigniaEnVivoTv(grande: true)),
-              if (_numero.isNotEmpty)
-                Positioned(
-                  top: MargenTv.arriba,
-                  right: MargenTv.derecha,
-                  child: _NumeroEscrito(numero: _numero, canal: escrito?.nombre),
+          child: _ConMouse(
+            raiz: _raiz,
+            alMover: _alMoverElMouse,
+            barraVisible: _capa != _CapaVivo.nada,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _ClicEnElVideo(
+                  alClic: _alClicEnElVideo,
+                  child: _Video(control: _control),
                 ),
-              // El cartel: solo informa
-              if (_cartel && _capa == _CapaVivo.nada && _control.error == null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _PanelControles(
-                    ayuda: 'OK: guía  ·  ↑ ↓ cambiar de canal  ·  ← →: opciones  ·  Atrás: salir',
-                    fila: datosDelCanal,
+                _EstadoSenal(
+                  control: _control,
+                  alReintentar: _control.reintentar,
+                  alGuia: () => _abrir(_CapaVivo.guia),
+                  nodoReintentar: _reintentar,
+                ),
+                if (_cartel || _capa != _CapaVivo.nada)
+                  const Positioned(top: MargenTv.arriba, left: MargenTv.derecha, child: InsigniaEnVivoTv(grande: true)),
+                if (_numero.isNotEmpty)
+                  Positioned(
+                    top: MargenTv.arriba,
+                    right: MargenTv.derecha,
+                    child: _NumeroEscrito(numero: _numero, canal: escrito?.nombre),
                   ),
-                ),
-              if (_capa == _CapaVivo.opciones)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _PanelControles(
-                    ayuda: '← → elegir  ·  OK: confirmar  ·  Atrás: cerrar',
-                    alMoverse: _esperarParaCerrar,
-                    fila: [
-                      if (_control.fuenteWeb != null)
+                // El cartel: solo informa
+                if (_cartel && _capa == _CapaVivo.nada && _control.error == null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _PanelControles(
+                      ayuda: 'OK: guía  ·  ↑ ↓ cambiar de canal  ·  ← →: opciones  ·  Atrás: salir',
+                      fila: datosDelCanal,
+                    ),
+                  ),
+                if (_capa == _CapaVivo.opciones)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _PanelControles(
+                      ayuda: '← → elegir  ·  OK: confirmar  ·  Atrás: cerrar',
+                      alMoverse: _esperarParaCerrar,
+                      alMouseEncima: _mouseSobreLaCapa,
+                      fila: [
+                        if (_control.fuenteWeb != null)
+                          _BotonCuadrado(
+                            icono: Icons.web,
+                            etiqueta: 'Reproductor web',
+                            alOk: () {
+                              _cerrar();
+                              _control.enfocarWeb();
+                            },
+                          ),
                         _BotonCuadrado(
-                          icono: Icons.web,
-                          etiqueta: 'Reproductor web',
+                          icono: Icons.view_list_rounded,
+                          etiqueta: 'Guía',
+                          nodo: _primeraOpcion,
+                          alOk: () => _abrir(_CapaVivo.guia),
+                        ),
+                        const SizedBox(width: 14),
+                        _BotonCuadrado(
+                          icono: Icons.skip_previous_rounded,
+                          etiqueta: 'Canal anterior',
                           alOk: () {
-                            _cerrar();
-                            _control.enfocarWeb();
+                            _zapping(-1);
+                            _esperarParaCerrar();
                           },
                         ),
-                      _BotonCuadrado(
-                        icono: Icons.view_list_rounded,
-                        etiqueta: 'Guía',
-                        nodo: _primeraOpcion,
-                        alOk: () => _abrir(_CapaVivo.guia),
-                      ),
-                      const SizedBox(width: 14),
-                      _BotonCuadrado(
-                        icono: Icons.skip_previous_rounded,
-                        etiqueta: 'Canal anterior',
-                        alOk: () {
-                          _zapping(-1);
-                          _esperarParaCerrar();
-                        },
-                      ),
-                      const SizedBox(width: 14),
-                      _BotonCuadrado(
-                        icono: Icons.skip_next_rounded,
-                        etiqueta: 'Canal siguiente',
-                        alOk: () {
-                          _zapping(1);
-                          _esperarParaCerrar();
-                        },
-                      ),
-                      const SizedBox(width: 20),
-                      ...datosDelCanal,
-                      _BotonCuadrado(
-                        icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        color: favorito ? Tono.rubi : null,
-                        etiqueta: favorito ? 'Quitar de favoritos' : 'Agregar a favoritos',
-                        alOk: () {
-                          alternarFavoritoTv(context, clave);
-                          _esperarParaCerrar();
-                        },
-                      ),
-                      const SizedBox(width: 14),
-                      _BotonCuadrado(
-                        icono: Icons.notifications_none_rounded,
-                        etiqueta: 'Recordarme',
-                        alOk: _recordarme,
-                      ),
-                      const SizedBox(width: 18),
-                      _BotonCuadrado(icono: Icons.settings_rounded, etiqueta: 'Ajustes', alOk: _ajustes),
-                    ],
+                        const SizedBox(width: 14),
+                        _BotonCuadrado(
+                          icono: Icons.skip_next_rounded,
+                          etiqueta: 'Canal siguiente',
+                          alOk: () {
+                            _zapping(1);
+                            _esperarParaCerrar();
+                          },
+                        ),
+                        const SizedBox(width: 20),
+                        ...datosDelCanal,
+                        _BotonCuadrado(
+                          icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: favorito ? Tono.rubi : null,
+                          etiqueta: favorito ? 'Quitar de favoritos' : 'Agregar a favoritos',
+                          alOk: () {
+                            alternarFavoritoTv(context, clave);
+                            _esperarParaCerrar();
+                          },
+                        ),
+                        const SizedBox(width: 14),
+                        _BotonCuadrado(
+                          icono: Icons.notifications_none_rounded,
+                          etiqueta: 'Recordarme',
+                          alOk: _recordarme,
+                        ),
+                        const SizedBox(width: 18),
+                        _BotonCuadrado(icono: Icons.settings_rounded, etiqueta: 'Ajustes', alOk: _ajustes),
+                      ],
+                    ),
                   ),
-                ),
-              if (_capa == _CapaVivo.guia)
-                _GuiaEncima(
-                  lista: widget.lista,
-                  actual: canal,
-                  numeroDe: catalogo.numeroDe,
-                  nodoActual: _canalEnLaGuia,
-                  alElegir: _ver,
-                ),
-            ],
+                if (_capa == _CapaVivo.guia)
+                  _GuiaEncima(
+                    lista: widget.lista,
+                    actual: canal,
+                    numeroDe: catalogo.numeroDe,
+                    nodoActual: _canalEnLaGuia,
+                    alElegir: _ver,
+                    alMouseEncima: _mouseSobreLaCapa,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -515,12 +552,16 @@ class _GuiaEncima extends StatelessWidget {
     required this.numeroDe,
     required this.alElegir,
     required this.nodoActual,
+    required this.alMouseEncima,
   });
 
   final List<Canal> lista;
   final Canal actual;
   final String Function(Canal) numeroDe;
   final ValueChanged<Canal> alElegir;
+
+  /// PC: el mouse entra (true) o sale (false) de la guía: mientras está encima, no se cierra sola.
+  final ValueChanged<bool> alMouseEncima;
 
   /// El del canal que se está viendo: ahí arranca el foco al abrir la guía.
   final FocusNode nodoActual;
@@ -535,45 +576,49 @@ class _GuiaEncima extends StatelessWidget {
       top: 0,
       bottom: 0,
       width: 720,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xF20E0E12), Color(0xD90E0E12), Color(0x000E0E12)],
-            stops: [0, .8, 1],
+      child: MouseRegion(
+        onEnter: (_) => alMouseEncima(true),
+        onExit: (_) => alMouseEncima(false),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xF20E0E12), Color(0xD90E0E12), Color(0x000E0E12)],
+              stops: [0, .8, 1],
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(MargenTv.derecha, 120, 60, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('GUÍA DE CANALES', style: LetraTv.sobretitulo),
-              const SizedBox(height: 14),
-              Expanded(
-                child: FocusTraversalGroup(
-                  child: ListView.builder(
-                    controller: ScrollController(initialScrollOffset: (indice - 2).clamp(0, 1 << 20) * _altoFila),
-                    clipBehavior: Clip.none,
-                    itemExtent: _altoFila,
-                    padding: const EdgeInsets.only(bottom: 60, right: 14),
-                    itemCount: lista.length,
-                    itemBuilder: (context, i) {
-                      final canal = lista[i];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 7),
-                        child: FilaCanalTv(
-                          canal: canal,
-                          numero: numeroDe(canal),
-                          nodo: i == indice ? nodoActual : null,
-                          enReproduccion: canal.id == actual.id,
-                          alOk: () => alElegir(canal),
-                        ),
-                      );
-                    },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(MargenTv.derecha, 120, 60, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('GUÍA DE CANALES', style: LetraTv.sobretitulo),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: FocusTraversalGroup(
+                    child: ListView.builder(
+                      controller: ScrollController(initialScrollOffset: (indice - 2).clamp(0, 1 << 20) * _altoFila),
+                      clipBehavior: Clip.none,
+                      itemExtent: _altoFila,
+                      padding: const EdgeInsets.only(bottom: 60, right: 14),
+                      itemCount: lista.length,
+                      itemBuilder: (context, i) {
+                        final canal = lista[i];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 7),
+                          child: FilaCanalTv(
+                            canal: canal,
+                            numero: numeroDe(canal),
+                            nodo: i == indice ? nodoActual : null,
+                            enReproduccion: canal.id == actual.id,
+                            alOk: () => alElegir(canal),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -729,6 +774,9 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
   Timer? _cerrarCartel;
   Timer? _guardar;
 
+  /// PC: el mouse está sobre la barra (no se esconde sola mientras tanto).
+  bool _mouseEncima = false;
+
   @override
   void initState() {
     super.initState();
@@ -844,12 +892,21 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
   void _reiniciarEspera() {
     _ocultar?.cancel();
     _ocultar = Timer(_esperaControles, () {
-      if (mounted && _controles && _reproduciendo) _cerrarControles();
+      if (mounted && _controles && _reproduciendo && !_mouseEncima) _cerrarControles();
     });
+  }
+
+  /// PC: el mouse se movió: aparece la barra (con el foco en Pausa) o se espera de nuevo para esconderla.
+  void _alMoverElMouse() => _controles ? _reiniciarEspera() : _abrirControles(_botonPausa);
+
+  void _mouseSobreLaBarra(bool encima) {
+    _mouseEncima = encima;
+    if (!encima && _controles) _reiniciarEspera();
   }
 
   void _cerrarControles() {
     _ocultar?.cancel();
+    _mouseEncima = false;
     setState(() => _controles = false);
     (_control.error != null && _reintentar.context != null ? _reintentar : _raiz).requestFocus();
   }
@@ -867,10 +924,11 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
   KeyEventResult _tecla(FocusNode _, KeyEvent evento) {
     if (evento is KeyUpEvent) return KeyEventResult.ignored;
     final tecla = evento.logicalKey;
-    // Las teclas de reproducción del control funcionan siempre
+    // Las teclas de reproducción del control funcionan siempre (en la PC, también la barra espaciadora)
     if (tecla == LogicalKeyboardKey.mediaPlayPause ||
         tecla == LogicalKeyboardKey.mediaPlay ||
-        tecla == LogicalKeyboardKey.mediaPause) {
+        tecla == LogicalKeyboardKey.mediaPause ||
+        (Aparato.esPc && tecla == LogicalKeyboardKey.space && evento is KeyDownEvent)) {
       _pausa();
       return KeyEventResult.handled;
     }
@@ -947,101 +1005,110 @@ class _ReproductorVodTvState extends State<ReproductorVodTv> {
         body: Focus(
           focusNode: _raiz,
           onKeyEvent: _tecla,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _Video(control: _control),
-              _EstadoSenal(control: _control, alReintentar: _control.reintentar, nodoReintentar: _reintentar),
-              if (_controles || _cartel)
-                Positioned(
-                  top: MargenTv.arriba,
-                  left: MargenTv.derecha,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: Tono.capaAlta.withValues(alpha: .85),
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
-                    ),
-                    child: Text(
-                      episodio == null ? 'PELÍCULA' : 'T${episodio.temporada} · E${episodio.numero}',
-                      style: const TextStyle(
-                        fontFamily: Letra.texto,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: .6,
-                        color: Tono.texto,
+          child: _ConMouse(
+            raiz: _raiz,
+            alMover: _alMoverElMouse,
+            barraVisible: _controles,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _ClicEnElVideo(
+                  alClic: _pausa,
+                  child: _Video(control: _control),
+                ),
+                _EstadoSenal(control: _control, alReintentar: _control.reintentar, nodoReintentar: _reintentar),
+                if (_controles || _cartel)
+                  Positioned(
+                    top: MargenTv.arriba,
+                    left: MargenTv.derecha,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Tono.capaAlta.withValues(alpha: .85),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(color: Tono.bordeSuave.withValues(alpha: .6)),
+                      ),
+                      child: Text(
+                        episodio == null ? 'PELÍCULA' : 'T${episodio.temporada} · E${episodio.numero}',
+                        style: const TextStyle(
+                          fontFamily: Letra.texto,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .6,
+                          color: Tono.texto,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              // El cartel del principio: título y cómo se maneja (solo informa)
-              if (_cartel && !_controles && _control.error == null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _PanelControles(
-                    fila: [Expanded(child: textoDelTitulo)],
-                    ayuda: 'OK: pausa  ·  ← →: atrasar / adelantar 10 s  ·  ↑ ↓: opciones  ·  Atrás: salir',
+                // El cartel del principio: título y cómo se maneja (solo informa)
+                if (_cartel && !_controles && _control.error == null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _PanelControles(
+                      fila: [Expanded(child: textoDelTitulo)],
+                      ayuda: 'OK: pausa  ·  ← →: atrasar / adelantar 10 s  ·  ↑ ↓: opciones  ·  Atrás: salir',
+                    ),
                   ),
-                ),
-              if (_controles)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _PanelControles(
-                    ayuda: '← →: elegir  ·  ↓: línea de tiempo  ·  Atrás: ocultar',
-                    alMoverse: _reiniciarEspera,
-                    fila: [
-                      _BotonCuadrado(
-                        icono: _reproduciendo ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                        etiqueta: _reproduciendo ? 'Pausa' : 'Seguir',
-                        nodo: _botonPausa,
-                        alOk: () {
-                          _control.alternarPausa();
-                          _reiniciarEspera();
-                        },
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(child: textoDelTitulo),
-                      if (siguiente != null) ...[
+                if (_controles)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _PanelControles(
+                      ayuda: '← →: elegir  ·  ↓: línea de tiempo  ·  Atrás: ocultar',
+                      alMoverse: _reiniciarEspera,
+                      alMouseEncima: _mouseSobreLaBarra,
+                      fila: [
                         _BotonCuadrado(
-                          icono: Icons.skip_next_rounded,
-                          etiqueta: 'Siguiente episodio',
-                          alOk: () => _pasarA(siguiente),
+                          icono: _reproduciendo ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          etiqueta: _reproduciendo ? 'Pausa' : 'Seguir',
+                          nodo: _botonPausa,
+                          alOk: () {
+                            _control.alternarPausa();
+                            _reiniciarEspera();
+                          },
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(child: textoDelTitulo),
+                        if (siguiente != null) ...[
+                          _BotonCuadrado(
+                            icono: Icons.skip_next_rounded,
+                            etiqueta: 'Siguiente episodio',
+                            alOk: () => _pasarA(siguiente),
+                          ),
+                          const SizedBox(width: 18),
+                        ],
+                        _BotonCuadrado(
+                          icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: favorito ? Tono.rubi : null,
+                          etiqueta: favorito ? 'Quitar de favoritos' : 'Agregar a favoritos',
+                          alOk: () {
+                            alternarFavoritoTv(context, clave);
+                            _reiniciarEspera();
+                          },
                         ),
                         const SizedBox(width: 18),
+                        _BotonCuadrado(icono: Icons.settings_rounded, etiqueta: 'Ajustes', alOk: _ajustes),
                       ],
-                      _BotonCuadrado(
-                        icono: favorito ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        color: favorito ? Tono.rubi : null,
-                        etiqueta: favorito ? 'Quitar de favoritos' : 'Agregar a favoritos',
-                        alOk: () {
-                          alternarFavoritoTv(context, clave);
+                      debajo: _LineaDeTiempo(
+                        nodo: _linea,
+                        posicion: posicion,
+                        duracion: duracion,
+                        alSaltar: (cuanto) {
+                          _control.saltar(cuanto);
+                          _reiniciarEspera();
+                        },
+                        alSubir: () {
+                          _botonPausa.requestFocus();
                           _reiniciarEspera();
                         },
                       ),
-                      const SizedBox(width: 18),
-                      _BotonCuadrado(icono: Icons.settings_rounded, etiqueta: 'Ajustes', alOk: _ajustes),
-                    ],
-                    debajo: _LineaDeTiempo(
-                      nodo: _linea,
-                      posicion: posicion,
-                      duracion: duracion,
-                      alSaltar: (cuanto) {
-                        _control.saltar(cuanto);
-                        _reiniciarEspera();
-                      },
-                      alSubir: () {
-                        _botonPausa.requestFocus();
-                        _reiniciarEspera();
-                      },
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1208,10 +1275,11 @@ class _ReproductorYoutubeTvState extends State<ReproductorYoutubeTv> {
   KeyEventResult _tecla(FocusNode _, KeyEvent evento) {
     if (evento is KeyUpEvent) return KeyEventResult.ignored;
     final tecla = evento.logicalKey;
-    // Las teclas de reproducción del control funcionan siempre
+    // Las teclas de reproducción del control funcionan siempre (en la PC, también la barra espaciadora)
     if (tecla == LogicalKeyboardKey.mediaPlayPause ||
         tecla == LogicalKeyboardKey.mediaPlay ||
-        tecla == LogicalKeyboardKey.mediaPause) {
+        tecla == LogicalKeyboardKey.mediaPause ||
+        (Aparato.esPc && tecla == LogicalKeyboardKey.space && evento is KeyDownEvent)) {
       _pausa();
       return KeyEventResult.handled;
     }
@@ -1487,7 +1555,7 @@ class _FallaYoutubeTv extends StatelessWidget {
 }
 
 // La línea de tiempo: con el foco, Izquierda/Derecha mueven ±10 s.
-class _LineaDeTiempo extends StatelessWidget {
+class _LineaDeTiempo extends StatefulWidget {
   const _LineaDeTiempo({
     required this.posicion,
     required this.duracion,
@@ -1505,10 +1573,53 @@ class _LineaDeTiempo extends StatelessWidget {
   final FocusNode? nodo;
 
   @override
+  State<_LineaDeTiempo> createState() => _LineaDeTiempoState();
+}
+
+class _LineaDeTiempoState extends State<_LineaDeTiempo> {
+  /// PC: hasta dónde se está arrastrando (la bolita va ahí; al soltar, salta). null = no se arrastra.
+  double? _arrastre;
+
+  Duration get posicion => widget.posicion;
+  Duration get duracion => widget.duracion;
+  ValueChanged<Duration> get alSaltar => widget.alSaltar;
+  VoidCallback get alSubir => widget.alSubir;
+  FocusNode? get nodo => widget.nodo;
+
+  /// La parte de la línea en [x] (de 0 a 1).
+  static double _fraccionEn(double x, double ancho) => ancho <= 0 ? 0 : (x / ancho).clamp(0.0, 1.0);
+
+  /// Salta a la parte [fraccion] de la película.
+  void _irA(double fraccion) {
+    if (duracion <= Duration.zero) return;
+    alSaltar(duracion * fraccion - posicion);
+  }
+
+  /// En la PC la línea se toca o se arrastra con el mouse. En la tele, nada.
+  Widget _conMouse(BoxConstraints limites, Widget linea) {
+    if (!Aparato.esPc) return linea;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (toque) => _irA(_fraccionEn(toque.localPosition.dx, limites.maxWidth)),
+      onHorizontalDragStart: (arrastre) =>
+          setState(() => _arrastre = _fraccionEn(arrastre.localPosition.dx, limites.maxWidth)),
+      onHorizontalDragUpdate: (arrastre) =>
+          setState(() => _arrastre = _fraccionEn(arrastre.localPosition.dx, limites.maxWidth)),
+      onHorizontalDragEnd: (_) {
+        final hasta = _arrastre;
+        setState(() => _arrastre = null);
+        if (hasta != null) _irA(hasta);
+      },
+      onHorizontalDragCancel: () => setState(() => _arrastre = null),
+      child: linea,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final fraccion = duracion.inMilliseconds == 0
-        ? 0.0
-        : (posicion.inMilliseconds / duracion.inMilliseconds).clamp(0.0, 1.0);
+    final fraccion =
+        _arrastre ??
+        (duracion.inMilliseconds == 0 ? 0.0 : (posicion.inMilliseconds / duracion.inMilliseconds).clamp(0.0, 1.0));
     return Column(
       children: [
         Enfocable(
@@ -1535,35 +1646,38 @@ class _LineaDeTiempo extends StatelessWidget {
           child: SizedBox(
             height: 26,
             child: LayoutBuilder(
-              builder: (context, limites) => Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  Container(
-                    height: 8,
-                    decoration: BoxDecoration(color: Tono.capaMaxima, borderRadius: BorderRadius.circular(99)),
-                  ),
-                  Container(
-                    height: 8,
-                    width: limites.maxWidth * fraccion,
-                    decoration: BoxDecoration(
-                      color: Tono.celeste,
-                      borderRadius: BorderRadius.circular(99),
-                      boxShadow: brilloCeleste(desenfoque: 10, opacidad: .6),
+              builder: (context, limites) => _conMouse(
+                limites,
+                Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    Container(
+                      height: 8,
+                      decoration: BoxDecoration(color: Tono.capaMaxima, borderRadius: BorderRadius.circular(99)),
                     ),
-                  ),
-                  Positioned(
-                    left: (limites.maxWidth * fraccion - 11).clamp(0, limites.maxWidth - 22),
-                    child: Container(
-                      width: 22,
-                      height: 22,
+                    Container(
+                      height: 8,
+                      width: limites.maxWidth * fraccion,
                       decoration: BoxDecoration(
-                        color: Tono.celesteClaro,
-                        shape: BoxShape.circle,
-                        boxShadow: brilloCeleste(desenfoque: 14, opacidad: .8),
+                        color: Tono.celeste,
+                        borderRadius: BorderRadius.circular(99),
+                        boxShadow: brilloCeleste(desenfoque: 10, opacidad: .6),
                       ),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      left: (limites.maxWidth * fraccion - 11).clamp(0, limites.maxWidth - 22),
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: Tono.celesteClaro,
+                          shape: BoxShape.circle,
+                          boxShadow: brilloCeleste(desenfoque: 14, opacidad: .8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1590,6 +1704,142 @@ class _LineaDeTiempo extends StatelessWidget {
 }
 
 // ── Piezas compartidas ─────────────────────────────────────────────
+
+/// El reproductor con el mouse, en la PC (en la tele devuelve [child] tal cual):
+///   - Mientras está abierto, pantalla completa (sin la barra de título de Windows).
+///   - Al mover el mouse (o la rueda): [alMover] (el reproductor muestra su barra) y, arriba a la derecha,
+///     Pantalla completa / Ventana y Salir. Con el mouse quieto 3 s se esconden y el puntero desaparece.
+///   - Esos dos botones son solo para el mouse: las flechas no llegan a ellos (no cambia el recorrido del control).
+class _ConMouse extends StatefulWidget {
+  const _ConMouse({required this.child, required this.raiz, required this.alMover, required this.barraVisible});
+
+  final Widget child;
+
+  /// El foco del reproductor: si estaba en los botones de arriba cuando se esconden, vuelve ahí.
+  final FocusNode raiz;
+  final VoidCallback alMover;
+
+  /// El reproductor muestra su barra: los botones de arriba también se ven.
+  final bool barraVisible;
+
+  @override
+  State<_ConMouse> createState() => _ConMouseState();
+}
+
+class _ConMouseState extends State<_ConMouse> {
+  static const _quietoHasta = Duration(seconds: 3);
+
+  bool _activo = false;
+  Timer? _quieto;
+  final _botones = FocusNode(debugLabel: 'botones del mouse', canRequestFocus: false, skipTraversal: true);
+
+  /// Pidió la pantalla completa (al cerrarse, la devuelve).
+  bool _pidioPantallaCompleta = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (Aparato.esPc) {
+      Ventana.entrarAlReproductor();
+      _pidioPantallaCompleta = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _quieto?.cancel();
+    _botones.dispose();
+    if (_pidioPantallaCompleta) Ventana.salirDelReproductor();
+    super.dispose();
+  }
+
+  void _seMovio() {
+    widget.alMover();
+    if (!_activo) setState(() => _activo = true);
+    _quieto?.cancel();
+    _quieto = Timer(_quietoHasta, _quedoQuieto);
+  }
+
+  void _quedoQuieto() {
+    if (!mounted) return;
+    if (_botones.hasFocus) widget.raiz.requestFocus();
+    setState(() => _activo = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Aparato.esPc) return widget.child;
+    final visibles = _activo || widget.barraVisible;
+    return Listener(
+      onPointerSignal: (_) => _seMovio(),
+      child: MouseRegion(
+        cursor: _activo ? MouseCursor.defer : SystemMouseCursors.none,
+        onHover: (_) => _seMovio(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.child,
+            Positioned(
+              top: MargenTv.arriba,
+              right: MargenTv.derecha,
+              child: IgnorePointer(
+                ignoring: !visibles,
+                child: AnimatedOpacity(
+                  opacity: visibles ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Focus(
+                    focusNode: _botones,
+                    descendantsAreTraversable: false,
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: Ventana.pantallaCompleta,
+                      builder: (context, completa, _) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _BotonCuadrado(
+                            icono: completa ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                            etiqueta: completa ? 'Ventana' : 'Pantalla completa',
+                            alOk: Ventana.alternar,
+                          ),
+                          const SizedBox(width: 14),
+                          _BotonCuadrado(
+                            icono: Icons.close_rounded,
+                            etiqueta: 'Salir',
+                            // Sale siempre (no "Atrás", que primero cierra la barra que el mouse acaba de abrir)
+                            alOk: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// PC: el clic en el video ([alClic]: pausa, o las opciones en vivo) y el doble clic (pantalla completa o
+/// ventana). En la tele devuelve [child] tal cual.
+class _ClicEnElVideo extends StatelessWidget {
+  const _ClicEnElVideo({required this.alClic, required this.child});
+
+  final VoidCallback alClic;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Aparato.esPc) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: alClic,
+      onDoubleTap: Ventana.alternar,
+      child: child,
+    );
+  }
+}
 
 class _Video extends StatelessWidget {
   const _Video({required this.control});
@@ -1660,9 +1910,13 @@ class _EstadoSenal extends StatelessWidget {
               // Varios canales seguidos sin andar: casi siempre es la TV (ver ControlSenal.canalesSinAndar)
               if (control.sugerirReiniciarAparato) ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Si varios canales no andan o se ven en verde, desenchufá la TV 30 segundos y volvé a abrir '
-                  'Kairos TV: algunos televisores lo necesitan después de muchos días encendidos.',
+                Text(
+                  enPc(
+                    'Si varios canales no andan o se ven en verde, desenchufá la TV 30 segundos y volvé a abrir '
+                        'Kairos TV: algunos televisores lo necesitan después de muchos días encendidos.',
+                    'Si varios canales seguidos no andan, revisá la conexión a internet o cerrá Kairos TV y volvé a '
+                        'abrirla.',
+                  ),
                   textAlign: TextAlign.center,
                   style: LetraTv.ayuda,
                 ),
@@ -1715,7 +1969,7 @@ class _EstadoSenal extends StatelessWidget {
 /// debajo (la línea de tiempo) y la ayuda de las teclas como teclas
 /// dibujadas. Ocupa todo el ancho de la pantalla.
 class _PanelControles extends StatelessWidget {
-  const _PanelControles({required this.fila, this.debajo, this.ayuda, this.alMoverse});
+  const _PanelControles({required this.fila, this.debajo, this.ayuda, this.alMoverse, this.alMouseEncima});
 
   final List<Widget> fila;
   final Widget? debajo;
@@ -1725,6 +1979,9 @@ class _PanelControles extends StatelessWidget {
 
   /// Avisa que se movió por la fila (para que la barra no se esconda mientras se usa).
   final VoidCallback? alMoverse;
+
+  /// PC: avisa cuando el mouse entra (true) o sale (false) de la barra: mientras está encima, no se esconde.
+  final ValueChanged<bool>? alMouseEncima;
 
   /// Izquierda/Derecha en la fila: al botón de al lado, en el orden en que se
   /// ven. Sin esto Flutter elegía "el más cercano" mirando toda la barra, y a
@@ -1746,6 +2003,12 @@ class _PanelControles extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final barra = _barra();
+    if (alMouseEncima == null) return barra;
+    return MouseRegion(onEnter: (_) => alMouseEncima!(true), onExit: (_) => alMouseEncima!(false), child: barra);
+  }
+
+  Widget _barra() {
     return Container(
       padding: const EdgeInsets.fromLTRB(MargenTv.derecha, 150, MargenTv.derecha, MargenTv.abajo),
       decoration: const BoxDecoration(
@@ -1805,18 +2068,30 @@ class _AyudaDeTeclas extends StatelessWidget {
     return ('', parte.trim());
   }
 
+  /// En la PC, las teclas del teclado: OK es Enter (o la barra espaciadora para pausar) y Atrás es Esc.
+  static (String, String) _deLaPc((String, String) parte) {
+    if (!Aparato.esPc) return parte;
+    final (tecla, que) = parte;
+    return switch (tecla) {
+      'OK' when que == 'pausa' => ('Espacio', que),
+      'OK' => ('Enter', que),
+      'Atrás' => ('Esc', que),
+      _ => parte,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final partes = texto.split('·').map((p) => p.trim()).where((p) => p.isNotEmpty);
+    final partes = texto.split('·').map((p) => p.trim()).where((p) => p.isNotEmpty).map((p) => _deLaPc(separar(p)));
     return Wrap(
       spacing: 30,
       runSpacing: 10,
       children: [
-        for (final parte in partes)
+        for (final (tecla, que) in partes)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (separar(parte).$1.isNotEmpty) ...[
+              if (tecla.isNotEmpty) ...[
                 Container(
                   constraints: const BoxConstraints(minWidth: 34),
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
@@ -1826,7 +2101,7 @@ class _AyudaDeTeclas extends StatelessWidget {
                     border: Border.all(color: Colors.white.withValues(alpha: .28)),
                   ),
                   child: Text(
-                    separar(parte).$1,
+                    tecla,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontFamily: Letra.texto,
@@ -1838,7 +2113,7 @@ class _AyudaDeTeclas extends StatelessWidget {
                 ),
                 const SizedBox(width: 9),
               ],
-              Text(separar(parte).$2, style: LetraTv.ayuda.copyWith(fontSize: 16, color: Tono.textoSuave)),
+              Text(que, style: LetraTv.ayuda.copyWith(fontSize: 16, color: Tono.textoSuave)),
             ],
           ),
       ],

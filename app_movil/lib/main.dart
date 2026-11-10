@@ -1,8 +1,11 @@
 /// Punto de entrada de la app (como manage.py / wsgi.py en Django).
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 import 'acceso.dart';
 import 'actualizacion.dart';
@@ -12,6 +15,7 @@ import 'config.dart';
 import 'movil/recordatorios.dart';
 import 'movil/estructura.dart';
 import 'pantallas/perfil.dart';
+import 'pc.dart';
 import 'sesion.dart';
 import 'tele/en_la_tele.dart';
 import 'tele/enlace.dart';
@@ -24,6 +28,9 @@ final claveNavegador = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // La app de PC: el video lo reproduce media_kit (mpv), que abre lo mismo que el de Android con sus
+  // arreglos (TS, HLS, MP2, Dolby, DTS). En Android no se toca: sigue el reproductor de Android.
+  if (Platform.isWindows) VideoPlayerMediaKit.ensureInitialized(windows: true);
   await Aparato.cargar();
   final sesion = Sesion();
   sesion.alSalir = () => claveNavegador.currentState?.popUntil((ruta) => ruta.isFirst);
@@ -64,8 +71,17 @@ class App extends StatelessWidget {
       locale: const Locale('es', 'AR'),
       supportedLocales: const [Locale('es', 'AR'), Locale('es')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      // En la PC: Esc vuelve (el "Atrás" del control), F11 pantalla completa, y las listas se arrastran con el
+      // mouse (lib/pc.dart). En Android quedan los de siempre.
+      shortcuts: Aparato.esPc ? atajosDePc : null,
+      actions: Aparato.esPc ? accionesDePc(claveNavegador) : null,
+      scrollBehavior: Aparato.esPc ? const ScrollDePc() : null,
       // En la TV todo se dibuja en 1920×1080 (las medidas del diseño) y se escala a la pantalla
-      builder: (context, hijo) => Aparato.esTv ? EscalaTv(child: hijo!) : hijo!,
+      builder: (context, hijo) => Aparato.esTv
+          ? EscalaTv(
+              child: Aparato.esPc ? MouseDePc(navegador: claveNavegador, child: hijo!) : hijo!,
+            )
+          : hijo!,
       home: const Raiz(),
     );
   }

@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from . import analizador, app, auth, biblioteca, canales, cliente, notificaciones, perfil, recorrido, usuarios
+from . import analizador, app, app_pc, auth, biblioteca, canales, cliente, notificaciones, perfil, recorrido, usuarios
 
 app_name = 'api_v1'
 
@@ -65,6 +65,8 @@ urlpatterns = [
 
     # La última versión de la app (para avisar que hay una nueva)
     path('app/', app.ultima_version, name='app'),
+    # La de la app para PC (Windows): la consulta al abrirse para actualizarse sola (lib/actualizacion.dart)
+    path('app-pc/', app_pc.ultima_version, name='app_pc'),
     # Los analizadores de canales instalados en PC: se actualizan solos (descargas/analizador.py)
     path('analizador/', analizador.ultima_version, name='analizador'),
     path('analizador/descargar/<int:pk>/', analizador.descargar, name='analizador_descargar'),

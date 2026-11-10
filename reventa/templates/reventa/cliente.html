@@ -43,7 +43,7 @@
                 <summary><i class="bi bi-info-circle" aria-hidden="true"></i> Cómo usar el código e instalar la app</summary>
                 <div>
                     <p>Con este código se entra en cualquier pantalla libre. Si cierra sesión o reinstala, usa el mismo. Generar uno nuevo desconecta los aparatos que entraron con él.</p>
-                    <p class="mb-0">Para instalarla: <a href="{% url 'descargas:pagina' %}">App Android</a> · link directo <span class="dato">{{ request.scheme }}://{{ request.get_host }}/descargar/</span>.</p>
+                    <p class="mb-0">Para instalarla: <a href="{% url 'descargas:pagina' %}">Descargas</a> · link directo Android <span class="dato">{{ request.scheme }}://{{ request.get_host }}/descargar/</span> · PC (Windows) <span class="dato">{{ request.scheme }}://{{ request.get_host }}/descargar/pc/</span>.</p>
                 </div>
             </details>
             <form method="post" action="{% url 'reventa:cliente_codigo' cliente.pk %}"

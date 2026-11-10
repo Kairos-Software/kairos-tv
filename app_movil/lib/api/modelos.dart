@@ -155,7 +155,12 @@ class FuenteCanal {
 
   /// Los formatos que este reproductor sabe abrir. Se le mandan al servidor
   /// al pedir los canales (?formatos=...) para que no mande otros.
-  static const formatosQueReproduce = ['hls', 'dash', 'directo', 'rtsp', 'youtube', 'pagina', 'yt_video', 'web'];
+  ///
+  /// En la PC, sin "yt_video" ni "web": en Android los abre el navegador de Android (WebView), que en Windows
+  /// no hay. Así el servidor no los manda y no aparecen títulos que no se pueden abrir.
+  static List<String> get formatosQueReproduce => Aparato.esPc ? _formatosPc : _formatos;
+  static const _formatos = ['hls', 'dash', 'directo', 'rtsp', 'youtube', 'pagina', 'yt_video', 'web'];
+  static const _formatosPc = ['hls', 'dash', 'directo', 'rtsp', 'youtube', 'pagina'];
 
   bool get esReproducible => formatosQueReproduce.contains(tipo);
 

@@ -5,12 +5,18 @@
 /// diseño todo quedaría el doble de grande.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../aparato.dart';
 
 const anchoTv = 1920.0;
+const altoTv = 1080.0;
 
+/// En una pantalla 16:9 (todas las teles) el lienzo es justo 1920×1080. En una más angosta (una ventana de PC,
+/// un monitor 16:10) queda de 1920 de ancho y más alto; en una más ancha (una ventana apaisada, un monitor
+/// ultra ancho) queda de 1080 de alto y más ancho. Así nunca queda más bajo que el diseño (se cortaría abajo).
 class EscalaTv extends StatelessWidget {
   const EscalaTv({super.key, required this.child});
 
@@ -19,18 +25,19 @@ class EscalaTv extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final medidas = MediaQuery.of(context);
-    if (medidas.size.width <= 0) return child;
-    final escala = medidas.size.width / anchoTv;
+    if (medidas.size.width <= 0 || medidas.size.height <= 0) return child;
+    final escala = math.min(medidas.size.width / anchoTv, medidas.size.height / altoTv);
+    final ancho = medidas.size.width / escala;
     final alto = medidas.size.height / escala;
     return FittedBox(
       fit: BoxFit.contain,
       alignment: Alignment.topLeft,
       child: SizedBox(
-        width: anchoTv,
+        width: ancho,
         height: alto,
         child: MediaQuery(
           data: medidas.copyWith(
-            size: Size(anchoTv, alto),
+            size: Size(ancho, alto),
             devicePixelRatio: medidas.devicePixelRatio * escala,
             padding: medidas.padding / escala,
             viewPadding: medidas.viewPadding / escala,

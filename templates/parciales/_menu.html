@@ -95,12 +95,8 @@
         {% if permisos.ver_canales or permisos.administrar_reventa or user.revendedor %}
         <a href="{% url 'descargas:pagina' %}"
            class="menu-link {% if request.path|slice:':13' == '/app-android/' %}activo{% endif %}">
-            {% if user.is_superuser %}
-            {# Para los superusuarios también está el analizador de canales para PC #}
+            {# La app para Android y para PC (y, para los superusuarios, el analizador de canales) #}
             <i class="bi bi-download" aria-hidden="true"></i><span class="menu-link-texto">Descargas</span>
-            {% else %}
-            <i class="bi bi-android2" aria-hidden="true"></i><span class="menu-link-texto">App Android</span>
-            {% endif %}
         </a>
         {% endif %}
 

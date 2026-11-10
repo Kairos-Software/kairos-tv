@@ -1750,15 +1750,15 @@ a.chip:hover, a.chip.activo { filter: brightness(1.25); box-shadow: 0 0 0 1px cu
     border-radius: 12px; background: var(--celeste-fondo); color: var(--celeste); font-size: 1.15rem;
 }
 /* El analizador para PC (descargas/_analizador.html, solo superusuarios) */
-.analizador-pasos { margin: 0; padding-left: 1.2rem; display: grid; gap: .55rem; font-size: .9rem; color: var(--texto-suave); max-width: 70rem; }
-.analizador-pasos strong { color: var(--texto); }
-.analizador-subida { display: grid; gap: .4rem; }
-.analizador-subida[hidden] { display: none; }
-.analizador-barra { display: block; height: 8px; border-radius: 8px; background: var(--capa-alta); overflow: hidden; }
-.analizador-barra span { display: block; width: 0; height: 100%; background: var(--celeste); box-shadow: 0 0 12px rgba(0, 240, 255, .45); transition: width .4s ease; }
-.analizador-subida-texto { font-size: .85rem; color: var(--texto-suave); }
-.analizador-subida.error .analizador-barra span { background: var(--rubi); box-shadow: none; }
-.analizador-subida.error .analizador-subida-texto { color: var(--rubi-claro); }
+.instalador-pasos { margin: 0; padding-left: 1.2rem; display: grid; gap: .55rem; font-size: .9rem; color: var(--texto-suave); max-width: 70rem; }
+.instalador-pasos strong { color: var(--texto); }
+.instalador-subida { display: grid; gap: .4rem; }
+.instalador-subida[hidden] { display: none; }
+.instalador-barra { display: block; height: 8px; border-radius: 8px; background: var(--capa-alta); overflow: hidden; }
+.instalador-barra span { display: block; width: 0; height: 100%; background: var(--celeste); box-shadow: 0 0 12px rgba(0, 240, 255, .45); transition: width .4s ease; }
+.instalador-subida-texto { font-size: .85rem; color: var(--texto-suave); }
+.instalador-subida.error .instalador-barra span { background: var(--rubi); box-shadow: none; }
+.instalador-subida.error .instalador-subida-texto { color: var(--rubi-claro); }
 .tabla-pcs td .chip { margin-left: .35rem; }
 
 /* Páginas de error y mantenimiento */

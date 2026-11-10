@@ -201,11 +201,16 @@ class _VideoPantalla extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tamanio = controlador.value.size;
-    return ClipRect(
-      child: SizedBox.expand(
-        child: FittedBox(
-          fit: BoxFit.cover,
-          child: SizedBox(width: tamanio.width, height: tamanio.height, child: VideoPlayer(controlador)),
+    // La presentación va por encima de MaterialApp, donde todavía no se sabe hacia dónde se lee. El
+    // reproductor de la PC (media_kit) lo necesita: sin esto fallaba al armarse y solo se oía el sonido.
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: ClipRect(
+        child: SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(width: tamanio.width, height: tamanio.height, child: VideoPlayer(controlador)),
+          ),
         ),
       ),
     );

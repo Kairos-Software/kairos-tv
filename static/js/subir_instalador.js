@@ -1,20 +1,25 @@
 /*
- * Subir el instalador del analizador de canales (Descargas → Analizador para PC, solo superusuarios).
+ * Subir un instalador para Windows: el de la app para PC (Descargas → App para PC) o el del analizador de canales
+ * (Descargas → Analizador para PC, solo superusuarios). Sirve para cada <form data-subir-instalador> de la página:
  *
- *   - Al elegir el archivo, la versión se completa sola con su nombre (KairosAnalizador-2026.11.9.1530.exe).
+ *   - Al elegir el archivo, la versión se completa sola con su nombre (data-prefijo: KairosTV-2026.11.10.1530.exe,
+ *     KairosAnalizador-2026.11.9.1530.exe).
  *   - Pesa cientos de MB y el servidor acepta hasta 160 MB por pedido: se manda de a pedazos (20 MB) con su
  *     avance; si un pedazo falla, se reintenta hasta 3 veces desde ese mismo lugar.
- *   - Al final se pide publicarlo (descargas/analizador.py revisa el archivo y calcula su huella) y la página se
+ *   - Al final se pide publicarlo (descargas/instaladores.py revisa el archivo y calcula su huella) y la página se
  *     recarga con la versión nueva en la lista.
  */
 (function () {
     'use strict';
 
-    var form = document.getElementById('form-analizador');
-    if (!form || !window.FormData || !window.Blob) return;
-    var campo = form.querySelector('#analizador-archivo');
-    var version = form.querySelector('#analizador-version');
-    var notas = form.querySelector('#analizador-notas');
+    if (!window.FormData || !window.Blob) return;
+    document.querySelectorAll('form[data-subir-instalador]').forEach(preparar);
+
+    function preparar(form) {
+    var campo = form.querySelector('[data-archivo]');
+    var version = form.querySelector('[data-version]');
+    var notas = form.querySelector('[data-notas]');
+    var prefijo = form.dataset.prefijo || 'KairosTV';
     var boton = form.querySelector('button[type=submit]');
     var subida = form.querySelector('[data-subida]');
     var barra = subida.querySelector('[role=progressbar]');
@@ -93,7 +98,8 @@
     campo.addEventListener('change', function () {
         var archivo = campo.files[0];
         if (!archivo) return;
-        var encontrada = /KairosAnalizador-(\d+(?:\.\d+){1,3})(?: \(\d+\))?\.exe$/i.exec(archivo.name);
+        var patron = new RegExp(prefijo + '-(\\d+(?:\\.\\d+){1,3})(?: \\(\\d+\\))?\\.exe$', 'i');
+        var encontrada = patron.exec(archivo.name);
         if (encontrada) version.value = encontrada[1];
         subida.hidden = true;
     });
@@ -103,11 +109,11 @@
         if (subiendo) return;
         var archivo = campo.files[0];
         if (!archivo) {
-            mostrar(0, 'Elegí el instalador (KairosAnalizador-….exe).', true);
+            mostrar(0, 'Elegí el instalador (' + prefijo + '-….exe).', true);
             return;
         }
         if (!/\.exe$/i.test(archivo.name)) {
-            mostrar(0, 'Tiene que ser el instalador .exe que arma armar.py.', true);
+            mostrar(0, 'Tiene que ser el instalador .exe (' + prefijo + '-….exe).', true);
             return;
         }
         if (!version.value.trim()) {
@@ -135,4 +141,5 @@
         e.preventDefault();
         e.returnValue = '';
     });
+    }
 })();

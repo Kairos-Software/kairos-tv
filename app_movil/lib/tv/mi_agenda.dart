@@ -231,7 +231,7 @@ class FilaMiAgendaTv extends StatelessWidget {
       builder: (context, _, _) => FilaTv(
         titulo: 'Mi agenda',
         icono: const Icon(Icons.event_rounded, color: Tono.celeste, size: 26),
-        final_: 'OK: ver o cambiar',
+        final_: enPc('OK: ver o cambiar', 'Clic: ver o cambiar'),
         alto: 150,
         tarjetas: [
           for (final (recordatorio, canal) in Recordatorios.conCanal(catalogo))

@@ -41,7 +41,7 @@ MODULOS_PERMISOS = [
         ('confirmar_compras', 'Confirmar o cancelar los pagos de compras de créditos'),
     ]),
     ('App Android', [
-        ('publicar_app', 'Subir versiones nuevas de la app (APK) para descargar'),
+        ('publicar_app', 'Subir versiones nuevas de la app (la APK y la de PC) para descargar'),
     ]),
     ('Sistema', [
         ('ver_actividad', 'Ver el registro de actividad (quién hizo qué y cuándo)'),

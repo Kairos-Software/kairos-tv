@@ -1,5 +1,6 @@
 import 'package:app_movil/api/cliente.dart';
 import 'package:app_movil/api/modelos.dart';
+import 'package:app_movil/aparato.dart';
 import 'package:app_movil/movil/busqueda.dart';
 import 'package:app_movil/movil/buscar.dart';
 import 'package:app_movil/movil/datos.dart';
@@ -125,5 +126,40 @@ void main() {
     await tecla(LogicalKeyboardKey.arrowLeft);
     expect(FocusManager.instance.primaryFocus?.debugLabel, isNot(startsWith('menú')));
     expect(_enfocado()?.length, 1); // una tecla
+  });
+
+  testWidgets('PC: se escribe con el teclado de verdad y Enter va a los resultados', (tester) async {
+    // Antes, Enter apretaba la tecla de la pantalla con el foco (la "A") y escribía una "a"
+    Aparato.esPc = true;
+    Aparato.esTv = true;
+    addTearDown(() {
+      Aparato.esPc = false;
+      Aparato.esTv = false;
+    });
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PantallaTv(catalogo: _catalogo(), biblioteca: Biblioteca(), seccionInicial: SeccionTv.buscar),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(_enfocado(), 'A');
+
+    for (final tecla in [LogicalKeyboardKey.keyC, LogicalKeyboardKey.keyA, LogicalKeyboardKey.keyS]) {
+      await tester.sendKeyEvent(tecla);
+      await tester.pump();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.space); // en la PC la barra espaciadora escribe (no es "OK")
+    await tester.pumpAndSettle();
+    expect(find.text('cas '), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('cas'), findsOneWidget); // no escribió nada más
+    expect(_enfocado(), isNot('A')); // está en el primer resultado
+    expect(_enfocado()?.length, greaterThan(1));
   });
 }

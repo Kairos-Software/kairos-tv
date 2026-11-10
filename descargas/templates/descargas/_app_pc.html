@@ -1,0 +1,94 @@
+{% comment %}
+    La app de Kairos TV para PC (Windows): views._pagina_de_la_pc. Como la APK, se baja sin sesión
+    (/descargar/pc/) y las apps instaladas se actualizan solas (api/v1/app_pc.py). El instalador se sube
+    de a pedazos (static/js/subir_instalador.js); lo publica quien tiene el permiso publicar_app.
+{% endcomment %}
+<section class="tarjeta descarga-hero mb-4">
+    <div class="descarga-hero-icono" aria-hidden="true"><i class="bi bi-windows"></i></div>
+    <div class="descarga-hero-contenido">
+        <h2 class="tarjeta-titulo">Kairos TV para PC</h2>
+        {% if app_pc %}
+        <p class="descarga-version">Versión <strong>{{ app_pc.version }}</strong> <span class="texto-suave">· {{ app_pc.tamanio|filesizeformat }} · publicada el {{ app_pc.subida|date:"j/m/Y" }}</span></p>
+        <a href="{% url 'descargas:descargar_pc' %}" class="btn btn-primary descarga-boton"><i class="bi bi-download" aria-hidden="true"></i> Descargar para Windows</a>
+        <p class="descarga-link-etiqueta">Link directo —siempre descarga la última versión—</p>
+        <p class="dato descarga-link">{{ link_pc }}</p>
+        <p class="texto-suave small mb-0">Para Windows 10 y 11 de 64 bits. Es la misma app de la tele, en una ventana: se maneja con el mouse o con el teclado.</p>
+        {% if app_pc.notas %}<p class="texto-suave small mt-2 mb-0">Qué cambió: {{ app_pc.notas|linebreaksbr }}</p>{% endif %}
+        {% else %}
+        <div class="vacio descarga-vacio">
+            <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+            <p>Todavía no se subió ninguna versión de la app para PC.{% if puede_publicar %} Subila abajo, en «Publicar una versión nueva».{% endif %}</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="tarjeta mb-4">
+    <h2 class="tarjeta-titulo">Cómo instalarla</h2>
+    <ol class="instalador-pasos">
+        <li><strong>Bajá el instalador y abrilo.</strong> Como no está firmado, el navegador y Windows avisan que no lo conocen, igual que con la APK: en el navegador elegí <em>Conservar</em> y, al abrirlo, <em>Más información → Ejecutar de todas formas</em>. Si la PC tiene prendido el <em>Control inteligente de aplicaciones</em> (Windows 11), no da esa opción: apagalo antes en <em>Seguridad de Windows → Control de aplicaciones y del explorador → Configuración del Control inteligente de aplicaciones → Desactivado</em>. Si el antivirus (McAfee, por ejemplo) lo manda a cuarentena apenas se baja, abrí su cuarentena y tocá <em>Restaurar</em>: desconfía por ser nuevo y sin firma.</li>
+        <li><strong>Se instala sola</strong>, para el usuario de Windows y sin permiso de administrador. Queda <em>Kairos TV</em> en el menú Inicio y en el escritorio.</li>
+        <li><strong>Abrila y poné el código del cliente.</strong> Se elige con el mouse o con las flechas y Enter; Esc vuelve y F11 pone o saca la pantalla completa (los canales y las películas ya se abren así).</li>
+    </ol>
+    <p class="texto-suave small mt-3 mb-0">Se actualiza sola: cuando se publica una versión nueva acá, al abrirse ofrece instalarla y vuelve a abrirse ya actualizada. Por ahora, en la PC no aparecen las películas y series de YouTube ni las señales web: siguen en la app de Android.</p>
+</section>
+
+{% if puede_publicar %}
+<section class="tarjeta mb-4">
+    <h2 class="tarjeta-titulo">Publicar una versión nueva</h2>
+    <p class="texto-suave small">Subí el instalador <code>KairosTV-&lt;versión&gt;.exe</code> (lo arma <code>app_movil\windows\instalador\armar.ps1</code>). Desde que lo publicás, el link directo entrega esta y las PCs con Kairos TV la ofrecen al abrirse.</p>
+    <form class="row g-3" id="form-app-pc" novalidate data-subir-instalador data-prefijo="KairosTV"
+          data-pedazo="{% url 'descargas:pc_pedazo' %}" data-publicar="{% url 'descargas:pc_publicar' %}"
+          data-tamanio-pedazo="{{ pedazo_maximo }}">
+        {% csrf_token %}
+        <div class="col-md-8">
+            <label class="form-label" for="app-pc-archivo">Instalador <span class="obligatorio" aria-hidden="true">*</span></label>
+            <input class="form-control" type="file" id="app-pc-archivo" name="archivo" accept=".exe" required data-archivo>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="app-pc-version">Versión <span class="obligatorio" aria-hidden="true">*</span></label>
+            <input class="form-control dato" type="text" id="app-pc-version" name="version" inputmode="decimal" placeholder="Sale del nombre del archivo" required data-version>
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="app-pc-notas">Qué cambió</label>
+            <textarea class="form-control" id="app-pc-notas" name="notas" rows="2" data-notas></textarea>
+        </div>
+        <div class="col-12 instalador-subida" data-subida hidden>
+            <span class="instalador-barra" role="progressbar" aria-label="Avance de la subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></span>
+            <span class="instalador-subida-texto" data-subida-texto aria-live="polite"></span>
+        </div>
+        <div class="col-12"><button type="submit" class="btn btn-primary"><i class="bi bi-upload" aria-hidden="true"></i> Publicar</button></div>
+    </form>
+</section>
+
+<section class="tarjeta p-0">
+    <h2 class="tarjeta-titulo px-4 pt-4">Versiones</h2>
+    {% if versiones_pc %}
+    <div class="table-responsive">
+        <table class="table tabla mb-0">
+            <thead><tr><th scope="col">Versión</th><th scope="col">Tamaño</th><th scope="col">Subida</th><th scope="col">Por</th><th scope="col">Estado</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+            <tbody>
+            {% for v in versiones_pc %}
+                <tr>
+                    <td><a class="dato" href="{% url 'descargas:descargar_pc_version' v.pk %}">{{ v.version }}</a></td>
+                    <td class="small">{{ v.tamanio|filesizeformat }}</td>
+                    <td class="small">{{ v.subida|date:"j/m/Y H:i" }}</td>
+                    <td class="texto-suave small">{{ v.subida_por.username|default:"—" }}</td>
+                    <td>{% if v.publicada %}<span class="chip chip-si">Publicada</span>{% else %}<span class="chip">Oculta</span>{% endif %}</td>
+                    <td class="text-end">
+                        <form method="post" action="{% url 'descargas:pc_publicada' v.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">{% if v.publicada %}Ocultar{% else %}Publicar{% endif %}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="texto-suave small px-4 py-3 mb-0">Se descarga y se instala la publicada con el número más alto. Ocultar la última hace que las PCs que todavía no la tienen ya no la reciban.</p>
+    {% else %}
+    <p class="texto-suave px-4 pb-4 mb-0">Sin versiones todavía.</p>
+    {% endif %}
+</section>
+{% endif %}

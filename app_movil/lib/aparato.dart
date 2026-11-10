@@ -2,7 +2,11 @@
 /// canal "kairos/dispositivo"). Se leen una sola vez, al abrir la app.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/services.dart';
+
+import 'pc.dart';
 
 class Aparato {
   Aparato._();
@@ -13,8 +17,12 @@ class Aparato {
   /// al entrar, y aparece en el panel en "Dispositivos conectados".
   static String nombre = 'App Android';
 
-  /// ¿Es un televisor (Android TV / Google TV)? Se maneja con el control remoto.
+  /// ¿Es un televisor (Android TV / Google TV)? Se maneja con el control remoto. En la PC también: usa el
+  /// diseño de pantalla grande (lib/tv/), con el teclado y el mouse.
   static bool esTv = false;
+
+  /// ¿Es la app de PC (Windows)? Para lo poco que cambia ahí (sin "Ver en la tele", otra forma de actualizarse).
+  static bool esPc = false;
 
   /// La versión instalada (la de pubspec.yaml, ej: "1.1.0"). Vacía = no se sabe.
   static String version = '';
@@ -81,6 +89,17 @@ class Aparato {
   }
 
   static Future<void> cargar() async {
+    if (Platform.isWindows) {
+      // La app de PC: no hay MainActivity.kt. El nombre de la PC es el que se ve en el panel
+      // ("Dispositivos conectados"). La versión es la que se le dio al armarla (fecha y hora, como
+      // 2026.11.10.1530: windows/instalador/README.md); con ella se ofrece la del panel (lib/actualizacion.dart).
+      esPc = true;
+      esTv = true;
+      nombre = 'PC ${Platform.localHostname}';
+      version = await Ventana.version();
+      carpetaTemporal = '${Directory.systemTemp.path}${Platform.pathSeparator}KairosTV-actualizacion';
+      return;
+    }
     try {
       final datos = await _canal.invokeMapMethod<String, Object?>('datos');
       nombre = '${datos?['nombre'] ?? nombre}';

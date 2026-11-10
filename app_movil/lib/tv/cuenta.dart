@@ -77,7 +77,7 @@ class CuentaTv extends StatelessWidget {
         context,
         biblioteca.probarTodo
             ? 'Se muestra todo: si algo no se ve bien, volvé a ponerlo en No'
-            : 'Listo: lo que esta TV no lee vuelve a esconderse',
+            : 'Listo: lo que ${enPc('esta TV', 'esta PC')} no lee vuelve a esconderse',
       );
     }
     await catalogo.cargar();
@@ -89,7 +89,7 @@ class CuentaTv extends StatelessWidget {
       context: context,
       builder: (contexto) => DialogoTv(
         icono: Icons.logout_rounded,
-        titulo: '¿Cerrar sesión en esta TV?',
+        titulo: '¿Cerrar sesión en ${enPc('esta TV', 'esta PC')}?',
         texto: sesion.esCliente
             ? 'La pantalla queda libre. Para volver a entrar vas a necesitar tu código.'
             : 'Para volver a entrar vas a necesitar tu usuario y contraseña.',
@@ -212,25 +212,28 @@ class CuentaTv extends StatelessWidget {
                             alOk: () => biblioteca.volverAlUltimo = !biblioteca.volverAlUltimo,
                           ),
                           const SizedBox(height: 14),
-                          // Si un canal se ve verde o negro con el sonido bien, el otro modo suele arreglarlo
-                          BotonTv(
-                            texto: biblioteca.videoEnSuperficie
-                                ? 'Modo de video: TV (recomendado)'
-                                : 'Modo de video: compatible',
-                            icono: Icons.tv_rounded,
-                            ancho: double.infinity,
-                            alOk: () => biblioteca.videoEnSuperficie = !biblioteca.videoEnSuperficie,
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            '¿Imagen verde o negra con sonido? Probá cambiar el modo de video o desenchufá la TV '
-                            '30 segundos.',
-                            style: LetraTv.ayuda,
-                          ),
-                          const SizedBox(height: 14),
+                          // Si un canal se ve verde o negro con el sonido bien, el otro modo suele arreglarlo.
+                          // En la PC no: es del reproductor de Android (en la PC el video lo dibuja media_kit).
+                          if (!Aparato.esPc) ...[
+                            BotonTv(
+                              texto: biblioteca.videoEnSuperficie
+                                  ? 'Modo de video: TV (recomendado)'
+                                  : 'Modo de video: compatible',
+                              icono: Icons.tv_rounded,
+                              ancho: double.infinity,
+                              alOk: () => biblioteca.videoEnSuperficie = !biblioteca.videoEnSuperficie,
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              '¿Imagen verde o negra con sonido? Probá cambiar el modo de video o desenchufá la TV '
+                              '30 segundos.',
+                              style: LetraTv.ayuda,
+                            ),
+                            const SizedBox(height: 14),
+                          ],
                           // ¿Un canal está en el celular y no en la TV? Acá se ve por qué
                           BotonTv(
-                            texto: 'Lo que no se ve en esta TV',
+                            texto: 'Lo que no se ve en ${enPc('esta TV', 'esta PC')}',
                             icono: Icons.visibility_off_rounded,
                             ancho: double.infinity,
                             alOk: () => _loQueNoSeVe(context),
@@ -309,9 +312,9 @@ class CuadroLoQueNoSeVe extends StatelessWidget {
     return DialogoTv(
       icono: Icons.visibility_off_rounded,
       titulo: escondidos.isEmpty
-          ? 'Esta TV muestra todo lo que manda el panel'
-          : 'No se ${escondidos.length == 1 ? 've 1' : 'ven ${escondidos.length}'} en esta TV',
-      texto: lee.isEmpty ? null : 'Esta TV lee videos ${lee.join(', ')}.',
+          ? '${enPc('Esta TV', 'Esta PC')} muestra todo lo que manda el panel'
+          : 'No se ${escondidos.length == 1 ? 've 1' : 'ven ${escondidos.length}'} en ${enPc('esta TV', 'esta PC')}',
+      texto: lee.isEmpty ? null : '${enPc('Esta TV', 'Esta PC')} lee videos ${lee.join(', ')}.',
       hijo: escondidos.isEmpty
           ? null
           : Padding(

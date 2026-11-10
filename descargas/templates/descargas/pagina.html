@@ -3,35 +3,39 @@
     Lo que se descarga desde el panel:
       - la app Android: link de descarga, cómo instalarla y (con publicar_app)
         subir versiones nuevas;
+      - (?ver=pc) la app para PC (Windows): lo mismo, con el instalador que se
+        sube de a pedazos (_app_pc.html);
       - SOLO SUPERUSUARIOS (?ver=analizador): el analizador de canales para
         PC, sus versiones y las PCs donde está instalado (_analizador.html).
 {% endcomment %}
 {% load static %}
 
-{% block titulo %}{% if user.is_superuser %}Descargas{% else %}App Android{% endif %}{% endblock %}
+{% block titulo %}Descargas{% endblock %}
 
 {% block encabezado %}
 <div class="pagina-encabezado">
-    {% if user.is_superuser %}
     <h1 class="pagina-titulo">Descargas</h1>
-    <p class="pagina-bajada">La app de Kairos TV para los clientes y el analizador de canales para tus PCs.</p>
+    {% if user.is_superuser %}
+    <p class="pagina-bajada">La app de Kairos TV para los clientes (Android y PC) y el analizador de canales para tus PCs.</p>
     {% else %}
-    <h1 class="pagina-titulo">App Android</h1>
-    <p class="pagina-bajada">Kairos TV para celulares y televisores Android. El cliente entra con el código de 8 números que figura en su ficha.</p>
+    <p class="pagina-bajada">Kairos TV para celulares, televisores Android y PC. El cliente entra con el código de 8 números que figura en su ficha.</p>
     {% endif %}
 </div>
 {% endblock %}
 
 {% block contenido %}
-{% if user.is_superuser %}
 <nav class="pestanias mb-4" aria-label="Qué descargar">
-    <a href="{% url 'descargas:pagina' %}" {% if ver != 'analizador' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-android2" aria-hidden="true"></i> App Android</a>
+    <a href="{% url 'descargas:pagina' %}" {% if ver != 'analizador' and ver != 'pc' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-android2" aria-hidden="true"></i> App Android</a>
+    <a href="{% url 'descargas:pagina' %}?ver=pc" {% if ver == 'pc' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-windows" aria-hidden="true"></i> App para PC</a>
+    {% if user.is_superuser %}
     <a href="{% url 'descargas:pagina' %}?ver=analizador" {% if ver == 'analizador' %}class="activa" aria-current="page"{% endif %}><i class="bi bi-pc-display" aria-hidden="true"></i> Analizador para PC</a>
+    {% endif %}
 </nav>
-{% endif %}
 
 {% if ver == 'analizador' %}
 {% include "descargas/_analizador.html" %}
+{% elif ver == 'pc' %}
+{% include "descargas/_app_pc.html" %}
 {% else %}
 <section class="tarjeta descarga-hero mb-4">
     <div class="descarga-hero-icono" aria-hidden="true"><i class="bi bi-android2"></i></div>
@@ -137,5 +141,5 @@
         });
     });
 </script>
-{% if ver == 'analizador' %}<script src="{% static 'js/subir_analizador.js' %}?v=1"></script>{% endif %}
+{% if ver == 'analizador' or ver == 'pc' and puede_publicar %}<script src="{% static 'js/subir_instalador.js' %}?v=2"></script>{% endif %}
 {% endblock %}

@@ -17,6 +17,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../aparato.dart';
 import '../movil/busqueda.dart';
 import '../movil/componentes.dart';
 import '../movil/datos.dart';
@@ -234,13 +235,22 @@ class _BuscarTvState extends State<BuscarTv> {
                             alLetra: _escribir,
                             alBorrar: _borrar,
                             alLimpiar: () => setState(() => _texto = ''),
+                            alEnterEnPc: () {
+                              if (_primerResultado.context != null) _primerResultado.requestFocus();
+                            },
                           ),
                         ),
                         const SizedBox(height: 20),
                         _Indicacion(
                           texto: resultados.isEmpty
-                              ? 'También podés escribir con el micrófono del control.'
-                              : 'Con la flecha DERECHA ▶ vas a los resultados.',
+                              ? enPc(
+                                  'También podés escribir con el micrófono del control.',
+                                  'También podés escribir con el teclado de la PC.',
+                                )
+                              : enPc(
+                                  'Con la flecha DERECHA ▶ vas a los resultados.',
+                                  'Con Enter o la flecha DERECHA ▶ vas a los resultados.',
+                                ),
                           destacada: resultados.isNotEmpty,
                         ),
                       ],
@@ -340,11 +350,14 @@ class _Indicacion extends StatelessWidget {
 }
 
 class _Teclado extends StatelessWidget {
-  const _Teclado({required this.alLetra, required this.alBorrar, required this.alLimpiar});
+  const _Teclado({required this.alLetra, required this.alBorrar, required this.alLimpiar, required this.alEnterEnPc});
 
   final ValueChanged<String> alLetra;
   final VoidCallback alBorrar;
   final VoidCallback alLimpiar;
+
+  /// En la PC, Enter (del teclado de verdad) va a los resultados en vez de apretar la tecla elegida de la pantalla.
+  final VoidCallback alEnterEnPc;
 
   static const _filas = ['ABCDEFGHIJ', 'KLMNÑOPQRS', 'TUVWXYZ', '1234567890'];
 
@@ -354,6 +367,13 @@ class _Teclado extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       child: Enfocable(
         alOk: alOk,
+        alTecla: Aparato.esPc
+            ? (evento) {
+                if (!esEnter(evento)) return KeyEventResult.ignored;
+                alEnterEnPc();
+                return KeyEventResult.handled;
+              }
+            : null,
         autofocus: autofocus,
         curva: Curva.medio + 2,
         escala: 1.1,

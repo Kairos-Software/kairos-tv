@@ -43,11 +43,11 @@ class FavoritosTv extends StatelessWidget {
                       const SizedBox(height: 22),
                       const Text('Todavía no tenés favoritos', style: LetraTv.pantalla),
                       const SizedBox(height: 10),
-                      const SizedBox(
+                      SizedBox(
                         width: 760,
                         child: Text(
-                          'Mantené apretado OK sobre un canal, una película o una serie para guardarlo acá. '
-                          'También podés usar el botón "Favorito" del detalle.',
+                          '${enPc('Mantené apretado OK', 'Hacé clic derecho')} sobre un canal, una película o una '
+                          'serie para guardarlo acá. También podés usar el botón "Favorito" del detalle.',
                           textAlign: TextAlign.center,
                           style: LetraTv.cuerpo,
                         ),
@@ -72,9 +72,12 @@ class FavoritosTv extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 80),
           children: [
             encabezado,
-            const Padding(
-              padding: EdgeInsets.fromLTRB(MargenTv.izquierda, 8, MargenTv.derecha, 0),
-              child: Text('OK abre · OK largo lo quita de favoritos', style: LetraTv.ayuda),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(MargenTv.izquierda, 8, MargenTv.derecha, 0),
+              child: Text(
+                enPc('OK abre · OK largo lo quita de favoritos', 'Clic abre · clic derecho lo quita de favoritos'),
+                style: LetraTv.ayuda,
+              ),
             ),
             FilaTv(
               titulo: 'Canales',

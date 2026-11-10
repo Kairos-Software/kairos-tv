@@ -327,7 +327,10 @@ extension on _DetalleTvState {
         ],
       );
     } else if (serie.cargada) {
-      estado = Text('Esta serie no tiene capítulos que se puedan ver en esta TV.', style: LetraTv.cuerpo);
+      estado = Text(
+        'Esta serie no tiene capítulos que se puedan ver en ${enPc('esta TV', 'esta PC')}.',
+        style: LetraTv.cuerpo,
+      );
     } else {
       estado = const Padding(
         padding: EdgeInsets.only(top: 12),

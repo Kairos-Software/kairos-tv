@@ -25,8 +25,8 @@ SOLO_DEL_PANEL = {
     'indice', 'login', 'logout', 'perfil', 'perfil_opciones', 'cambiar_password', 'usuarios', 'usuarios_opciones',
     'usuario', 'usuario_estado', 'usuario_restablecer_password', 'canales_recorrido', 'notificaciones',
     'notificacion_leida', 'notificaciones_marcar_todas',
-    # Sin sesión (las usa cualquiera): la última versión de la app y entrar con el código
-    'app', 'cliente_login',
+    # Sin sesión (las usa cualquiera): la última versión de la app (la APK y la de PC) y entrar con el código
+    'app', 'app_pc', 'cliente_login',
     # Sin sesión: los analizadores de canales instalados, que se presentan con la huella de su instalador
     'analizador', 'analizador_descargar',
 }

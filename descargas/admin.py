@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import PcConAnalizador, VersionAnalizador, VersionApp
+from .models import PcConAnalizador, VersionAnalizador, VersionApp, VersionPc
 
 
 @admin.register(VersionApp)
@@ -11,6 +11,13 @@ class VersionAppAdmin(admin.ModelAdmin):
 
 @admin.register(VersionAnalizador)
 class VersionAnalizadorAdmin(admin.ModelAdmin):
+    list_display = ['version', 'publicada', 'tamanio', 'subida', 'subida_por']
+    list_filter = ['publicada']
+    readonly_fields = ['sha256', 'tamanio']
+
+
+@admin.register(VersionPc)
+class VersionPcAdmin(admin.ModelAdmin):
     list_display = ['version', 'publicada', 'tamanio', 'subida', 'subida_por']
     list_filter = ['publicada']
     readonly_fields = ['sha256', 'tamanio']

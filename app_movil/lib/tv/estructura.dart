@@ -24,10 +24,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/modelos.dart';
+import '../aparato.dart';
 import '../marca.dart';
 import '../movil/recordatorios.dart';
 import '../movil/datos.dart';
 import '../movil/estilo.dart';
+import '../pc.dart';
 import '../sesion.dart';
 import '../tele/en_la_tele.dart';
 import '../utiles.dart';
@@ -261,6 +263,10 @@ class _PantallaTvState extends State<PantallaTv> {
     _reposo = Timer(widget.esperaReposo, _entrarEnReposo);
   }
 
+  void _alUsarElMouse() {
+    if (!_enReposo) _esperarReposo();
+  }
+
   /// Solo si esta pantalla está adelante: con el reproductor o un cartel
   /// encima, no (se vuelve a esperar). Sin títulos con imagen, muestra solo el logo.
   Future<void> _entrarEnReposo() async {
@@ -361,7 +367,9 @@ class _PantallaTvState extends State<PantallaTv> {
     if (widget.espejo) return; // la sección la elige el celular
     if (_seccion != SeccionTv.inicio) return _irA(SeccionTv.inicio);
     final salir = await showDialog<bool>(context: context, builder: (_) => const _ConfirmarSalida());
-    if (salir == true) await SystemNavigator.pop();
+    if (salir != true) return;
+    // En Windows SystemNavigator.pop no hace nada: la app se cierra de verdad
+    Aparato.esPc ? await Ventana.cerrarLaApp() : await SystemNavigator.pop();
   }
 
   Widget _seccionActual() {
@@ -404,61 +412,76 @@ class _PantallaTvState extends State<PantallaTv> {
             },
             child: Scaffold(
               backgroundColor: Tono.fondo,
-              body: Stack(
-                children: [
-                  Positioned.fill(
-                    key: _claveContenido,
-                    child: FocusScope(
-                      node: _contenido,
-                      onKeyEvent: _teclaEnContenido,
-                      child: ListenableBuilder(
-                        listenable: _catalogo,
-                        builder: (context, _) {
-                          if (!_catalogo.cargado) return _Cargando(catalogo: _catalogo);
-                          return KeyedSubtree(
-                            key: ValueKey(_seccion == SeccionTv.nueva ? 'nueva:$_nueva' : _seccion),
-                            child: _seccionActual(),
-                          );
+              // En la PC el mouse también cuenta como "usar la app" (si no, el reposo aparecía al minuto aunque se
+              // estuviera eligiendo con el mouse). Solo llega mientras esta pantalla está adelante.
+              body: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerHover: (_) => _alUsarElMouse(),
+                onPointerDown: (_) => _alUsarElMouse(),
+                onPointerSignal: (_) => _alUsarElMouse(),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      key: _claveContenido,
+                      child: FocusScope(
+                        node: _contenido,
+                        onKeyEvent: _teclaEnContenido,
+                        child: ListenableBuilder(
+                          listenable: _catalogo,
+                          builder: (context, _) {
+                            if (!_catalogo.cargado) return _Cargando(catalogo: _catalogo);
+                            return KeyedSubtree(
+                              key: ValueKey(_seccion == SeccionTv.nueva ? 'nueva:$_nueva' : _seccion),
+                              child: _seccionActual(),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    // Al abrirse, el menú oscurece el contenido
+                    IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _menuAbierto ? 1 : 0,
+                        duration: const Duration(milliseconds: 160),
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [Color(0xE6131317), Color(0x00131317)], stops: [.2, .6]),
+                          ),
+                          child: SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 32,
+                      top: 54,
+                      bottom: 54,
+                      // En la PC el menú se abre al pasar el mouse por encima (el foco va adonde se señala) y se
+                      // cierra al sacarlo
+                      child: MouseRegion(
+                        onExit: (_) {
+                          if (Aparato.esPc && _menu.hasFocus) _cerrarMenu();
                         },
-                      ),
-                    ),
-                  ),
-                  // Al abrirse, el menú oscurece el contenido
-                  IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: _menuAbierto ? 1 : 0,
-                      duration: const Duration(milliseconds: 160),
-                      child: const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: [Color(0xE6131317), Color(0x00131317)], stops: [.2, .6]),
-                        ),
-                        child: SizedBox.expand(),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 32,
-                    top: 54,
-                    bottom: 54,
-                    child: FocusScope(
-                      node: _menu,
-                      onKeyEvent: _teclaEnMenu,
-                      // Se rearma cuando llega el catálogo: ahí se sabe qué secciones nuevas hay
-                      child: ListenableBuilder(
-                        listenable: _catalogo,
-                        builder: (context, _) => _Menu(
-                          seccion: _seccion,
-                          nueva: _nueva,
-                          abierto: _menuAbierto,
-                          nodos: _opcionesDelMenu,
-                          nuevas: _catalogo.seccionesNuevas,
-                          nodoNueva: _nodoNueva,
-                          alElegir: _irA,
+                        child: FocusScope(
+                          node: _menu,
+                          onKeyEvent: _teclaEnMenu,
+                          // Se rearma cuando llega el catálogo: ahí se sabe qué secciones nuevas hay
+                          child: ListenableBuilder(
+                            listenable: _catalogo,
+                            builder: (context, _) => _Menu(
+                              seccion: _seccion,
+                              nueva: _nueva,
+                              abierto: _menuAbierto,
+                              nodos: _opcionesDelMenu,
+                              nuevas: _catalogo.seccionesNuevas,
+                              nodoNueva: _nodoNueva,
+                              alElegir: _irA,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

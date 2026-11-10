@@ -1,6 +1,6 @@
 {% comment %}
     El analizador de canales para PC (solo superusuarios: views._pagina_del_analizador).
-    El instalador se sube de a pedazos (static/js/subir_analizador.js) y los
+    El instalador se sube de a pedazos (static/js/subir_instalador.js) y los
     analizadores instalados lo bajan solos para actualizarse (api/v1/analizador.py).
 {% endcomment %}
 <section class="tarjeta descarga-hero mb-4">
@@ -23,7 +23,7 @@
 
 <section class="tarjeta mb-4">
     <h2 class="tarjeta-titulo">Cómo instalarlo</h2>
-    <ol class="analizador-pasos">
+    <ol class="instalador-pasos">
         <li><strong>Bajá el instalador y abrilo.</strong> Como no está firmado, el navegador y Windows avisan que no lo conocen, igual que con la APK: en el navegador elegí <em>Conservar</em> y, al abrirlo, <em>Más información → Ejecutar de todas formas</em>. Si la PC tiene prendido el <em>Control inteligente de aplicaciones</em> (Windows 11), no da esa opción: apagalo antes en <em>Seguridad de Windows → Control de aplicaciones y del explorador → Configuración del Control inteligente de aplicaciones → Desactivado</em>. Si el antivirus (McAfee, por ejemplo) lo manda a cuarentena apenas se baja, abrí su cuarentena y tocá <em>Restaurar</em>: desconfía por ser nuevo y sin firma. Pasa con la descarga del navegador; las actualizaciones las baja el propio analizador.</li>
         <li><strong>Abrí «Analizador de canales»</strong> desde el menú Inicio o el escritorio. La primera vez baja de Google el Android virtual (unos 1,1 GB) y recién después empieza a medir.</li>
         <li><strong>Listo.</strong> La PC aparece sola abajo, en «PCs con el analizador», y desde ahí se actualiza sola cada vez que publicás una versión.</li>
@@ -63,25 +63,25 @@
 <section class="tarjeta mb-4">
     <h2 class="tarjeta-titulo">Publicar una versión nueva</h2>
     <p class="texto-suave small">Armalo en la PC de desarrollo con <code>entorno\Scripts\python instalador\armar.py</code> y subí <code>instalador\salida\KairosAnalizador-&lt;versión&gt;.exe</code>. Desde que lo publicás, cada analizador instalado lo baja e instala solo.</p>
-    <form class="row g-3" id="form-analizador" novalidate
+    <form class="row g-3" id="form-analizador" novalidate data-subir-instalador data-prefijo="KairosAnalizador"
           data-pedazo="{% url 'descargas:analizador_pedazo' %}" data-publicar="{% url 'descargas:analizador_publicar' %}"
           data-tamanio-pedazo="{{ pedazo_maximo }}">
         {% csrf_token %}
         <div class="col-md-8">
             <label class="form-label" for="analizador-archivo">Instalador <span class="obligatorio" aria-hidden="true">*</span></label>
-            <input class="form-control" type="file" id="analizador-archivo" name="archivo" accept=".exe" required>
+            <input class="form-control" type="file" id="analizador-archivo" name="archivo" accept=".exe" required data-archivo>
         </div>
         <div class="col-md-4">
             <label class="form-label" for="analizador-version">Versión <span class="obligatorio" aria-hidden="true">*</span></label>
-            <input class="form-control dato" type="text" id="analizador-version" name="version" inputmode="decimal" placeholder="Sale del nombre del archivo" required>
+            <input class="form-control dato" type="text" id="analizador-version" name="version" inputmode="decimal" placeholder="Sale del nombre del archivo" required data-version>
         </div>
         <div class="col-12">
             <label class="form-label" for="analizador-notas">Qué cambió</label>
-            <textarea class="form-control" id="analizador-notas" name="notas" rows="2"></textarea>
+            <textarea class="form-control" id="analizador-notas" name="notas" rows="2" data-notas></textarea>
         </div>
-        <div class="col-12 analizador-subida" data-subida hidden>
-            <span class="analizador-barra" role="progressbar" aria-label="Avance de la subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></span>
-            <span class="analizador-subida-texto" data-subida-texto aria-live="polite"></span>
+        <div class="col-12 instalador-subida" data-subida hidden>
+            <span class="instalador-barra" role="progressbar" aria-label="Avance de la subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></span>
+            <span class="instalador-subida-texto" data-subida-texto aria-live="polite"></span>
         </div>
         <div class="col-12"><button type="submit" class="btn btn-primary"><i class="bi bi-upload" aria-hidden="true"></i> Publicar</button></div>
     </form>

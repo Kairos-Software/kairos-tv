@@ -288,9 +288,12 @@ class _GuiaTvState extends State<GuiaTv> {
                             padding: const EdgeInsets.fromLTRB(32, 22, 32, 4),
                             child: Row(
                               children: [
-                                const Expanded(
+                                Expanded(
                                   child: Text(
-                                    '↑ ↓ cambiar · OK pantalla completa · OK largo: favorito',
+                                    enPc(
+                                      '↑ ↓ cambiar · OK pantalla completa · OK largo: favorito',
+                                      '↑ ↓ cambiar · clic o Enter: pantalla completa · clic derecho: favorito',
+                                    ),
                                     style: LetraTv.ayuda,
                                   ),
                                 ),
@@ -333,7 +336,7 @@ class _GuiaTvState extends State<GuiaTv> {
                                             listas: [lista],
                                           ),
                                           favorito: biblioteca.estaEnMiLista(clave),
-                                          ayuda: 'OK · Pantalla completa',
+                                          ayuda: enPc('OK · Pantalla completa', 'Clic · Pantalla completa'),
                                           alOk: () => verCanalTv(context, canal, lista: canales),
                                           alOkLargo: () => alternarFavoritoTv(context, clave),
                                         ),

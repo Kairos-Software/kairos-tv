@@ -16,17 +16,24 @@
 ///   - antes de mostrar el cartel se cierra el teclado de Android y se suelta
 ///     el foco, para que el control remoto llegue al botón "Actualizar";
 ///   - el login tiene su propio "Buscar actualización" ([buscarAhora]).
+///
+/// EN LA PC (Windows) es el mismo cartel, con la app de PC que se sube en el panel (GET /api/v1/app-pc/): baja
+/// el instalador, revisa que haya llegado entero y sin cambios (su huella SHA-256, la que calculó el panel), lo
+/// corre sin preguntar nada (/VERYSILENT) y se cierra; el instalador la reemplaza y la vuelve a abrir sola. La
+/// versión es la fecha y hora en que se armó (windows/instalador/README.md).
 library;
 
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'aparato.dart';
 import 'movil/estilo.dart';
+import 'pc.dart';
 import 'sesion.dart';
 
 /// ¿[nueva] es mayor que [instalada]? Compara número por número: "1.10.0" > "1.9.3".
@@ -108,7 +115,8 @@ class _VigilarActualizacionState extends State<VigilarActualizacion> with Widget
     _ultimaConsulta = ahora;
     _programar(_cadaCuanto);
     try {
-      final datos = await widget.sesion.api.get('app/') as Map<String, dynamic>;
+      // La PC tiene su propia app (el instalador de Windows), que se sube aparte en el panel
+      final datos = await widget.sesion.api.get(Aparato.esPc ? 'app-pc/' : 'app/') as Map<String, dynamic>;
       final version = datos['version'] as String?;
       final descarga = datos['descarga'] as String?;
       if (version == null || descarga == null || (!forzar && version == _postergada)) return false;
@@ -123,8 +131,13 @@ class _VigilarActualizacionState extends State<VigilarActualizacion> with Widget
       final actualizo = await showDialog<bool>(
         context: contexto,
         barrierDismissible: false,
-        builder: (_) =>
-            _CartelActualizacion(version: version, notas: '${datos['notas'] ?? ''}'.trim(), descarga: descarga),
+        builder: (_) => _CartelActualizacion(
+          version: version,
+          notas: '${datos['notas'] ?? ''}'.trim(),
+          descarga: descarga,
+          tamanio: (datos['tamanio'] as num?)?.toInt() ?? 0,
+          sha256: '${datos['sha256'] ?? ''}',
+        ),
       );
       _mostrando = false;
       if (actualizo != true) _postergada = version;
@@ -153,15 +166,34 @@ enum _Paso { preguntar, bajando, listo, error }
 
 /// El cartel solo (para las pruebas: normalmente lo abre [VigilarActualizacion]).
 @visibleForTesting
-Widget cartelDeActualizacion({required String version, String notas = '', String descarga = ''}) =>
-    _CartelActualizacion(version: version, notas: notas, descarga: descarga);
+Widget cartelDeActualizacion({
+  required String version,
+  String notas = '',
+  String descarga = '',
+  int tamanio = 0,
+  String sha256 = '',
+}) => _CartelActualizacion(version: version, notas: notas, descarga: descarga, tamanio: tamanio, sha256: sha256);
+
+/// Con qué se baja la versión nueva (las pruebas ponen uno de mentira).
+@visibleForTesting
+http.Client Function() clienteDeDescarga = http.Client.new;
 
 class _CartelActualizacion extends StatefulWidget {
-  const _CartelActualizacion({required this.version, required this.notas, required this.descarga});
+  const _CartelActualizacion({
+    required this.version,
+    required this.notas,
+    required this.descarga,
+    this.tamanio = 0,
+    this.sha256 = '',
+  });
 
   final String version;
   final String notas;
   final String descarga;
+
+  /// Solo en la PC: cuánto pesa el instalador y su huella, para revisar que haya llegado bien (0 / '' = no se sabe).
+  final int tamanio;
+  final String sha256;
 
   @override
   State<_CartelActualizacion> createState() => _CartelActualizacionState();
@@ -214,7 +246,7 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
       _paso = _Paso.bajando;
       _avance = null;
     });
-    final cliente = _cliente = http.Client();
+    final cliente = _cliente = clienteDeDescarga();
     try {
       final carpeta = Directory(Aparato.carpetaTemporal);
       // Las APK de actualizaciones anteriores ya no sirven
@@ -228,7 +260,9 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
       final respuesta = await cliente.send(http.Request('GET', Uri.parse(widget.descarga)));
       if (respuesta.statusCode != 200) throw HttpException('El servidor respondió ${respuesta.statusCode}.');
       final total = respuesta.contentLength ?? 0;
-      final archivo = File('${carpeta.path}/KairosTV-${widget.version}.apk');
+      final archivo = File(
+        '${carpeta.path}${Platform.pathSeparator}KairosTV-${widget.version}.${Aparato.esPc ? 'exe' : 'apk'}',
+      );
       final salida = archivo.openWrite();
       var recibido = 0;
       var ultimoPorcentaje = -1;
@@ -249,6 +283,7 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
         await salida.close();
       }
       if (total > 0 && recibido < total) throw const HttpException('La descarga se cortó.');
+      if (Aparato.esPc) await _revisarInstalador(archivo, recibido);
       _ruta = archivo.path;
       if (!mounted) return;
       setState(() => _paso = _Paso.listo);
@@ -265,7 +300,22 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
     }
   }
 
+  /// PC: que sea el instalador que publicó el panel, entero (si no, ni se abre). Lo que se corre es un programa.
+  Future<void> _revisarInstalador(File archivo, int recibido) async {
+    if (widget.tamanio > 0 && recibido != widget.tamanio) {
+      throw const HttpException('La descarga se cortó.');
+    }
+    if (widget.sha256.isNotEmpty) {
+      final huella = await sha256.bind(archivo.openRead()).first;
+      if (huella.toString() != widget.sha256.toLowerCase()) {
+        await archivo.delete();
+        throw const HttpException('El instalador llegó dañado. Probá de nuevo.');
+      }
+    }
+  }
+
   Future<void> _instalar() async {
+    if (Aparato.esPc) return _instalarEnLaPc();
     try {
       await Aparato.instalar(_ruta!);
     } catch (_) {
@@ -275,6 +325,28 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
         _error = 'No se pudo abrir el instalador de Android.';
       });
     }
+  }
+
+  /// PC: el instalador corre solo, sin preguntar nada (windows/instalador/kairos_tv.iss), reemplaza la app y la
+  /// vuelve a abrir. Esta se cierra enseguida para dejarle los archivos libres.
+  Future<void> _instalarEnLaPc() async {
+    try {
+      await Process.start(_ruta!, const [
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART',
+        '/CLOSEAPPLICATIONS',
+      ], mode: ProcessStartMode.detached);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _paso = _Paso.error;
+        _error = 'No se pudo abrir el instalador. Puede que el antivirus lo haya bloqueado.';
+      });
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    await Ventana.cerrarLaApp();
   }
 
   @override
@@ -360,12 +432,14 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
           ),
         ];
       case _Paso.listo:
-        return const [
+        return [
           Text(
-            'Listo. En la ventana de Android tocá "Instalar". Si te pide permiso para '
-            '"instalar apps de este origen", activalo y volvé.',
+            Aparato.esPc
+                ? 'Instalando… Kairos TV se cierra y se vuelve a abrir sola en unos segundos.'
+                : 'Listo. En la ventana de Android tocá "Instalar". Si te pide permiso para '
+                      '"instalar apps de este origen", activalo y volvé.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Tono.textoSuave),
+            style: const TextStyle(color: Tono.textoSuave),
           ),
         ];
       case _Paso.error:
@@ -402,6 +476,8 @@ class _CartelActualizacionState extends State<_CartelActualizacion> {
       case _Paso.bajando:
         return const [];
       case _Paso.listo:
+        // En la PC se instala sola y la app se cierra: no hay nada que tocar
+        if (Aparato.esPc) return const [];
         return [
           despues,
           FilledButton(

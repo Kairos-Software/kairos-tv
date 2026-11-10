@@ -9,6 +9,12 @@ urlpatterns = [
     path('descargar/<int:pk>/', views.descargar, name='descargar_version'),
     path('app-android/', views.pagina, name='pagina'),
     path('app-android/<int:pk>/publicada/', views.cambiar_publicada, name='cambiar_publicada'),
+    # La app para PC (Windows): se descarga como la APK; la suben quienes publican la app
+    path('descargar/pc/', views.descargar_pc, name='descargar_pc'),
+    path('descargar/pc/<int:pk>/', views.descargar_pc, name='descargar_pc_version'),
+    path('app-android/pc/pedazo/', views.pc_pedazo, name='pc_pedazo'),
+    path('app-android/pc/publicar/', views.pc_publicar, name='pc_publicar'),
+    path('app-android/pc/<int:pk>/publicada/', views.pc_publicada, name='pc_publicada'),
     # El analizador de canales para PC: solo superusuarios
     path('app-android/analizador/pedazo/', views.analizador_pedazo, name='analizador_pedazo'),
     path('app-android/analizador/publicar/', views.analizador_publicar, name='analizador_publicar'),

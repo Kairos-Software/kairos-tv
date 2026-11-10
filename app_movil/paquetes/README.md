@@ -3,6 +3,48 @@
 Copias de paquetes de Flutter con algún cambio nuestro. `pubspec.yaml` las usa
 en lugar de las originales (sección `dependency_overrides`).
 
+## video_player_media_kit/ (2.0.0) — la app de PC (Windows)
+
+En Windows el video lo reproduce **media_kit** (mpv por dentro: abre TS, HLS,
+MKV, MP2, Dolby y DTS sin agregados) por debajo del mismo `video_player` de
+siempre: las pantallas no cambian. Solo se activa en Windows (`lib/main.dart`,
+`VideoPlayerMediaKit.ensureInitialized(windows: true)`); en Android sigue el de
+arriba. Es el paquete oficial con **tres cambios**, todos en
+`lib/src/media_kit_video_player.dart` (buscar "KAIROS TV"):
+
+1. **Listo cuando hay imagen.** De fábrica daba el video por listo cuando sabía
+   el tamaño de la imagen **y** la duración. Un canal en vivo no tiene duración:
+   no quedaba listo nunca (la app lo daba por caído). Y el tamaño 0×0 de antes
+   del primer cuadro lo daba listo con 0×0: **sonido sin imagen** (la
+   presentación al abrir se veía negra). Ahora está listo apenas se sabe el
+   tamaño de la imagen, o que es solo audio (una radio).
+2. **En vivo, «sin fin».** mpv no dice "sin duración" en vivo: pasa como duración
+   lo que lleva cargado (y crece). Con eso `video_player` dejaba la posición en
+   esa duración y daba el canal por **terminado** apenas arrancaba (lo mismo que
+   pasó en Android con la 1.2.33). `kairosEnVivo` decide si es en vivo (no se
+   puede adelantar y es HLS, o no tiene tamaño, o su duración es lo poco que
+   lleva cargado) y entonces pasa unos 100 años, como Android
+   (`KAIROS_SIN_FIN_MS`). Una película que no deja adelantar (servidor sin
+   "Range") tiene tamaño y dura más: sigue siendo película.
+3. **Si no abre, se avisa ya.** De fábrica los errores esperaban a que estuviera
+   listo: la app esperaba su tiempo entero (hasta 40 s) por cada fuente caída.
+   Ahora `kairosNoAbre` avisa enseguida lo que de verdad impide abrir ("Failed
+   to open" de la conexión, un 404, el lector que se rinde). Los avisos del
+   decodificador (comunes en IPTV y sin consecuencias) no cuentan.
+
+**Probado el 10/11/2026** con un programa aparte que usa este mismo paquete y
+`video_player` (no queda en el repo; se puede rehacer con lo de abajo), en
+Windows 11: Canal 26 (HLS público), un TS en vivo con audio MP2 y una radio MP3
+(armados con FFmpeg), películas con Dolby AC3 y DTS, una de 90 s por HTTP sin
+"Range", una con el índice al final sin "Range" (no se puede reproducir: falla en
+0,2 s, igual que en Android), un 404 (falla en 0,15 s) y un puerto cerrado (5 s).
+En vivo: listo en 1 a 2,5 s, la posición avanza y nunca "termina"; películas con
+su duración. Se miró la imagen dibujada por la app (no la pantalla).
+
+**Si se actualiza `video_player_media_kit`:** copiar `lib/`, `pubspec.yaml` y
+`LICENSE` de `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\video_player_media_kit-X.Y.Z`,
+volver a aplicar los tres cambios y sacar `dev_dependencies` de su `pubspec.yaml`.
+
 ## video_player_android/ (2.12.2)
 
 El reproductor de video de Android (ExoPlayer) que usa `video_player`. Es el
